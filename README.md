@@ -59,12 +59,29 @@ rv-trust-backend/
 
 The NestJS **identity** service can run as a single serverless function (cold starts apply; WebSockets are not suitable for this mode).
 
+### GitHub (dashboard)
+
 1. Import [this repository](https://github.com/abhijatdakshesh/EdAI-Backend) in [Vercel](https://vercel.com/new).
 2. Set **Root Directory** to `services/identity`.
 3. Framework preset: **Other** (leave default or pick “Other”; `vercel.json` supplies `buildCommand`).
 4. Add environment variable **`JWT_SECRET`** (use a long random string; must match what you expect for token verification in production).
 5. Optional: **`CORS_ORIGINS`** — comma-separated list of allowed browser origins (e.g. `https://your-app.vercel.app,http://localhost:3000`). If unset, localhost and `10.x.x.x` patterns are allowed for dev.
 6. Deploy. API base URL is `https://<project>.vercel.app/api` (e.g. `POST .../api/auth/login`). Swagger UI: `https://<project>.vercel.app/docs`.
+
+### CLI (from this repo)
+
+```bash
+cd services/identity
+npm install
+npx vercel login          # once per machine
+npx vercel link --yes     # first time: link to a Vercel project (or creates one)
+npx vercel deploy --yes   # preview URL
+npx vercel deploy --prod --yes   # production
+```
+
+Useful scripts in `services/identity/package.json`: `npm run vercel:deploy` (preview) and `npm run vercel:prod` (production).
+
+If **Vercel Deployment Protection** is enabled, anonymous `curl` to preview URLs returns 401; use your [production domain](https://vercel.com/docs/deployments/deployment-protection) or run `npx vercel curl /api/health` from `services/identity` (CLI can bypass protection for testing).
 
 Point the frontend `NEXT_PUBLIC_API_BASE_URL` (or equivalent) at this URL.
 
