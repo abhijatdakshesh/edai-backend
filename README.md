@@ -55,6 +55,19 @@ rv-trust-backend/
 - Docker + Docker Compose
 - AWS CLI configured
 
+## Deploy identity API on Vercel
+
+The NestJS **identity** service can run as a single serverless function (cold starts apply; WebSockets are not suitable for this mode).
+
+1. Import [this repository](https://github.com/abhijatdakshesh/EdAI-Backend) in [Vercel](https://vercel.com/new).
+2. Set **Root Directory** to `services/identity`.
+3. Framework preset: **Other** (leave default or pick “Other”; `vercel.json` supplies `buildCommand`).
+4. Add environment variable **`JWT_SECRET`** (use a long random string; must match what you expect for token verification in production).
+5. Optional: **`CORS_ORIGINS`** — comma-separated list of allowed browser origins (e.g. `https://your-app.vercel.app,http://localhost:3000`). If unset, localhost and `10.x.x.x` patterns are allowed for dev.
+6. Deploy. API base URL is `https://<project>.vercel.app/api` (e.g. `POST .../api/auth/login`). Swagger UI: `https://<project>.vercel.app/docs`.
+
+Point the frontend `NEXT_PUBLIC_API_BASE_URL` (or equivalent) at this URL.
+
 ## Quick Start (Local Dev)
 
 ```bash

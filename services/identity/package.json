@@ -10,6 +10,7 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
+    "express": "^4.21.2",
     "@nestjs/common": "^10.4.2",
     "@nestjs/core": "^10.4.2",
     "@nestjs/jwt": "^10.2.0",
@@ -30,6 +31,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.2",
     "@types/passport-jwt": "^4.0.1",
