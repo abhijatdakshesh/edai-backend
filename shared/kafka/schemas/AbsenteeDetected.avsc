@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "AbsenteeDetected",
+  "namespace": "ai.rvtrust.attendance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "studentId", "type": "string" },
+    { "name": "studentName", "type": "string" },
+    { "name": "sectionId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "date", "type": "string" },
+    { "name": "parentId", "type": "string" },
+    { "name": "parentPhoneToken", "type": "string" },
+    { "name": "parentLanguage", "type": "string" },
+    { "name": "consecutiveAbsentDays", "type": "int" },
+    { "name": "semesterPercentage", "type": "float" },
+    { "name": "consentVoice", "type": "boolean" },
+    { "name": "consentWhatsapp", "type": "boolean" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

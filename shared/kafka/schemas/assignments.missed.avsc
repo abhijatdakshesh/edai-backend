@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "AssignmentMissed",
+  "namespace": "ai.edai.assignments",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "assignmentId", "type": "string" },
+    { "name": "title", "type": "string" },
+    { "name": "dueDate", "type": "string" },
+    { "name": "weightage", "type": "float" },
+    { "name": "missCount", "type": "int" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

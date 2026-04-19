@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grievance
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grievance
+  template:
+    metadata:
+      labels:
+        app: grievance
+    spec:
+      containers:
+        - name: grievance
+          image: rvtrust/grievance:latest
+          envFrom:
+            - secretRef:
+                name: grievance-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grievance
+spec:
+  selector:
+    app: grievance
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grievance-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: grievance
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grievance-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grievance
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

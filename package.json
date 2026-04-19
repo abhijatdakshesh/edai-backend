@@ -1,0 +1,33 @@
+{
+  "name": "edai-backend",
+  "private": true,
+  "workspaces": [
+    "services/identity",
+    "services/attendance",
+    "services/academics",
+    "services/fees",
+    "services/comms",
+    "services/mentorship",
+    "services/placements",
+    "services/grievance",
+    "services/compliance",
+    "services/analytics",
+    "services/sap-bridge",
+    "services/assignments",
+    "services/communications",
+    "services/finance",
+    "services/behavior",
+    "services/chatbot"
+  ],
+  "scripts": {
+    "dev:core": "concurrently -n identity,attendance,academics,assignments,communications,finance,analytics,behavior,chatbot \"npm run start:dev --workspace services/identity\" \"npm run start:dev --workspace services/attendance\" \"npm run start:dev --workspace services/academics\" \"npm run start:dev --workspace services/assignments\" \"npm run start:dev --workspace services/communications\" \"npm run start:dev --workspace services/finance\" \"npm run start:dev --workspace services/analytics\" \"npm run start:dev --workspace services/behavior\" \"npm run start:dev --workspace services/chatbot\"",
+    "dev:all": "npm run dev:core",
+    "migrate:all": "npm run migration:run --workspaces --if-present",
+    "build:all": "npm run build --workspaces --if-present",
+    "lint:all": "npm run lint --workspaces --if-present",
+    "test:all": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "CallCompleted",
+  "namespace": "ai.rvtrust.voice",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "callId", "type": "string" },
+    { "name": "parentId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "language", "type": "string" },
+    { "name": "disposition", "type": "string" },
+    { "name": "summary", "type": "string" },
+    { "name": "recordingUrl", "type": ["null", "string"], "default": null },
+    { "name": "durationSeconds", "type": "int" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

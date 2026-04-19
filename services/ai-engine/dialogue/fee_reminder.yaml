@@ -1,0 +1,23 @@
+call_type: FEE_REMINDER
+
+greeting:
+  kn: "ನಮಸ್ಕಾರ, ನಾನು {institution_name} ನಿಂದ ಶುಲ್ಕ ಬಾಕಿ ಬಗ್ಗೆ ತಿಳಿಸಲು ಕರೆ ಮಾಡಿದ್ದೇನೆ."
+  en: "Good day, this is an automated reminder from {institution_name} regarding fee payment for {student_name}."
+  hi: "नमस्ते, मैं {institution_name} से {student_name} की फीस के बारे में याद दिलाने के लिए कॉल कर रही हूँ।"
+  ta: "வணக்கம், {institution_name} இல் இருந்து {student_name} கட்டணம் குறித்து தொடர்பு கொள்கிறோம்."
+  te: "నమస్కారం, {institution_name} నుండి {student_name} ఫీజు గురించి తెలియజేయడానికి కాల్ చేస్తున్నాను."
+  ml: "നമസ്കാരം, {institution_name} ൽ നിന്ന് {student_name} ഫീസ് സംബന്ധിച്ച് ബന്ധപ്പെടുകയാണ്."
+
+payment_options:
+  en: "You can pay online at {payment_link}, or visit the accounts office. Press 1 to hear the payment link again, press 2 for EMI options, press 3 to speak to accounts."
+
+dtmf_options:
+  "1": "Repeat payment link"
+  "2": "EMI options"
+  "3": "Connect to accounts"
+
+payer_profile_tone:
+  CONSISTENT: "We know you are always on time. This is just a gentle reminder in case it was overlooked."
+  FIRST_LATE: "This appears to be the first time. Please pay at your earliest convenience."
+  HARDSHIP: "We understand you may be facing challenges. Please speak with our accounts team about EMI or scholarship options."
+  SIBLING: "We have consolidated the dues for both your children in this message."

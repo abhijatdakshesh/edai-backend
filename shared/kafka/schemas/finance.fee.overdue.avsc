@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "FinanceFeeOverdue",
+  "namespace": "ai.edai.finance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "feeRecordId", "type": "string" },
+    { "name": "amountDue", "type": "double" },
+    { "name": "daysOverdue", "type": "int" },
+    { "name": "payerProfile", "type": "string" },
+    { "name": "parentId", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

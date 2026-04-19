@@ -1,0 +1,42 @@
+call_type: ABSENT_CALL
+
+greeting:
+  kn: "ನಮಸ್ಕಾರ, ನಾನು {institution_name} ನಿಂದ {student_name} ಅವರ ಸಹಾಯಕ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ."
+  en: "Good morning, this is the automated assistant from {institution_name} calling about {student_name}."
+  hi: "नमस्ते, मैं {institution_name} से {student_name} के बारे में बात कर रही हूँ।"
+  ta: "வணக்கம், நான் {institution_name} சார்பாக {student_name} பற்றி பேசுகிறேன்."
+  te: "నమస్కారం, నేను {institution_name} నుండి {student_name} గురించి మాట్లాడుతున్నాను."
+  ml: "നമസ്കാരം, ഞാൻ {institution_name} ൽ നിന്ന് {student_name} നെ കുറിച്ച് വിളിക്കുന്നു."
+
+absence_reason_ask:
+  kn: "{student_name} ಇಂದು ತರಗತಿಗೆ ಗೈರಾಗಿದ್ದಾರೆ. 1 ಒತ್ತಿ ಅನಾರೋಗ್ಯ, 2 ಒತ್ತಿ ತಡವಾಗಿ ಬರುತ್ತಾರೆ, 3 ಒತ್ತಿ ಇತರ ಕಾರಣ."
+  en: "{student_name} is absent today. Press 1 if sick, 2 if running late, 3 for another reason."
+  hi: "{student_name} आज अनुपस्थित है। बीमार है तो 1 दबाएं, देर से आएंगे तो 2, अन्य कारण के लिए 3।"
+  ta: "{student_name} இன்று வகுப்பில் இல்லை. நோய்வாய்ப்பட்டால் 1, தாமதமாக வருவதாயிருந்தால் 2, வேறு காரணத்திற்கு 3 அழுத்துங்கள்."
+  te: "{student_name} ఈరోజు తరగతికి రాలేదు. అనారోగ్యంగా ఉంటే 1, ఆలస్యంగా వస్తే 2, ఇతర కారణాల కోసం 3 నొక్కండి."
+  ml: "{student_name} ഇന്ന് ക്ലാസ്സിൽ ഇല്ല. അസുഖമുണ്ടെങ്കിൽ 1, വൈകി വരുന്നെങ്കിൽ 2, മറ്റ് കാരണങ്ങൾക്ക് 3 അമർത്തുക."
+
+dtmf_options:
+  "1": "Sick/unwell"
+  "2": "Running late"
+  "3": "Other reason"
+
+closing_positive:
+  kn: "ಧನ್ಯವಾದ. {student_name} ಅವರು ಶೀಘ್ರ ಚೇತರಿಕೆ ಪಡೆಯಲಿ ಎಂದು ಆಶಿಸುತ್ತೇವೆ."
+  en: "Thank you. We hope {student_name} feels better soon. Goodbye."
+  hi: "धन्यवाद। उम्मीद है {student_name} जल्दी ठीक हो जाएंगे।"
+
+escalation_triggers:
+  - sick
+  - hospital
+  - accident
+  - upset
+  - crying
+  - abuse
+  - emergency
+
+policy_constraints:
+  - Never promise fee waivers
+  - Never promise mark corrections
+  - Never make policy decisions
+  - Escalate to teacher if parent is distressed

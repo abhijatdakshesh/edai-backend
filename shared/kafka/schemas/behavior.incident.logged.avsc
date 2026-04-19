@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "BehaviorIncidentLogged",
+  "namespace": "ai.edai.behavior",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "incidentId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "severity", "type": "string" },
+    { "name": "incidentType", "type": "string" },
+    { "name": "parentNotified", "type": "boolean" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

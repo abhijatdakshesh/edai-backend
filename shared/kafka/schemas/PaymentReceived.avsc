@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "PaymentReceived",
+  "namespace": "ai.rvtrust.fees",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "paymentId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "amount", "type": "double" },
+    { "name": "currency", "type": "string", "default": "INR" },
+    { "name": "mode", "type": "string" },
+    { "name": "feeHeads", "type": { "type": "array", "items": "string" } },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

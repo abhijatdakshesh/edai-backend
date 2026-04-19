@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "BehaviorPatternDetected",
+  "namespace": "ai.edai.behavior",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "patternId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "patternType", "type": "string" },
+    { "name": "description", "type": "string" },
+    { "name": "aiRecommendation", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

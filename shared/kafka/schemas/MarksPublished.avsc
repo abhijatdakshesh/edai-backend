@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "MarksPublished",
+  "namespace": "ai.rvtrust.academics",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "examId", "type": "string" },
+    { "name": "courseId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "publishedBy", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

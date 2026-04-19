@@ -1,0 +1,39 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push changed service images
+        run: |
+          SERVICES="identity attendance academics fees comms mentorship placements grievance compliance analytics sap-bridge"
+          for svc in $SERVICES; do
+            echo "Building $svc ..."
+            docker build -t rvtrust/$svc:${{ github.sha }} services/$svc || true
+          done
+
+      - name: Sync ArgoCD staging
+        run: |
+          echo "ArgoCD sync for staging overlay — placeholder"
+          # argocd app sync rvtrust-staging --revision ${{ github.sha }}
+
+      - name: Run migrations
+        run: |
+          echo "kubectl exec migration pod — placeholder"
+          # kubectl exec jobs/migrate -- npm run migration:run

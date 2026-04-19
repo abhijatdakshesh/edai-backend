@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "AttendanceAbsentMarked",
+  "namespace": "ai.edai.attendance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "studentId", "type": "string" },
+    { "name": "studentName", "type": "string" },
+    { "name": "classId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "date", "type": "string" },
+    { "name": "period", "type": ["null", "int"], "default": null },
+    { "name": "parentId", "type": "string" },
+    { "name": "parentPhoneToken", "type": "string" },
+    { "name": "parentLanguage", "type": "string" },
+    { "name": "consentVoice", "type": "boolean" },
+    { "name": "consentWhatsapp", "type": "boolean" },
+    { "name": "teacherId", "type": "string" },
+    { "name": "markedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

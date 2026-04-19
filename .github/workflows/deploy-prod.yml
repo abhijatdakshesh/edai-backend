@@ -1,0 +1,42 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to confirm production release'
+        required: true
+
+jobs:
+  gate-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        if: ${{ github.event.inputs.confirm != 'DEPLOY' }}
+        run: |
+          echo "Confirmation not provided. Aborting."
+          exit 1
+
+  deploy:
+    needs: gate-check
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Blue-green deploy via ArgoCD
+        run: |
+          echo "ArgoCD blue-green sync for production — placeholder"
+          # argocd app sync rvtrust-prod --strategy=blueGreen
+
+      - name: Health check & rollback guard
+        run: |
+          echo "Health check and auto-rollback after 5 min — placeholder"

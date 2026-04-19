@@ -1,0 +1,73 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CoursesController = void 0;
+const common_1 = require("@nestjs/common");
+const courses_service_1 = require("./courses.service");
+const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+let CoursesController = class CoursesController {
+    constructor(coursesService) {
+        this.coursesService = coursesService;
+    }
+    getCourses() {
+        return this.coursesService.getCourses();
+    }
+    enroll(id, req) {
+        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        return this.coursesService.enroll(id, usn);
+    }
+    unenroll(id, req) {
+        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        return this.coursesService.unenroll(id, usn);
+    }
+    getResults(usn) {
+        return this.coursesService.getResults(usn);
+    }
+};
+exports.CoursesController = CoursesController;
+__decorate([
+    (0, common_1.Get)('courses'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "getCourses", null);
+__decorate([
+    (0, common_1.Post)('courses/:id/enroll'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "enroll", null);
+__decorate([
+    (0, common_1.Delete)('courses/:id/enroll'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "unenroll", null);
+__decorate([
+    (0, common_1.Get)('academics/results/student/:usn'),
+    __param(0, (0, common_1.Param)('usn')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "getResults", null);
+exports.CoursesController = CoursesController = __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Controller)(),
+    __metadata("design:paramtypes", [courses_service_1.CoursesService])
+], CoursesController);
+//# sourceMappingURL=courses.controller.js.map

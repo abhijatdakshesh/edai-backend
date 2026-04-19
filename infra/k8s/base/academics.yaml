@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: academics
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: academics
+  template:
+    metadata:
+      labels:
+        app: academics
+    spec:
+      containers:
+        - name: academics
+          image: rvtrust/academics:latest
+          envFrom:
+            - secretRef:
+                name: academics-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: academics
+spec:
+  selector:
+    app: academics
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: academics-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: academics
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: academics-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: academics
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

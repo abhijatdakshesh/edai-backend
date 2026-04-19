@@ -1,0 +1,15 @@
+call_type: WEEKLY_UPDATE
+
+greeting:
+  kn: "ನಮಸ್ಕಾರ, ನಾನು {institution_name} ನಿಂದ {student_name} ಅವರ ವಾರದ ಅಪ್ಡೇಟ್ ತಿಳಿಸಲು ಕರೆ ಮಾಡಿದ್ದೇನೆ."
+  en: "Good evening! This is your weekly update call from {institution_name} about {student_name}."
+  hi: "शुभ संध्या! यह {institution_name} से {student_name} की साप्ताहिक अपडेट कॉल है।"
+  ta: "நல்ல மாலை! {institution_name} இல் இருந்து {student_name} பற்றிய வாராந்திர புதுப்பிப்பு அழைப்பு இது."
+  te: "శుభ సాయంత్రం! {institution_name} నుండి {student_name} గురించి వారపు అప్‌డేట్ కాల్ ఇది."
+  ml: "ശുഭ സന്ധ്യ! {institution_name} ൽ നിന്ന് {student_name} ന്റെ ആഴ്ചതോറുമുള്ള അപ്‌ഡേറ്റ് കാൾ ആണിത്."
+
+positive_summary:
+  en: "Great news this week! Attendance: {attendance}%. {highlights}. Keep up the wonderful work!"
+
+concern_summary:
+  en: "This week's update for {student_name}: Attendance: {attendance}%. {concerns}. Action taken: {action}."

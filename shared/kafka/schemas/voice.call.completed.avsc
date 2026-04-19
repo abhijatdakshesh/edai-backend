@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "VoiceCallCompleted",
+  "namespace": "ai.edai.voice",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "callId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "parentId", "type": "string" },
+    { "name": "outcome", "type": "string" },
+    { "name": "collectedReason", "type": ["null", "string"], "default": null },
+    { "name": "sentiment", "type": "string" },
+    { "name": "escalated", "type": "boolean" },
+    { "name": "summaryEn", "type": "string" },
+    { "name": "durationSeconds", "type": "int" },
+    { "name": "timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

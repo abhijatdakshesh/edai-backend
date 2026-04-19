@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "FinanceFeePaid",
+  "namespace": "ai.edai.finance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "transactionId", "type": "string" },
+    { "name": "amount", "type": "double" },
+    { "name": "gateway", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

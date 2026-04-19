@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "EscalationTriggered",
+  "namespace": "ai.edai.attendance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "escalationLevel", "type": "string" },
+    { "name": "absenceCount", "type": "int" },
+    { "name": "actionTaken", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

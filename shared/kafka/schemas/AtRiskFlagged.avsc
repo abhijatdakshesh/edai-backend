@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "AtRiskFlagged",
+  "namespace": "ai.rvtrust.academics",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "studentId", "type": "string" },
+    { "name": "institutionId", "type": "string" },
+    { "name": "riskScore", "type": "float" },
+    { "name": "reasons", "type": { "type": "array", "items": "string" } },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

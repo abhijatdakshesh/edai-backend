@@ -1,0 +1,102 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rvtrust-backend
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/identity
+            pathType: Prefix
+            backend:
+              service:
+                name: identity
+                port:
+                  number: 80
+          - path: /api/attendance
+            pathType: Prefix
+            backend:
+              service:
+                name: attendance
+                port:
+                  number: 80
+          - path: /api/academics
+            pathType: Prefix
+            backend:
+              service:
+                name: academics
+                port:
+                  number: 80
+          - path: /api/fees
+            pathType: Prefix
+            backend:
+              service:
+                name: fees
+                port:
+                  number: 80
+          - path: /api/comms
+            pathType: Prefix
+            backend:
+              service:
+                name: comms
+                port:
+                  number: 80
+          - path: /api/mentorship
+            pathType: Prefix
+            backend:
+              service:
+                name: mentorship
+                port:
+                  number: 80
+          - path: /api/placements
+            pathType: Prefix
+            backend:
+              service:
+                name: placements
+                port:
+                  number: 80
+          - path: /api/grievance
+            pathType: Prefix
+            backend:
+              service:
+                name: grievance
+                port:
+                  number: 80
+          - path: /api/compliance
+            pathType: Prefix
+            backend:
+              service:
+                name: compliance
+                port:
+                  number: 80
+          - path: /api/analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics
+                port:
+                  number: 80
+          - path: /api/sap-bridge
+            pathType: Prefix
+            backend:
+              service:
+                name: sap-bridge
+                port:
+                  number: 80
+          - path: /api/ai
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-platform
+                port:
+                  number: 80
+          - path: /api/voice
+            pathType: Prefix
+            backend:
+              service:
+                name: voice
+                port:
+                  number: 8088

@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "AcademicsPerformanceDrop",
+  "namespace": "ai.edai.academics",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "studentId", "type": "string" },
+    { "name": "subjectId", "type": "string" },
+    { "name": "currentScore", "type": "float" },
+    { "name": "rollingAverage", "type": "float" },
+    { "name": "dropPercent", "type": "float" },
+    { "name": "rootCauseHints", "type": { "type": "record", "name": "RootCauseHints", "fields": [
+      { "name": "attendanceLast14Days", "type": "int" },
+      { "name": "assignmentsMissedLast14Days", "type": "int" }
+    ]}},
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

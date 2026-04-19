@@ -1,0 +1,17 @@
+call_type: ASSIGNMENT_MISS
+
+greeting:
+  kn: "ನಮಸ್ಕಾರ, ನಾನು {institution_name} ನಿಂದ {student_name} ಅವರ ಅಸೈನ್ಮೆಂಟ್ ಬಗ್ಗೆ ಕರೆ ಮಾಡಿದ್ದೇನೆ."
+  en: "Good morning, this is the automated assistant from {institution_name} calling about {student_name}'s {subject} assignment titled '{title}'."
+  hi: "नमस्ते, मैं {institution_name} से {student_name} के {subject} असाइनमेंट के बारे में बात कर रही हूँ।"
+  ta: "வணக்கம், {institution_name} சார்பாக {student_name} இன் {subject} பணி பற்றி பேசுகிறேன்."
+  te: "నమస్కారం, {institution_name} నుండి {student_name} యొక్క {subject} అసైన్‌మెంట్ గురించి మాట్లాడుతున్నాను."
+  ml: "നമസ്കാരം, {institution_name} ൽ നിന്ന് {student_name} ന്റെ {subject} അസൈൻമെന്റ് സംബന്ധിച്ച് ബന്ധപ്പെടുകയാണ്."
+
+body:
+  en: "The submission was due {days} ago. This assignment carries {weightage}% marks and this is {student_name}'s {miss_count} missed submission this month. Please ensure completion by {new_deadline}. Press 1 if your child will submit today, press 2 if they need an extension, press 3 for other concerns."
+
+dtmf_options:
+  "1": "Will submit today"
+  "2": "Needs extension"
+  "3": "Other concerns"

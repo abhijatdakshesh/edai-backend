@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sap-bridge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sap-bridge
+  template:
+    metadata:
+      labels:
+        app: sap-bridge
+    spec:
+      containers:
+        - name: sap-bridge
+          image: rvtrust/sap-bridge:latest
+          envFrom:
+            - secretRef:
+                name: sap-bridge-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sap-bridge
+spec:
+  selector:
+    app: sap-bridge
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sap-bridge-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: sap-bridge
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sap-bridge-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sap-bridge
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

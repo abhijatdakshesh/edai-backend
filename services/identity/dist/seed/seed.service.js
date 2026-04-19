@@ -1,0 +1,389 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var SeedService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SeedService = void 0;
+const common_1 = require("@nestjs/common");
+const courses_service_1 = require("../courses/courses.service");
+const attendance_api_service_1 = require("../attendance-api/attendance-api.service");
+const assignments_api_service_1 = require("../assignments-api/assignments-api.service");
+const ia_service_1 = require("../ia/ia.service");
+const fees_api_service_1 = require("../fees-api/fees-api.service");
+const vtu_service_1 = require("../vtu/vtu.service");
+const wellness_service_1 = require("../wellness/wellness.service");
+const jobs_service_1 = require("../jobs/jobs.service");
+const classes_api_service_1 = require("../classes-api/classes-api.service");
+const student_portal_service_1 = require("../student-portal/student-portal.service");
+const parent_portal_service_1 = require("../parent-portal/parent-portal.service");
+const comms_service_1 = require("../comms/comms.service");
+const STUDENTS = [
+    { usn: '1RV21CS001', name: 'Arjun Mehta', dept: 'Computer Science', semester: 5, cgpa: 8.2 },
+    { usn: '1RV21CS002', name: 'Sneha Reddy', dept: 'Computer Science', semester: 5, cgpa: 7.9 },
+    { usn: '1RV21CS003', name: 'Priya Sharma', dept: 'Computer Science', semester: 5, cgpa: 6.8 },
+    { usn: '1RV21CS004', name: 'Karan Joshi', dept: 'Computer Science', semester: 5, cgpa: 8.7 },
+    { usn: '1RV21CS005', name: 'Ravi Kumar', dept: 'Computer Science', semester: 5, cgpa: 5.9 },
+];
+const SUBJECTS = [
+    { code: 'CS501', name: 'Data Structures & Algorithms' },
+    { code: 'CS502', name: 'Database Management Systems' },
+    { code: 'CS503', name: 'Computer Networks' },
+    { code: 'CS504', name: 'Operating Systems' },
+];
+const TEACHER_ID = 'teacher-seed-001';
+let SeedService = SeedService_1 = class SeedService {
+    constructor(coursesSvc, attendanceSvc, assignmentsSvc, iaSvc, feesSvc, vtuSvc, wellnessSvc, jobsSvc, classesSvc, studentPortalSvc, parentPortalSvc, commsSvc) {
+        this.coursesSvc = coursesSvc;
+        this.attendanceSvc = attendanceSvc;
+        this.assignmentsSvc = assignmentsSvc;
+        this.iaSvc = iaSvc;
+        this.feesSvc = feesSvc;
+        this.vtuSvc = vtuSvc;
+        this.wellnessSvc = wellnessSvc;
+        this.jobsSvc = jobsSvc;
+        this.classesSvc = classesSvc;
+        this.studentPortalSvc = studentPortalSvc;
+        this.parentPortalSvc = parentPortalSvc;
+        this.commsSvc = commsSvc;
+        this.logger = new common_1.Logger(SeedService_1.name);
+    }
+    onModuleInit() {
+        this.logger.log('Seeding in-memory stores...');
+        this.seedCourses();
+        this.seedClasses();
+        this.seedAttendance();
+        this.seedAssignments();
+        this.seedIaMarks();
+        this.seedFees();
+        this.seedVtu();
+        this.seedWellness();
+        this.seedJobs();
+        this.seedStudentPortal();
+        this.seedParentPortal();
+        this.seedComms();
+        this.seedAcademicResults();
+        this.logger.log('Seed complete — all modules populated');
+    }
+    seedCourses() {
+        this.coursesSvc.courses = [
+            { id: 'course-1', name: 'Data Structures & Algorithms', code: 'CS501', credits: 4, department: 'Computer Science', instructorName: 'Dr. Anand Rao', instructorId: TEACHER_ID, enrolled: 120 },
+            { id: 'course-2', name: 'Database Management Systems', code: 'CS502', credits: 4, department: 'Computer Science', instructorName: 'Dr. Lakshmi Devi', instructorId: 'teacher-002', enrolled: 115 },
+            { id: 'course-3', name: 'Computer Networks', code: 'CS503', credits: 3, department: 'Computer Science', instructorName: 'Prof. Suresh Kumar', instructorId: 'teacher-003', enrolled: 118 },
+            { id: 'course-4', name: 'Operating Systems', code: 'CS504', credits: 4, department: 'Computer Science', instructorName: 'Dr. Anand Rao', instructorId: TEACHER_ID, enrolled: 122 },
+            { id: 'course-5', name: 'Software Engineering', code: 'CS505', credits: 3, department: 'Computer Science', instructorName: 'Dr. Meena Iyer', instructorId: 'teacher-004', enrolled: 110 },
+            { id: 'course-6', name: 'Machine Learning', code: 'CS601', credits: 4, department: 'Computer Science', instructorName: 'Dr. Raj Patel', instructorId: 'teacher-005', enrolled: 90 },
+            { id: 'course-7', name: 'Circuit Theory', code: 'EC501', credits: 4, department: 'Electronics', instructorName: 'Dr. Vinod Hegde', instructorId: 'teacher-006', enrolled: 85 },
+            { id: 'course-8', name: 'Thermodynamics', code: 'ME501', credits: 4, department: 'Mechanical', instructorName: 'Dr. Prakash Nair', instructorId: 'teacher-007', enrolled: 78 },
+        ];
+    }
+    seedClasses() {
+        this.classesSvc.classes = [
+            { id: 'class-cs501-a', name: 'CS 5A', subject: 'Data Structures & Algorithms', subjectCode: 'CS501', semester: 5, instructorId: TEACHER_ID, instructorName: 'Dr. Anand Rao', studentCount: 60 },
+            { id: 'class-cs504-a', name: 'CS 5B', subject: 'Operating Systems', subjectCode: 'CS504', semester: 5, instructorId: TEACHER_ID, instructorName: 'Dr. Anand Rao', studentCount: 62 },
+            { id: 'class-cs502-a', name: 'CS 5C', subject: 'Database Management Systems', subjectCode: 'CS502', semester: 5, instructorId: 'teacher-002', instructorName: 'Dr. Lakshmi Devi', studentCount: 58 },
+            { id: 'class-cs503-a', name: 'CS 5D', subject: 'Computer Networks', subjectCode: 'CS503', semester: 5, instructorId: 'teacher-003', instructorName: 'Prof. Suresh Kumar', studentCount: 60 },
+        ];
+        const roster = STUDENTS.map((s) => ({ usn: s.usn, name: s.name, dept: s.dept }));
+        this.classesSvc.rosters.set('class-cs501-a', roster);
+        this.classesSvc.rosters.set('class-cs504-a', roster);
+        this.classesSvc.rosters.set('class-cs502-a', roster);
+        this.classesSvc.rosters.set('class-cs503-a', roster);
+    }
+    seedAttendance() {
+        const records = [];
+        const now = new Date();
+        for (const student of STUDENTS) {
+            for (const subject of SUBJECTS) {
+                for (let d = 29; d >= 0; d--) {
+                    const date = new Date(now);
+                    date.setDate(date.getDate() - d);
+                    if (date.getDay() === 0 || date.getDay() === 6)
+                        continue;
+                    const attendanceProb = student.cgpa > 7.5 ? 0.88 : student.cgpa > 6.5 ? 0.78 : 0.65;
+                    const status = Math.random() < attendanceProb ? 'P' : Math.random() < 0.2 ? 'L' : 'A';
+                    records.push({
+                        id: `att-${student.usn}-${subject.code}-${date.toISOString().split('T')[0]}`,
+                        classId: `class-${subject.code.toLowerCase()}-a`,
+                        date: date.toISOString().split('T')[0],
+                        usn: student.usn,
+                        status,
+                        subjectCode: subject.code,
+                        subjectName: subject.name,
+                        markedBy: TEACHER_ID,
+                        studentName: student.name,
+                    });
+                }
+            }
+        }
+        this.attendanceSvc.records = records;
+    }
+    seedAssignments() {
+        const assignments = [
+            {
+                id: 'asn-1',
+                title: 'Implement Binary Search Tree',
+                dueDate: '2026-04-25',
+                subjectCode: 'CS501',
+                description: 'Implement a BST with insert, delete, and search operations',
+                maxMarks: 20,
+                status: 'PUBLISHED',
+                teacherId: TEACHER_ID,
+                submissionCount: 3,
+            },
+            {
+                id: 'asn-2',
+                title: 'SQL Query Optimization',
+                dueDate: '2026-04-28',
+                subjectCode: 'CS502',
+                description: 'Write optimized SQL queries for given scenarios',
+                maxMarks: 15,
+                status: 'PUBLISHED',
+                teacherId: 'teacher-002',
+                submissionCount: 2,
+            },
+            {
+                id: 'asn-3',
+                title: 'Socket Programming Lab',
+                dueDate: '2026-05-02',
+                subjectCode: 'CS503',
+                description: 'Implement a TCP client-server application',
+                maxMarks: 25,
+                status: 'PUBLISHED',
+                teacherId: 'teacher-003',
+                submissionCount: 1,
+            },
+        ];
+        this.assignmentsSvc.assignments = assignments;
+        const submissions = [
+            { id: 'sub-1', assignmentId: 'asn-1', usn: '1RV21CS001', studentName: 'Arjun Mehta', submittedAt: '2026-04-20T10:00:00Z', marks: 18, feedback: 'Excellent implementation', status: 'GRADED' },
+            { id: 'sub-2', assignmentId: 'asn-1', usn: '1RV21CS002', studentName: 'Sneha Reddy', submittedAt: '2026-04-21T09:30:00Z', status: 'SUBMITTED' },
+            { id: 'sub-3', assignmentId: 'asn-2', usn: '1RV21CS001', studentName: 'Arjun Mehta', submittedAt: '2026-04-22T14:00:00Z', status: 'SUBMITTED' },
+            { id: 'sub-4', assignmentId: 'asn-1', usn: '1RV21CS003', studentName: 'Priya Sharma', status: 'PENDING' },
+            { id: 'sub-5', assignmentId: 'asn-1', usn: '1RV21CS004', studentName: 'Karan Joshi', submittedAt: '2026-04-20T16:00:00Z', status: 'SUBMITTED' },
+        ];
+        this.assignmentsSvc.submissions = submissions;
+    }
+    seedIaMarks() {
+        const entries = STUDENTS.flatMap((s) => SUBJECTS.map((sub) => ({
+            usn: s.usn,
+            name: s.name,
+            subjectCode: sub.code,
+            sem: 5,
+            ia1: Math.min(20, Math.round((s.cgpa / 10) * 20 + (Math.random() * 4 - 2))),
+            ia2: Math.min(20, Math.round((s.cgpa / 10) * 20 + (Math.random() * 4 - 2))),
+            ia3: Math.min(20, Math.round((s.cgpa / 10) * 20 + (Math.random() * 4 - 2))),
+        })));
+        this.iaSvc.entries = entries;
+        this.iaSvc.submissions = [
+            { id: 'ia-sub-1', teacherId: TEACHER_ID, subjectCode: 'CS501', sem: 5, submittedAt: '2026-04-15T10:00:00Z', status: 'CONFIRMED' },
+            { id: 'ia-sub-2', teacherId: TEACHER_ID, subjectCode: 'CS504', sem: 5, submittedAt: '2026-04-16T10:00:00Z', status: 'SUBMITTED' },
+            { id: 'ia-sub-3', teacherId: 'teacher-002', subjectCode: 'CS502', sem: 5, submittedAt: '2026-04-17T10:00:00Z', status: 'SUBMITTED' },
+            { id: 'ia-sub-4', teacherId: 'teacher-003', subjectCode: 'CS503', sem: 5, submittedAt: '2026-04-14T10:00:00Z', status: 'DRAFT' },
+            { id: 'ia-sub-5', teacherId: 'teacher-004', subjectCode: 'CS505', sem: 5, submittedAt: '2026-04-18T10:00:00Z', status: 'CONFIRMED' },
+        ];
+    }
+    seedFees() {
+        const components = ['Tuition', 'Lab', 'Exam'];
+        const fees = STUDENTS.flatMap((s) => components.map((comp, i) => ({
+            id: `fee-${s.usn}-${comp.toLowerCase()}`,
+            usn: s.usn,
+            component: comp,
+            semester: 5,
+            amount: comp === 'Tuition' ? 45000 : comp === 'Lab' ? 5000 : 2500,
+            dueDate: '2026-04-30',
+            status: (i === 0 ? 'PAID' : i === 1 && s.cgpa > 7 ? 'PAID' : s.cgpa < 6.5 ? 'OVERDUE' : 'PENDING'),
+            paidDate: i === 0 ? '2026-04-01T00:00:00Z' : undefined,
+        })));
+        this.feesSvc.feeItems = fees;
+    }
+    seedVtu() {
+        const win = {
+            id: 'vtu-win-2026-sem5',
+            title: 'VTU Registration — May 2026 Exams',
+            openDate: '2026-04-01',
+            closeDate: '2026-04-30',
+            semester: 5,
+            isActive: true,
+        };
+        this.vtuSvc.windows = [win];
+        this.vtuSvc.eligibilities = STUDENTS.map((s) => ({
+            windowId: win.id,
+            usn: s.usn,
+            eligibleSubjects: SUBJECTS.map((sub) => sub.code),
+            isEligible: s.cgpa >= 6.0,
+        }));
+        this.vtuSvc.registrations = [
+            { windowId: win.id, usn: '1RV21CS001', subjectCodes: SUBJECTS.map((s) => s.code), registeredAt: '2026-04-05T10:00:00Z' },
+            { windowId: win.id, usn: '1RV21CS002', subjectCodes: SUBJECTS.map((s) => s.code), registeredAt: '2026-04-06T10:00:00Z' },
+            { windowId: win.id, usn: '1RV21CS004', subjectCodes: SUBJECTS.map((s) => s.code), registeredAt: '2026-04-07T10:00:00Z' },
+        ];
+    }
+    seedWellness() {
+        const slots = [
+            { id: 'slot-1', dateTime: '2026-04-22T10:00:00Z', counsellorId: 'counsellor-001', isBooked: true },
+            { id: 'slot-2', dateTime: '2026-04-22T11:00:00Z', counsellorId: 'counsellor-001', isBooked: false },
+            { id: 'slot-3', dateTime: '2026-04-23T10:00:00Z', counsellorId: 'counsellor-001', isBooked: false },
+        ];
+        this.wellnessSvc.slots = slots;
+        this.wellnessSvc.sessions = [
+            { id: 'sess-1', slotId: 'slot-1', studentUsn: '1RV21CS003', reason: 'Academic stress', status: 'BOOKED' },
+        ];
+        this.wellnessSvc.studyTasks = [
+            { id: 'task-1', usn: '1RV21CS001', subject: 'CS501', title: 'Revise tree traversals', done: true, dueDate: '2026-04-20' },
+            { id: 'task-2', usn: '1RV21CS001', subject: 'CS502', title: 'Practice SQL joins', done: false, dueDate: '2026-04-24' },
+            { id: 'task-3', usn: '1RV21CS001', subject: 'CS503', title: 'Read OSI model notes', done: false, dueDate: '2026-04-25' },
+        ];
+        this.wellnessSvc.riskScores.set('1RV21CS001', { score: 20, level: 'LOW', factors: ['Good attendance', 'Assignments on track'] });
+        this.wellnessSvc.riskScores.set('1RV21CS003', { score: 70, level: 'HIGH', factors: ['Low attendance: 68%', 'Missed 3 assignments'] });
+        this.wellnessSvc.riskScores.set('1RV21CS005', { score: 55, level: 'MEDIUM', factors: ['CGPA below 6.0', 'Fee overdue'] });
+    }
+    seedJobs() {
+        this.jobsSvc.jobs = [
+            { id: 'job-1', company: 'Infosys', role: 'Systems Engineer', package: '4.5 LPA', deadline: '2026-05-15', eligibility: 'CGPA >= 6.0', applyUrl: 'https://careers.infosys.com/campus', dept: 'CS' },
+            { id: 'job-2', company: 'Wipro', role: 'Software Engineer', package: '4.0 LPA', deadline: '2026-05-20', eligibility: 'CGPA >= 6.0', applyUrl: 'https://careers.wipro.com/campus', dept: 'CS' },
+            { id: 'job-3', company: 'TCS', role: 'Associate Software Engineer', package: '3.8 LPA', deadline: '2026-05-25', eligibility: 'CGPA >= 5.5', applyUrl: 'https://careers.tcs.com/campus', dept: 'CS' },
+            { id: 'job-4', company: 'Accenture', role: 'Associate', package: '4.5 LPA', deadline: '2026-06-01', eligibility: 'CGPA >= 6.0', applyUrl: 'https://careers.accenture.com/campus', dept: 'CS' },
+            { id: 'job-5', company: 'Amazon', role: 'SDE Intern', package: '8.0 LPA', deadline: '2026-05-01', eligibility: 'CGPA >= 7.5', applyUrl: 'https://amazon.jobs/campus', dept: 'CS' },
+            { id: 'job-6', company: 'Google', role: 'Step Intern', package: '12.0 LPA', deadline: '2026-04-30', eligibility: 'CGPA >= 8.0', applyUrl: 'https://careers.google.com/campus', dept: 'CS' },
+            { id: 'job-7', company: 'Bosch', role: 'Graduate Engineer Trainee', package: '4.2 LPA', deadline: '2026-06-10', eligibility: 'CGPA >= 6.5', applyUrl: 'https://careers.bosch.com/campus', dept: 'ME' },
+            { id: 'job-8', company: 'ABB', role: 'Field Engineer', package: '4.0 LPA', deadline: '2026-06-15', eligibility: 'CGPA >= 6.0', applyUrl: 'https://careers.abb.com/campus', dept: 'EC' },
+            { id: 'job-9', company: 'Flipkart', role: 'SDE I', package: '16.0 LPA', deadline: '2026-04-28', eligibility: 'CGPA >= 7.5', applyUrl: 'https://careers.flipkart.com/campus', dept: 'CS' },
+            { id: 'job-10', company: 'Capgemini', role: 'Analyst', package: '3.8 LPA', deadline: '2026-06-20', eligibility: 'CGPA >= 5.5', applyUrl: 'https://careers.capgemini.com/campus', dept: 'CS' },
+        ];
+        this.jobsSvc.predictions = STUDENTS.map((s) => ({
+            usn: s.usn,
+            name: s.name,
+            dept: s.dept,
+            likelihood: s.cgpa >= 7.5 ? 'HIGH' : s.cgpa >= 6.5 ? 'MEDIUM' : 'LOW',
+            skillGaps: s.cgpa >= 7.5 ? ['System Design'] : s.cgpa >= 6.5 ? ['DSA', 'System Design'] : ['DSA', 'SQL', 'Communication'],
+        }));
+    }
+    seedStudentPortal() {
+        const defaultSchedule = [
+            { dayOfWeek: 'Monday', subject: 'Data Structures & Algorithms', room: 'Room 301', startTime: '09:00', endTime: '10:00' },
+            { dayOfWeek: 'Monday', subject: 'Database Management Systems', room: 'Room 302', startTime: '10:00', endTime: '11:00' },
+            { dayOfWeek: 'Tuesday', subject: 'Computer Networks', room: 'Lab 101', startTime: '09:00', endTime: '11:00' },
+            { dayOfWeek: 'Wednesday', subject: 'Operating Systems', room: 'Room 301', startTime: '11:00', endTime: '12:00' },
+            { dayOfWeek: 'Thursday', subject: 'Data Structures & Algorithms', room: 'Room 301', startTime: '09:00', endTime: '10:00' },
+            { dayOfWeek: 'Friday', subject: 'Software Engineering', room: 'Room 303', startTime: '14:00', endTime: '15:00' },
+        ];
+        this.studentPortalSvc.schedules.set('default', defaultSchedule);
+        const defaultHostel = {
+            hostel: {
+                roomNumber: '204',
+                block: 'Block B',
+                warden: 'Mr. Krishnamurthy',
+                messMenu: [
+                    { day: 'Monday', breakfast: 'Idli Sambar', lunch: 'Rice Dal Sabzi', dinner: 'Chapati Paneer' },
+                    { day: 'Tuesday', breakfast: 'Upma', lunch: 'Curd Rice', dinner: 'Biryani' },
+                    { day: 'Wednesday', breakfast: 'Dosa Chutney', lunch: 'Rice Sambar', dinner: 'Chapati Dal' },
+                ],
+            },
+            transport: {
+                route: 'Route 4 — Koramangala to College',
+                pickupPoint: 'Koramangala BDA Complex',
+                timing: '7:45 AM',
+            },
+        };
+        this.studentPortalSvc.hostelData.set('default', defaultHostel);
+        this.studentPortalSvc.staff = [
+            { name: 'Dr. Anand Rao', role: 'Professor & HoD', department: 'Computer Science', email: 'anand.rao@rvce.edu.in', phone: '+91-9876543210' },
+            { name: 'Dr. Lakshmi Devi', role: 'Associate Professor', department: 'Computer Science', email: 'lakshmi.devi@rvce.edu.in', phone: '+91-9876543211' },
+            { name: 'Prof. Suresh Kumar', role: 'Assistant Professor', department: 'Computer Science', email: 'suresh.kumar@rvce.edu.in', phone: '+91-9876543212' },
+            { name: 'Dr. Meena Iyer', role: 'Associate Professor', department: 'Computer Science', email: 'meena.iyer@rvce.edu.in', phone: '+91-9876543213' },
+            { name: 'Ms. Divya Nair', role: 'Lab Instructor', department: 'Computer Science', email: 'divya.nair@rvce.edu.in', phone: '+91-9876543214' },
+            { name: 'Mr. Rajesh Shetty', role: 'Placement Coordinator', department: 'Placements', email: 'rajesh.shetty@rvce.edu.in', phone: '+91-9876543215' },
+            { name: 'Dr. Preethi Rao', role: 'Counsellor', department: 'Student Welfare', email: 'preethi.rao@rvce.edu.in', phone: '+91-9876543216' },
+        ];
+    }
+    seedParentPortal() {
+        const parentId = 'parent-seed-001';
+        this.parentPortalSvc.parentChildMap.set(parentId, ['1RV21CS001', '1RV21CS003']);
+        for (const s of STUDENTS) {
+            this.parentPortalSvc.childProfiles.set(s.usn, {
+                usn: s.usn,
+                name: s.name,
+                semester: s.semester,
+                dept: s.dept,
+                cgpa: s.cgpa,
+                attendance: Math.round((s.cgpa / 10) * 30 + 60),
+            });
+        }
+    }
+    seedComms() {
+        const now = new Date();
+        this.commsSvc.callLogs = STUDENTS.slice(0, 5).map((s, i) => {
+            const calledAt = new Date(now);
+            calledAt.setDate(calledAt.getDate() - i);
+            const outcomes = ['ANSWERED', 'ANSWERED', 'VOICEMAIL', 'ANSWERED', 'NO_ANSWER'];
+            return {
+                id: `call-${i + 1}`,
+                calledAt: calledAt.toISOString(),
+                studentName: s.name,
+                studentUsn: s.usn,
+                parentId: 'parent-seed-001',
+                outcome: outcomes[i],
+                duration: outcomes[i] === 'ANSWERED' ? 120 + Math.floor(Math.random() * 180) : 0,
+                transcript: outcomes[i] === 'ANSWERED' ? `Parent acknowledged absence of ${s.name} on ${calledAt.toLocaleDateString()}` : undefined,
+                summary: outcomes[i] === 'ANSWERED' ? `Parent was informed and will follow up with student` : undefined,
+            };
+        });
+        this.commsSvc.messages = [
+            { id: 'msg-1', parentId: 'parent-seed-001', content: 'Your child was absent today. Please ensure they attend tomorrow.', direction: 'OUTBOUND', sentAt: now.toISOString(), channel: 'WHATSAPP' },
+            { id: 'msg-2', parentId: 'parent-seed-001', content: 'Noted, thank you for informing us.', direction: 'INBOUND', sentAt: new Date(now.getTime() + 60000).toISOString(), channel: 'WHATSAPP' },
+            { id: 'msg-3', parentId: 'parent-seed-001', content: 'Fee reminder: ₹52,500 due by 30-Apr-2026', direction: 'OUTBOUND', sentAt: new Date(now.getTime() - 86400000).toISOString(), channel: 'SMS' },
+        ];
+    }
+    seedAcademicResults() {
+        this.coursesSvc.academicResults = STUDENTS.map((s) => ({
+            usn: s.usn,
+            cgpa: s.cgpa,
+            semesters: [
+                {
+                    sem: 1,
+                    sgpa: s.cgpa + (Math.random() * 0.4 - 0.2),
+                    subjects: [
+                        { code: 'MA101', name: 'Engineering Mathematics I', ia: 18, ese: 72, total: 90, grade: 'S' },
+                        { code: 'PH101', name: 'Engineering Physics', ia: 16, ese: 68, total: 84, grade: 'A' },
+                        { code: 'CS101', name: 'Programming in C', ia: 19, ese: 76, total: 95, grade: 'S' },
+                    ],
+                },
+                {
+                    sem: 5,
+                    sgpa: s.cgpa,
+                    subjects: SUBJECTS.map((sub) => {
+                        const ia = Math.min(20, Math.round((s.cgpa / 10) * 20));
+                        const ese = Math.min(80, Math.round((s.cgpa / 10) * 80));
+                        const total = ia + ese;
+                        const grade = total >= 90 ? 'S' : total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : 'D';
+                        return { code: sub.code, name: sub.name, ia, ese, total, grade };
+                    }),
+                },
+            ],
+        }));
+    }
+};
+exports.SeedService = SeedService;
+exports.SeedService = SeedService = SeedService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [courses_service_1.CoursesService,
+        attendance_api_service_1.AttendanceApiService,
+        assignments_api_service_1.AssignmentsApiService,
+        ia_service_1.IaService,
+        fees_api_service_1.FeesApiService,
+        vtu_service_1.VtuService,
+        wellness_service_1.WellnessService,
+        jobs_service_1.JobsService,
+        classes_api_service_1.ClassesApiService,
+        student_portal_service_1.StudentPortalService,
+        parent_portal_service_1.ParentPortalService,
+        comms_service_1.CommsService])
+], SeedService);
+//# sourceMappingURL=seed.service.js.map

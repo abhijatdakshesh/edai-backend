@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "GrievanceFiled",
+  "namespace": "ai.rvtrust.grievance",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "grievanceId", "type": "string" },
+    { "name": "filedBy", "type": "string" },
+    { "name": "category", "type": "string" },
+    { "name": "priority", "type": "string" },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

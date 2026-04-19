@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "TimelineEventCreated",
+  "namespace": "ai.rvtrust.comms",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventVersion", "type": "string", "default": "1.0" },
+    { "name": "timelineEventId", "type": "string" },
+    { "name": "userId", "type": "string" },
+    { "name": "kind", "type": "string" },
+    { "name": "title", "type": "string" },
+    { "name": "body", "type": ["null", "string"], "default": null },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}
