@@ -79,10 +79,15 @@ describe('CommsService', () => {
       const msg: Message = {
         id: 'm1',
         parentId: 'parent-1',
-        content: 'Hello',
-        direction: 'OUTBOUND',
-        sentAt: '2026-04-01T10:00:00Z',
-        channel: 'WHATSAPP',
+        parentName: 'Test Parent',
+        studentUsn: 'USN001',
+        recipientId: 'teacher-1',
+        recipientName: 'Test Teacher',
+        subject: 'Test Subject',
+        body: 'Hello',
+        status: 'SENT',
+        replies: [],
+        createdAt: '2026-04-01T10:00:00Z',
       };
       service.messages.push(msg, { ...msg, id: 'm2', parentId: 'parent-2' });
 

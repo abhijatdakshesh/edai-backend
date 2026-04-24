@@ -372,9 +372,22 @@ export class SeedService implements OnModuleInit {
     });
 
     this.commsSvc.messages = [
-      { id: 'msg-1', parentId: 'u-parent-01', content: 'Your child was absent today. Please ensure they attend tomorrow.', direction: 'OUTBOUND', sentAt: now.toISOString(), channel: 'WHATSAPP' },
-      { id: 'msg-2', parentId: 'u-parent-01', content: 'Noted, thank you for informing us.', direction: 'INBOUND', sentAt: new Date(now.getTime() + 60000).toISOString(), channel: 'WHATSAPP' },
-      { id: 'msg-3', parentId: 'u-parent-01', content: 'Fee reminder: ₹52,500 due by 30-Apr-2026', direction: 'OUTBOUND', sentAt: new Date(now.getTime() - 86400000).toISOString(), channel: 'SMS' },
+      {
+        id: 'msg-1', parentId: 'u-parent-01', parentName: 'Suresh Kumar',
+        studentUsn: STUDENTS[0].usn, recipientId: 'teacher-001', recipientName: 'Ravi Shankar',
+        subject: 'Attendance Concern', body: 'My son was absent on 22-Apr due to illness. Please note.',
+        status: 'REPLIED', createdAt: new Date(now.getTime() - 86400000 * 2).toISOString(),
+        replies: [
+          { id: 'reply-1', fromId: 'teacher-001', fromName: 'Ravi Shankar', body: 'Noted. Please submit a medical certificate.', createdAt: new Date(now.getTime() - 86400000).toISOString() },
+        ],
+      },
+      {
+        id: 'msg-2', parentId: 'u-parent-01', parentName: 'Suresh Kumar',
+        studentUsn: STUDENTS[0].usn, recipientId: 'teacher-002', recipientName: 'Dr. Lakshmi Devi',
+        subject: 'Fee Payment Query', body: 'Can the lab fee be paid in installments?',
+        status: 'READ', createdAt: new Date(now.getTime() - 86400000).toISOString(),
+        replies: [],
+      },
     ];
   }
 

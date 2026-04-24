@@ -27,13 +27,31 @@ export interface Announcement {
   createdAt: string;
 }
 
+export interface MessageReply {
+  id: string;
+  fromId: string;
+  fromName: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface Message {
   id: string;
   parentId: string;
-  content: string;
-  direction: 'INBOUND' | 'OUTBOUND';
-  sentAt: string;
-  channel: 'WHATSAPP' | 'SMS' | 'EMAIL';
+  parentName: string;
+  studentUsn: string;
+  recipientId: string;
+  recipientName: string;
+  subject: string;
+  body: string;
+  status: 'SENT' | 'READ' | 'REPLIED';
+  replies: MessageReply[];
+  createdAt: string;
+  /** @deprecated SMS/WhatsApp fields — kept for backward compat */
+  content?: string;
+  direction?: 'INBOUND' | 'OUTBOUND';
+  sentAt?: string;
+  channel?: 'WHATSAPP' | 'SMS' | 'EMAIL';
 }
 
 @Injectable()
