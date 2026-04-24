@@ -11,6 +11,16 @@ export class CommsController {
     private readonly studentPortalSvc: StudentPortalService,
   ) {}
 
+  @Get('comms/announcements')
+  getAnnouncements() {
+    return this.svc.getAnnouncements();
+  }
+
+  @Get('comms/calls')
+  getCallsByClass(@Query('classId') classId: string) {
+    return this.svc.getCallsByClass(classId);
+  }
+
   @Get('comms/calls/recent')
   getRecentCalls() {
     return this.svc.getRecentCalls();

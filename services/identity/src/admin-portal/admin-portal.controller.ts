@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Res, UseGuards } from '@nestjs/common';
 import { AdminPortalService } from './admin-portal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../roles/roles.guard';
@@ -72,6 +72,16 @@ export class AdminPortalController {
   @Get('analytics/export')
   exportAnalytics(@Query('type') type?: string) {
     return this.svc.exportAnalytics(type);
+  }
+
+  @Post('exports/download')
+  downloadExport(
+    @Body() body: { type: string; format: string; filters?: Record<string, unknown>; requestedBy?: string },
+    @Res({ passthrough: true }) res: any,
+  ) {
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="export.${(body.format || 'CSV').toLowerCase()}"`);
+    return `"type","format"\n"${body.type}","${body.format}"`;
   }
 
   @Get('analytics/performance')

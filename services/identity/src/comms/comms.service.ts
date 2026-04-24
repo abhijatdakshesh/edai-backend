@@ -26,6 +26,15 @@ export interface Message {
 export class CommsService {
   callLogs: AICallLog[] = [];
   messages: Message[] = [];
+  announcements: Array<{ id: string; title: string; content: string; audience: string; createdAt: string }> = [];
+
+  getAnnouncements(): Array<{ id: string; title: string; content: string; audience: string; createdAt: string }> {
+    return this.announcements;
+  }
+
+  getCallsByClass(classId: string): AICallLog[] {
+    return this.callLogs.filter((c) => (c as any).classId === classId);
+  }
 
   constructor(private readonly events: EventsGateway) {}
 
@@ -69,7 +78,9 @@ export class CommsService {
     content: string,
     audience: string,
   ): { id: string; title: string; content: string; audience: string; createdAt: string } {
-    return { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
+    const ann = { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
+    this.announcements.push(ann);
+    return ann;
   }
 
   triggerParentCall(parentId: string, usn: string): { callId: string; status: 'QUEUED' } {
