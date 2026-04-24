@@ -142,4 +142,10 @@ export class VtuService {
   runEligibility(windowId: string): { processed: number; windowId: string } {
     return { processed: this.eligibilities.filter((e) => e.windowId === windowId).length, windowId };
   }
+
+  getWindowById(id: string): VtuWindow {
+    const win = this.windows.find((w) => w.id === id);
+    if (!win) throw new NotFoundException('Window not found');
+    return win;
+  }
 }

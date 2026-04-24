@@ -110,7 +110,7 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('denies access when neither user nor x-role header is present', () => {
+  it('passes when neither user nor x-role header is present (defers to JwtAuthGuard for 401)', () => {
     const reflector = {
       getAllAndOverride: jest.fn().mockReturnValue(['ADMIN'] as UserRole[]),
     } as unknown as Reflector;
@@ -122,7 +122,8 @@ describe('RolesGuard', () => {
       switchToHttp: () => ({ getRequest: () => ({ user: undefined, headers: {} }) }),
     } as unknown as ExecutionContext;
 
-    expect(guard.canActivate(ctx)).toBe(false);
+    // Returns true — unauthenticated requests pass the global RolesGuard so JwtAuthGuard returns 401.
+    expect(guard.canActivate(ctx)).toBe(true);
   });
 
   it('allows access when one of multiple required roles matches', () => {

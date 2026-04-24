@@ -77,4 +77,10 @@ export class CoursesService {
     if (!result) throw new NotFoundException('Results not found for USN');
     return result;
   }
+
+  getCourseById(id: string): Course {
+    const course = this.courses.find((c) => c.id === id);
+    if (!course) throw new NotFoundException('Course not found');
+    return course;
+  }
 }

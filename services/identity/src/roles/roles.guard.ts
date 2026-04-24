@@ -30,7 +30,9 @@ export class RolesGuard implements CanActivate {
     const role: UserRole | undefined =
       request.user?.role ?? (request.headers['x-role'] as UserRole | undefined);
 
-    if (!role) return false;
+    // No user yet means JwtAuthGuard hasn't run — pass through so JwtAuthGuard returns 401.
+    // Role check only applies to authenticated requests.
+    if (!role) return true;
     return requiredRoles.includes(role);
   }
 }

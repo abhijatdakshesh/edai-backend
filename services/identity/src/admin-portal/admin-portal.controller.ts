@@ -1,8 +1,11 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { AdminPortalService } from './admin-portal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../roles/roles.guard';
+import { Roles } from '../roles/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'HOD', 'PRINCIPAL', 'DEAN', 'TRUSTEE')
 @Controller()
 export class AdminPortalController {
   constructor(private readonly svc: AdminPortalService) {}
@@ -17,9 +20,42 @@ export class AdminPortalController {
     return this.svc.getReports();
   }
 
+  @Get('analytics/attendance-trend')
+  getAttendanceTrend(@Query('institutionId') _institutionId?: string) {
+    return this.svc.getAttendanceTrend();
+  }
+
+  @Get('analytics/fee-collection')
+  getFeeCollection(@Query('year') _year?: string) {
+    return this.svc.getFeeCollection();
+  }
+
+  @Get('analytics/attendance/by-department')
+  getDeptAttendance() {
+    return this.svc.getDeptAttendance();
+  }
+
   @Get('admin/naac')
   getNaac() {
     return this.svc.getNaac();
+  }
+
+  @Get('admin/naac/metrics')
+  getNaacMetrics() {
+    return this.svc.getNaacMetrics();
+  }
+
+  @Get('admin/placements/summary')
+  getPlacementSummary() {
+    return this.svc.getPlacementSummary();
+  }
+
+  @Get('admin/placements/predictions')
+  getPlacementPredictions(
+    @Query('dept') dept?: string,
+    @Query('likelihood') likelihood?: string,
+  ) {
+    return this.svc.getPlacementPredictions(dept, likelihood);
   }
 
   @Post('admin/bulk-import/trigger')
@@ -31,5 +67,15 @@ export class AdminPortalController {
     },
   ) {
     return this.svc.triggerBulkImport(body.entityType, body.fileUrl);
+  }
+
+  @Get('analytics/export')
+  exportAnalytics(@Query('type') type?: string) {
+    return this.svc.exportAnalytics(type);
+  }
+
+  @Get('analytics/performance')
+  getClassPerformance(@Query('classId') classId?: string) {
+    return this.svc.getClassPerformance(classId);
   }
 }

@@ -68,4 +68,48 @@ export class AssignmentsApiController {
     this.events.emitMarksUpdate({ subjectCode: result.assignmentId, sem: 0 });
     return result;
   }
+
+  // Base assignments - static routes BEFORE param routes to avoid conflicts
+  @Get('assignments')
+  getAllAssignments() {
+    return this.svc.getAllAssignments();
+  }
+
+  @Get('assignments/course/:courseId')
+  getAssignmentsByCourse(@Param('courseId') courseId: string) {
+    return this.svc.getAssignmentsByCourse(courseId);
+  }
+
+  @Get('assignments/student/:usn')
+  getStudentAssignmentsByUsn(@Param('usn') usn: string) {
+    return this.svc.getStudentAssignments(usn);
+  }
+
+  @Get('teacher/assignments/:id')
+  getAssignmentDetail(@Param('id') id: string) {
+    return this.svc.getAssignmentById(id);
+  }
+
+  @Get('assignments/:id/submissions')
+  getSubmissionsById(@Param('id') id: string) {
+    return this.svc.getSubmissions(id);
+  }
+
+  @Post('assignments/:id/submit')
+  submitAssignment(
+    @Param('id') id: string,
+    @Body() body: { fileUrl?: string; text?: string },
+    @Request() req: any,
+  ) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.svc.submitAssignment(id, usn, body);
+  }
+
+  @Post('assignments/submissions/:submissionId/grade')
+  gradeSubmissionById(
+    @Param('submissionId') subId: string,
+    @Body() body: { marks: number; feedback: string },
+  ) {
+    return this.svc.gradeSubmissionById(subId, body.marks, body.feedback);
+  }
 }

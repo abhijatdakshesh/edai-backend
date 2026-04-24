@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 export interface ClassRecord {
   id: string;
@@ -58,5 +58,20 @@ export class ClassesApiService {
 
   getClassStudents(classId: string): StudentRoster[] {
     return this.rosters.get(classId) ?? [];
+  }
+
+  getClassById(id: string): ClassRecord {
+    const cls = this.classes.find((c) => c.id === id);
+    if (!cls) throw new NotFoundException('Class not found');
+    return cls;
+  }
+
+  getStudentsByClass(classId: string): Array<{ usn: string; name: string; attendancePct: number }> {
+    const roster = this.rosters.get(classId) ?? [];
+    return roster.map((s) => ({
+      usn: s.usn,
+      name: s.name,
+      attendancePct: Math.floor(70 + Math.random() * 25),
+    }));
   }
 }

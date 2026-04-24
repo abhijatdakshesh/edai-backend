@@ -22,7 +22,10 @@ import { StudentPortalModule } from './student-portal/student-portal.module';
 import { ParentPortalModule } from './parent-portal/parent-portal.module';
 import { AdminPortalModule } from './admin-portal/admin-portal.module';
 import { CommsModule } from './comms/comms.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { SeedModule } from './seed/seed.module';
+import { PromotionModule } from './promotion/promotion.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -50,6 +53,9 @@ import { SeedModule } from './seed/seed.module';
     ParentPortalModule,
     AdminPortalModule,
     CommsModule,
+    DepartmentsModule,
+    PromotionModule,
+    ChatbotModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],

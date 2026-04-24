@@ -88,4 +88,44 @@ export class ParentPortalService {
       return { totalDue: 0, totalOutstanding: 0, items: [] };
     }
   }
+
+  getChild(
+    usn: string,
+  ): { usn: string; name: string; dept: string; semester: number; cgpa: number; attendancePct: number; feeStatus: string } {
+    const profile = this.childProfiles.get(usn);
+    return {
+      usn,
+      name: profile?.name ?? `Student ${usn}`,
+      dept: profile?.dept ?? 'Computer Science',
+      semester: profile?.semester ?? 5,
+      cgpa: profile?.cgpa ?? 7.5,
+      attendancePct: profile?.attendance ?? 80,
+      feeStatus: 'PENDING',
+    };
+  }
+
+  payFees(
+    usn: string,
+    amount: number,
+    feeIds: string[],
+  ): { receiptId: string; paidAt: string; amount: number } {
+    return {
+      receiptId: `rcpt-${Date.now()}`,
+      paidAt: new Date().toISOString(),
+      amount,
+    };
+  }
+
+  checkScholarship(
+    usn: string,
+  ): { eligible: boolean; schemes: Array<{ name: string; amount: number; criteria: string }> } {
+    return {
+      eligible: true,
+      schemes: [
+        { name: 'SC/ST Scholarship', amount: 25000, criteria: 'Category SC/ST with >75% attendance' },
+        { name: 'Merit Scholarship', amount: 15000, criteria: 'CGPA >= 8.5 in previous semester' },
+        { name: 'National Scholarship Portal', amount: 20000, criteria: 'Family income below 8 LPA' },
+      ],
+    };
+  }
 }

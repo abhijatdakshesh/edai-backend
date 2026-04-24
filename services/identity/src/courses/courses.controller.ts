@@ -28,4 +28,15 @@ export class CoursesController {
   getResults(@Param('usn') usn: string) {
     return this.coursesService.getResults(usn);
   }
+
+  @Get('courses/:id')
+  getCourse(@Param('id') id: string) {
+    return this.coursesService.getCourseById(id);
+  }
+
+  @Post('student/courses/:courseId/enroll')
+  enrollStudent(@Param('courseId') id: string, @Request() req: any) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.coursesService.enroll(id, usn);
+  }
 }
