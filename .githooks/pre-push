@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# pre-push: enforce branch + PR workflow
+# Never push directly to main/master — all changes must go through a PR.
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+PROTECTED="main master"
+
+for p in $PROTECTED; do
+  if [ "$BRANCH" = "$p" ]; then
+    if [ "$ALLOW_BRANCHLESS_PUSH" = "1" ]; then
+      echo "⚠️  ALLOW_BRANCHLESS_PUSH=1 override — pushing to $BRANCH"
+      exit 0
+    fi
+    echo ""
+    echo "❌  Direct push to '$BRANCH' is blocked."
+    echo ""
+    echo "   Create a feature branch and open a PR instead:"
+    echo "   git checkout -b <type>/<short-desc>"
+    echo "   git push -u origin HEAD"
+    echo "   gh pr create --fill"
+    echo ""
+    echo "   To override (repo init only): ALLOW_BRANCHLESS_PUSH=1 git push"
+    echo ""
+    exit 1
+  fi
+done
+
+# Auto-open PR if one doesn't exist yet for this branch
+if command -v gh &>/dev/null; then
+  PR_URL=$(gh pr view --json url -q .url 2>/dev/null)
+  if [ -z "$PR_URL" ]; then
+    echo "🔀  No PR found for branch '$BRANCH' — creating one..."
+    gh pr create --fill 2>/dev/null && echo "✅  PR created." || echo "⚠️  PR creation failed — create manually with: gh pr create --fill"
+  else
+    echo "✅  PR already exists: $PR_URL"
+  fi
+fi
+
+exit 0
