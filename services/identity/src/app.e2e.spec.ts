@@ -36,6 +36,7 @@ const SEED = {
 let app: INestApplication;
 let http: ReturnType<typeof supertest>;
 let studentToken: string;
+let adminToken: string;
 
 beforeAll(async () => {
   const server = express();
@@ -43,12 +44,14 @@ beforeAll(async () => {
   await app.init();
   http = supertest(server);
 
-  // Get a student JWT once — reused across tests
-  const res = await http
-    .post('/api/auth/login')
-    .send({ email: SEED.student.email, password: SEED.student.password });
-  studentToken = res.body.accessToken as string;
-  expect(studentToken).toBeTruthy(); // fail fast if seed login broken
+  const [studentRes, adminRes] = await Promise.all([
+    http.post('/api/auth/login').send({ email: SEED.student.email, password: SEED.student.password }),
+    http.post('/api/auth/login').send({ email: SEED.admin.email, password: SEED.admin.password }),
+  ]);
+  studentToken = studentRes.body.accessToken as string;
+  adminToken   = adminRes.body.accessToken as string;
+  expect(studentToken).toBeTruthy();
+  expect(adminToken).toBeTruthy();
 }, 30_000);
 
 afterAll(async () => {
@@ -263,5 +266,166 @@ describe('HttpExceptionFilter — error response shape', () => {
       typeof res.body.message === 'string' ||
       typeof res.body.error === 'string';
     expect(hasMessage).toBe(true);
+  });
+});
+
+// ─── Departments ─────────────────────────────────────────────────────────────
+
+describe('GET /api/departments', () => {
+  it('returns 200 + array for authenticated user', async () => {
+    const res = await http
+      .get('/api/departments')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+  });
+
+  it('each department has code, name, hodUserId', async () => {
+    const res = await http
+      .get('/api/departments')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const dept = res.body[0];
+    expect(dept.code).toBeTruthy();
+    expect(dept.name).toBeTruthy();
+    expect(dept.hodUserId).toBeTruthy();
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await http.get('/api/departments');
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('GET /api/departments/:code', () => {
+  it('returns 200 for existing CSE department', async () => {
+    const res = await http
+      .get('/api/departments/CSE')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe('CSE');
+  });
+
+  it('returns 404 for non-existent code', async () => {
+    const res = await http
+      .get('/api/departments/UNKNOWN')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+describe('GET /api/analytics/attendance-trend', () => {
+  it('returns 200 + array for admin', async () => {
+    const res = await http
+      .get('/api/analytics/attendance-trend')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(typeof res.body[0]!.month).toBe('string');
+    expect(typeof res.body[0]!.pct).toBe('number');
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await http.get('/api/analytics/attendance-trend');
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('GET /api/analytics/fee-collection', () => {
+  it('returns 200 + array with collected + target fields', async () => {
+    const res = await http
+      .get('/api/analytics/fee-collection')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const point = res.body[0];
+    expect(typeof point.collected).toBe('number');
+    expect(typeof point.target).toBe('number');
+  });
+});
+
+// ─── NAAC Metrics ────────────────────────────────────────────────────────────
+
+describe('GET /api/admin/naac/metrics', () => {
+  it('returns 200 with overallScore, grade, criteria array', async () => {
+    const res = await http
+      .get('/api/admin/naac/metrics')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.overallScore).toBe('number');
+    expect(typeof res.body.grade).toBe('string');
+    expect(Array.isArray(res.body.criteria)).toBe(true);
+    expect(res.body.criteria.length).toBeGreaterThan(0);
+    const criterion = res.body.criteria[0];
+    expect(['UP', 'DOWN', 'STABLE']).toContain(criterion.trend);
+  });
+
+  it('student token returns 401 (no JwtAuthGuard bypass)', async () => {
+    // Admin-only route — student should get 401 or 403
+    const res = await http
+      .get('/api/admin/naac/metrics')
+      .set('Authorization', `Bearer ${studentToken}`);
+    expect([401, 403]).toContain(res.status);
+  });
+});
+
+// ─── Placement Predictor ─────────────────────────────────────────────────────
+
+describe('GET /api/admin/placements/summary', () => {
+  it('returns 200 with total + high + medium + low + veryLow fields', async () => {
+    const res = await http
+      .get('/api/admin/placements/summary')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.total).toBe('number');
+    expect(typeof res.body.high).toBe('number');
+    expect(typeof res.body.medium).toBe('number');
+    expect(typeof res.body.low).toBe('number');
+    expect(typeof res.body.veryLow).toBe('number');
+    expect(res.body.total).toBe(res.body.high + res.body.medium + res.body.low + res.body.veryLow);
+  });
+});
+
+describe('GET /api/admin/placements/predictions', () => {
+  it('returns 200 + array for admin', async () => {
+    const res = await http
+      .get('/api/admin/placements/predictions')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('dept filter narrows results to matching dept', async () => {
+    const res = await http
+      .get('/api/admin/placements/predictions?dept=CSE')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    for (const p of res.body as Array<{ dept: string }>) {
+      expect(p.dept).toBe('CSE');
+    }
+  });
+
+  it('likelihood filter narrows results', async () => {
+    const res = await http
+      .get('/api/admin/placements/predictions?likelihood=HIGH')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    for (const p of res.body as Array<{ likelihood: string }>) {
+      expect(p.likelihood).toBe('HIGH');
+    }
+  });
+
+  it('each prediction has studentUsn, cgpa, likelihood, matchedCompanies', async () => {
+    const res = await http
+      .get('/api/admin/placements/predictions')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const pred = res.body[0];
+    expect(pred.studentUsn).toBeTruthy();
+    expect(typeof pred.cgpa).toBe('number');
+    expect(['HIGH', 'MEDIUM', 'LOW', 'VERY_LOW']).toContain(pred.likelihood);
+    expect(Array.isArray(pred.matchedCompanies)).toBe(true);
   });
 });

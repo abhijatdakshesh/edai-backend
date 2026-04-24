@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { AdminPortalService } from './admin-portal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../roles/roles.guard';
+import { Roles } from '../roles/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'HOD', 'PRINCIPAL', 'DEAN', 'TRUSTEE')
 @Controller()
 export class AdminPortalController {
   constructor(private readonly svc: AdminPortalService) {}
