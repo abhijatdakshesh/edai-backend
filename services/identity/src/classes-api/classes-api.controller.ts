@@ -23,4 +23,14 @@ export class ClassesApiController {
   getAllClasses() {
     return this.svc.getAllClasses();
   }
+
+  @Get('classes/:id')
+  getClass(@Param('id') id: string) {
+    return this.svc.getClassById(id);
+  }
+
+  @Get('classes/:classId/students')
+  getStudentsForClass(@Param('classId') classId: string) {
+    return this.svc.getStudentsByClass(classId);
+  }
 }

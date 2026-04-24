@@ -110,4 +110,8 @@ export class IaService {
   uploadResults(subjectCode: string, sem: number): { message: string } {
     return { message: `Results for ${subjectCode} sem ${sem} queued for upload` };
   }
+
+  getMarksBySubject(subjectId: string): IAEntry[] {
+    return this.entries.filter((e) => e.subjectCode === subjectId);
+  }
 }

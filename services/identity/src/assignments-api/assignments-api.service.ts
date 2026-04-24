@@ -96,4 +96,50 @@ export class AssignmentsApiService {
     sub.status = 'GRADED';
     return sub;
   }
+
+  getAllAssignments(): Assignment[] {
+    return this.assignments;
+  }
+
+  getAssignmentsByCourse(courseId: string): Assignment[] {
+    return this.assignments.filter((a) => a.subjectCode === courseId);
+  }
+
+  getAssignmentById(id: string): Assignment {
+    const a = this.assignments.find((a) => a.id === id);
+    if (!a) throw new NotFoundException('Assignment not found');
+    return a;
+  }
+
+  submitAssignment(
+    id: string,
+    usn: string,
+    body: { fileUrl?: string; text?: string },
+  ): { submissionId: string; submittedAt: string; status: 'SUBMITTED' } {
+    const submissionId = `sub-${id}-${usn}-${Date.now()}`;
+    const sub: Submission = {
+      id: submissionId,
+      assignmentId: id,
+      usn,
+      studentName: `Student ${usn}`,
+      submittedAt: new Date().toISOString(),
+      status: 'SUBMITTED',
+    };
+    this.submissions.push(sub);
+    return { submissionId, submittedAt: sub.submittedAt!, status: 'SUBMITTED' };
+  }
+
+  gradeSubmissionById(
+    subId: string,
+    marks: number,
+    feedback: string,
+  ): { ok: true; submissionId: string; marks: number; feedback: string } {
+    const sub = this.submissions.find((s) => s.id === subId);
+    if (sub) {
+      sub.marks = marks;
+      sub.feedback = feedback;
+      sub.status = 'GRADED';
+    }
+    return { ok: true, submissionId: subId, marks, feedback };
+  }
 }

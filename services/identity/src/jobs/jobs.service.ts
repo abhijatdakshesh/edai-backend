@@ -53,4 +53,32 @@ export class JobsService {
     if (likelihood) results = results.filter((p) => p.likelihood === likelihood);
     return results;
   }
+
+  getJob(id: string): Job {
+    const job = this.jobs.find((j) => j.id === id);
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
+  }
+
+  getMyApplications(
+    usn: string,
+  ): Array<{ id: string; jobId: string; companyName: string; role: string; status: 'APPLIED' | 'SHORTLISTED' | 'REJECTED'; appliedAt: string }> {
+    return this.applications
+      .filter((a) => a.usn === usn)
+      .map((a) => {
+        const job = this.jobs.find((j) => j.id === a.jobId);
+        return {
+          id: `app-${a.jobId}-${usn}`,
+          jobId: a.jobId,
+          companyName: job?.company ?? 'Unknown',
+          role: job?.role ?? 'Unknown',
+          status: 'APPLIED' as const,
+          appliedAt: a.appliedAt,
+        };
+      });
+  }
+
+  withdraw(applicationId: string): { ok: true } {
+    return { ok: true };
+  }
 }

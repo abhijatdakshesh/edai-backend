@@ -68,4 +68,14 @@ export class AdminPortalController {
   ) {
     return this.svc.triggerBulkImport(body.entityType, body.fileUrl);
   }
+
+  @Get('analytics/export')
+  exportAnalytics(@Query('type') type?: string) {
+    return this.svc.exportAnalytics(type);
+  }
+
+  @Get('analytics/performance')
+  getClassPerformance(@Query('classId') classId?: string) {
+    return this.svc.getClassPerformance(classId);
+  }
 }

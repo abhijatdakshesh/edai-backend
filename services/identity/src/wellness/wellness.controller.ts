@@ -59,4 +59,47 @@ export class WellnessController {
   getResources() {
     return this.svc.getResources();
   }
+
+  @Post('counselor/book')
+  bookSessionAlias(
+    @Body() body: { slotId: string; reason: string },
+    @Request() req: any,
+  ) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.svc.bookSession(usn, body.slotId, body.reason);
+  }
+
+  @Get('wellness/risk-score/me')
+  getMyRiskScore(@Request() req: any) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.svc.getRiskScore(usn);
+  }
+
+  @Patch('wellness/study-plan/tasks/:id/complete')
+  completeTask(@Param('id') id: string) {
+    return this.svc.updateTask(id, true);
+  }
+
+  @Get('wellness/resources')
+  getResourcesAlias() {
+    return this.svc.getResources();
+  }
+
+  @Post('wellness/stress-assessment')
+  stressAssessment(
+    @Body() body: { answers: Record<string, number> },
+    @Request() req: any,
+  ) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.svc.assessStress(usn, body.answers);
+  }
+
+  @Post('wellness/study-plan/generate')
+  generateStudyPlan(
+    @Body() body: { examDate: string; subjects: string[] },
+    @Request() req: any,
+  ) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.svc.generateStudyPlan(usn, body.examDate, body.subjects);
+  }
 }

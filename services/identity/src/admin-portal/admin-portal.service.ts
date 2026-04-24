@@ -263,4 +263,26 @@ export class AdminPortalService {
       message: `Bulk import for ${entityType} from ${fileUrl} has been queued`,
     };
   }
+
+  exportAnalytics(
+    type?: string,
+  ): { url: string; filename: string; generatedAt: string } {
+    const label = type ?? 'all';
+    return {
+      url: `https://edai.in/exports/${label}-${Date.now()}.csv`,
+      filename: `analytics-${label}-export.csv`,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  getClassPerformance(
+    classId?: string,
+  ): { avgCgpa: number; topCgpa: number; below5: number; passRate: number } {
+    return {
+      avgCgpa: 7.4,
+      topCgpa: 9.2,
+      below5: 8,
+      passRate: 94.2,
+    };
+  }
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   Body,
   Query,
@@ -74,5 +75,35 @@ export class IaController {
   @Post('teacher/upload-results')
   uploadResults(@Body() body: { subjectCode: string; sem: number }) {
     return this.svc.uploadResults(body.subjectCode, body.sem);
+  }
+
+  @Patch('ia/teacher/marks/:subjectId/submit')
+  submitBySubjectId(@Param('subjectId') subjectId: string, @Request() req: any) {
+    const teacherId = req.user?.sub ?? 'unknown';
+    return this.svc.submitForReview(subjectId, 5, teacherId);
+  }
+
+  @Get('academics/marks/subject/:subjectId')
+  getMarksBySubject(@Param('subjectId') subjectId: string) {
+    return this.svc.getMarksBySubject(subjectId);
+  }
+
+  @Post('academics/marks/bulk')
+  bulkSaveMarks(
+    @Body()
+    body: {
+      subjectCode: string;
+      sem: number;
+      marks: Array<{ usn: string; ia1: number; ia2: number; ia3: number }>;
+    },
+    @Request() req: any,
+  ) {
+    const _teacherId = req.user?.sub ?? 'unknown';
+    return { jobId: `bulk-${Date.now()}`, status: 'QUEUED', count: body.marks.length };
+  }
+
+  @Post('academics/marks/bulk/confirm')
+  confirmBulkMarks(@Body() body: { jobId: string }) {
+    return { ok: true, jobId: body.jobId, confirmedAt: new Date().toISOString() };
   }
 }

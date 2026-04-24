@@ -92,4 +92,32 @@ export class VtuController {
   ) {
     return this.svc.getStudentStatus(usn, windowId);
   }
+
+  @Get('vtu/windows/:id')
+  getWindow(@Param('id') id: string) {
+    return this.svc.getWindowById(id);
+  }
+
+  @Get('vtu/windows/:windowId/dept-overview')
+  getDeptOverviewByWindow(@Param('windowId') wId: string) {
+    return this.svc.getDeptOverview(wId);
+  }
+
+  @Get('vtu/windows/:windowId/pending')
+  getPendingByWindow(@Param('windowId') wId: string) {
+    return this.svc.getPendingStudents(wId);
+  }
+
+  @Post('vtu/windows/:windowId/remind')
+  remindByWindow(
+    @Param('windowId') wId: string,
+    @Body() body: { usnList: string[] },
+  ) {
+    return this.svc.sendReminders(wId, body.usnList);
+  }
+
+  @Post('vtu/windows/:windowId/eligibility-check')
+  eligibilityCheck(@Param('windowId') wId: string) {
+    return this.svc.runEligibility(wId);
+  }
 }

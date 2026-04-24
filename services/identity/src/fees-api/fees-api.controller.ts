@@ -18,4 +18,28 @@ export class FeesApiController {
   ) {
     return this.svc.initiatePayment(body.usn, body.amount, body.feeIds);
   }
+
+  @Get('fees/student/:usn/history')
+  getFeeHistory(@Param('usn') usn: string) {
+    return this.svc.getFeeHistory(usn);
+  }
+
+  @Get('fees/student/:usn/summary')
+  getFeeSummary(@Param('usn') usn: string) {
+    return this.svc.getFeeSummary(usn);
+  }
+
+  @Post('fees/payment/initiate')
+  initiatePaymentGateway(
+    @Body() body: { usn: string; amount: number; feeIds: string[] },
+  ) {
+    return this.svc.initiatePaymentGateway(body.usn, body.amount, body.feeIds);
+  }
+
+  @Post('fees/payment/verify')
+  verifyPayment(
+    @Body() body: { orderId: string; paymentId: string; signature: string },
+  ) {
+    return this.svc.verifyPayment(body.orderId, body.paymentId, body.signature);
+  }
 }
