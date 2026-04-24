@@ -7,9 +7,12 @@ export interface AICallLog {
   studentName: string;
   studentUsn: string;
   parentId: string;
+  parentPhone?: string;
+  triggeredBy?: string;
+  language?: string;
   classId?: string;
   institutionId?: string;
-  outcome: 'ANSWERED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY';
+  outcome: 'ANSWERED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY' | 'FAILED';
   duration: number;
   transcript?: string;
   summary?: string;

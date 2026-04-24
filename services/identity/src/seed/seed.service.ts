@@ -349,6 +349,7 @@ export class SeedService implements OnModuleInit {
 
   private seedComms(): void {
     const now = new Date();
+    const triggers = ['LOW_ATTENDANCE', 'PERFORMANCE_DROP', 'FEE_DUE', 'LOW_ATTENDANCE', 'GENERAL'] as const;
     this.commsSvc.callLogs = STUDENTS.slice(0, 5).map((s, i) => {
       const calledAt = new Date(now);
       calledAt.setDate(calledAt.getDate() - i);
@@ -359,6 +360,10 @@ export class SeedService implements OnModuleInit {
         studentName: s.name,
         studentUsn: s.usn,
         parentId: 'u-parent-01',
+        parentPhone: '+919876543210',
+        triggeredBy: triggers[i],
+        language: 'en',
+        institutionId: process.env.INSTITUTION_ID ?? 'rvce',
         outcome: outcomes[i],
         duration: outcomes[i] === 'ANSWERED' ? 120 + Math.floor(Math.random() * 180) : 0,
         transcript: outcomes[i] === 'ANSWERED' ? `Parent acknowledged absence of ${s.name} on ${calledAt.toLocaleDateString()}` : undefined,
