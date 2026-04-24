@@ -22,6 +22,7 @@ import { StudentPortalModule } from './student-portal/student-portal.module';
 import { ParentPortalModule } from './parent-portal/parent-portal.module';
 import { AdminPortalModule } from './admin-portal/admin-portal.module';
 import { CommsModule } from './comms/comms.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
@@ -50,6 +51,7 @@ import { SeedModule } from './seed/seed.module';
     ParentPortalModule,
     AdminPortalModule,
     CommsModule,
+    DepartmentsModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
