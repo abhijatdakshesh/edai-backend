@@ -80,20 +80,29 @@ export class PromotionService {
     return filtered;
   }
 
+  private currentAcademicYear(): string {
+    const now = new Date();
+    const y = now.getFullYear();
+    // Academic year starts in June
+    return now.getMonth() >= 5 ? `${y}-${(y + 1).toString().slice(2)}` : `${y - 1}-${y.toString().slice(2)}`;
+  }
+
   generate(
     semester: number,
     dept: string,
+    stats?: { eligible: number; detained: number; conditional: number; total: number },
   ): PromotionBatch {
+    if (semester >= 8) throw new Error('Semester cannot exceed 8 for a 4-year program');
     const batch: PromotionBatch = {
       id: `promo-${Date.now()}`,
       className: `${dept} Sem ${semester}`,
       fromSemester: semester,
       toSemester: semester + 1,
-      academicYear: '2025-26',
+      academicYear: this.currentAcademicYear(),
       dept,
       status: 'PENDING',
       promotedAt: null,
-      stats: { eligible: 55, detained: 5, conditional: 2, total: 60 },
+      stats: stats ?? { eligible: 0, detained: 0, conditional: 0, total: 0 },
       createdAt: new Date().toISOString(),
     };
     this.batches.push(batch);

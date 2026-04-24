@@ -6,6 +6,7 @@ export interface ClassRecord {
   departmentCode: string;
   semester: number;
   section: string;
+  /** Total enrolled students — single source of truth (strength === studentCount) */
   strength: number;
   classTeacherId: string;
   classTeacherName: string;
@@ -13,6 +14,7 @@ export interface ClassRecord {
   subjectCode: string;
   instructorId: string;
   instructorName: string;
+  /** @deprecated use strength */
   studentCount: number;
 }
 
