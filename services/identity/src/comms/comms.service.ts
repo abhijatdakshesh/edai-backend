@@ -7,10 +7,21 @@ export interface AICallLog {
   studentName: string;
   studentUsn: string;
   parentId: string;
+  classId?: string;
+  institutionId?: string;
   outcome: 'ANSWERED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY';
   duration: number;
   transcript?: string;
   summary?: string;
+}
+
+export interface Announcement {
+  id: string;
+  institutionId: string;
+  title: string;
+  content: string;
+  audience: string;
+  createdAt: string;
 }
 
 export interface Message {
@@ -26,6 +37,17 @@ export interface Message {
 export class CommsService {
   callLogs: AICallLog[] = [];
   messages: Message[] = [];
+  announcements: Announcement[] = [];
+
+  getAnnouncements(institutionId: string): Announcement[] {
+    return this.announcements.filter((a) => a.institutionId === institutionId);
+  }
+
+  getCallsByClass(classId: string, institutionId?: string): AICallLog[] {
+    return this.callLogs.filter(
+      (c) => c.classId === classId && (!institutionId || c.institutionId === institutionId),
+    );
+  }
 
   constructor(private readonly events: EventsGateway) {}
 
@@ -64,12 +86,10 @@ export class CommsService {
     return { messageId: `sms-${Date.now()}`, status: 'SENT' };
   }
 
-  createAnnouncement(
-    title: string,
-    content: string,
-    audience: string,
-  ): { id: string; title: string; content: string; audience: string; createdAt: string } {
-    return { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
+  createAnnouncement(title: string, content: string, audience: string, institutionId = 'default'): Announcement {
+    const ann: Announcement = { id: `ann-${Date.now()}`, institutionId, title, content, audience, createdAt: new Date().toISOString() };
+    this.announcements.push(ann);
+    return ann;
   }
 
   triggerParentCall(parentId: string, usn: string): { callId: string; status: 'QUEUED' } {

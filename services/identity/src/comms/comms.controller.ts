@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Patch, Param, Body, Query, Request, UseGuards } from '@nestjs/common';
 import { CommsService } from './comms.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StudentPortalService } from '../student-portal/student-portal.service';
@@ -10,6 +10,23 @@ export class CommsController {
     private readonly svc: CommsService,
     private readonly studentPortalSvc: StudentPortalService,
   ) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Get('comms/announcements')
+  getAnnouncements(@Request() req: any) {
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID;
+    if (!institutionId) throw new BadRequestException('institutionId not resolvable from token');
+    return this.svc.getAnnouncements(institutionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('comms/calls')
+  getCallsByClass(@Query('classId') classId: string, @Request() req: any) {
+    if (!classId) throw new BadRequestException('classId is required');
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID;
+    if (!institutionId) throw new BadRequestException('institutionId not resolvable from token');
+    return this.svc.getCallsByClass(classId, institutionId);
+  }
 
   @Get('comms/calls/recent')
   getRecentCalls() {
@@ -44,8 +61,10 @@ export class CommsController {
   @Post('comms/announcements')
   createAnnouncement(
     @Body() body: { title: string; content: string; audience: string },
+    @Request() req: any,
   ) {
-    return this.svc.createAnnouncement(body.title, body.content, body.audience);
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    return this.svc.createAnnouncement(body.title, body.content, body.audience, institutionId);
   }
 
   @Post('parent-comms/calls/trigger')
