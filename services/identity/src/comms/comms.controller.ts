@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Patch, Param, Body, Query, Request, UseGuards } from '@nestjs/common';
 import { CommsService } from './comms.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StudentPortalService } from '../student-portal/student-portal.service';
@@ -12,13 +12,16 @@ export class CommsController {
   ) {}
 
   @Get('comms/announcements')
-  getAnnouncements() {
-    return this.svc.getAnnouncements();
+  getAnnouncements(@Request() req: any) {
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    return this.svc.getAnnouncements(institutionId);
   }
 
   @Get('comms/calls')
-  getCallsByClass(@Query('classId') classId: string) {
-    return this.svc.getCallsByClass(classId);
+  getCallsByClass(@Query('classId') classId: string, @Request() req: any) {
+    if (!classId) throw new BadRequestException('classId is required');
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    return this.svc.getCallsByClass(classId, institutionId);
   }
 
   @Get('comms/calls/recent')

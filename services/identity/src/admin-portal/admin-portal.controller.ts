@@ -79,12 +79,13 @@ export class AdminPortalController {
     @Body() body: { type: string; format: string; filters?: Record<string, unknown>; requestedBy?: string },
     @Res({ passthrough: true }) res: import('express').Response,
   ) {
-    // Sanitize: strip any characters that could inject CSV formulas or split HTTP headers
+    const ALLOWED_EXTS: Record<string, string> = { CSV: 'csv', XLSX: 'xlsx', PDF: 'pdf', VTU: 'txt' };
     const safeType = (body.type ?? 'export').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeExt = (body.format ?? 'CSV').toLowerCase().replace(/[^a-z]/g, '') || 'csv';
+    const safeExt = ALLOWED_EXTS[(body.format ?? '').toUpperCase()] ?? 'csv';
+    const data = this.svc.exportAnalytics(body.type);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="export_${safeType}.${safeExt}"`);
-    return `"type","format"\n"${safeType}","${safeExt}"`;
+    return JSON.stringify(data);
   }
 
   @Get('analytics/performance')

@@ -16,6 +16,7 @@ export interface AICallLog {
 
 export interface Announcement {
   id: string;
+  institutionId: string;
   title: string;
   content: string;
   audience: string;
@@ -37,12 +38,14 @@ export class CommsService {
   messages: Message[] = [];
   announcements: Announcement[] = [];
 
-  getAnnouncements(): Announcement[] {
-    return this.announcements;
+  getAnnouncements(institutionId: string): Announcement[] {
+    return this.announcements.filter((a) => a.institutionId === institutionId);
   }
 
-  getCallsByClass(classId: string): AICallLog[] {
-    return this.callLogs.filter((c) => c.classId === classId);
+  getCallsByClass(classId: string, institutionId?: string): AICallLog[] {
+    return this.callLogs.filter(
+      (c) => c.classId === classId && (!institutionId || (c as any).institutionId === institutionId),
+    );
   }
 
   constructor(private readonly events: EventsGateway) {}
@@ -82,8 +85,8 @@ export class CommsService {
     return { messageId: `sms-${Date.now()}`, status: 'SENT' };
   }
 
-  createAnnouncement(title: string, content: string, audience: string): Announcement {
-    const ann: Announcement = { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
+  createAnnouncement(title: string, content: string, audience: string, institutionId = 'default'): Announcement {
+    const ann: Announcement = { id: `ann-${Date.now()}`, institutionId, title, content, audience, createdAt: new Date().toISOString() };
     this.announcements.push(ann);
     return ann;
   }
