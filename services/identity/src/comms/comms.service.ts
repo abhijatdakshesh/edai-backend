@@ -7,10 +7,19 @@ export interface AICallLog {
   studentName: string;
   studentUsn: string;
   parentId: string;
+  classId?: string;
   outcome: 'ANSWERED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY';
   duration: number;
   transcript?: string;
   summary?: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  audience: string;
+  createdAt: string;
 }
 
 export interface Message {
@@ -26,14 +35,14 @@ export interface Message {
 export class CommsService {
   callLogs: AICallLog[] = [];
   messages: Message[] = [];
-  announcements: Array<{ id: string; title: string; content: string; audience: string; createdAt: string }> = [];
+  announcements: Announcement[] = [];
 
-  getAnnouncements(): Array<{ id: string; title: string; content: string; audience: string; createdAt: string }> {
+  getAnnouncements(): Announcement[] {
     return this.announcements;
   }
 
   getCallsByClass(classId: string): AICallLog[] {
-    return this.callLogs.filter((c) => (c as any).classId === classId);
+    return this.callLogs.filter((c) => c.classId === classId);
   }
 
   constructor(private readonly events: EventsGateway) {}
@@ -73,12 +82,8 @@ export class CommsService {
     return { messageId: `sms-${Date.now()}`, status: 'SENT' };
   }
 
-  createAnnouncement(
-    title: string,
-    content: string,
-    audience: string,
-  ): { id: string; title: string; content: string; audience: string; createdAt: string } {
-    const ann = { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
+  createAnnouncement(title: string, content: string, audience: string): Announcement {
+    const ann: Announcement = { id: `ann-${Date.now()}`, title, content, audience, createdAt: new Date().toISOString() };
     this.announcements.push(ann);
     return ann;
   }
