@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 
 export interface PromotionBatch {
   id: string;
-  semester: number;
+  className: string;
+  fromSemester: number;
+  toSemester: number;
+  academicYear: string;
   dept: string;
   status: 'PENDING' | 'PROMOTED' | 'OVERRIDDEN';
-  totalStudents: number;
-  eligible: number;
-  detained: number;
+  promotedAt: string | null;
+  stats: { eligible: number; detained: number; conditional: number; total: number };
   createdAt: string;
 }
 
@@ -16,32 +18,38 @@ export class PromotionService {
   batches: PromotionBatch[] = [
     {
       id: 'promo-1',
-      semester: 5,
+      className: 'CSE-A Sem 5',
+      fromSemester: 5,
+      toSemester: 6,
+      academicYear: '2025-26',
       dept: 'CSE',
       status: 'PENDING',
-      totalStudents: 60,
-      eligible: 55,
-      detained: 5,
+      promotedAt: null,
+      stats: { eligible: 55, detained: 5, conditional: 2, total: 60 },
       createdAt: '2026-04-01T00:00:00.000Z',
     },
     {
       id: 'promo-2',
-      semester: 5,
+      className: 'ECE-A Sem 5',
+      fromSemester: 5,
+      toSemester: 6,
+      academicYear: '2025-26',
       dept: 'ECE',
       status: 'PROMOTED',
-      totalStudents: 58,
-      eligible: 56,
-      detained: 2,
+      promotedAt: '2026-04-10T00:00:00.000Z',
+      stats: { eligible: 56, detained: 2, conditional: 0, total: 58 },
       createdAt: '2026-04-01T00:00:00.000Z',
     },
     {
       id: 'promo-3',
-      semester: 3,
+      className: 'ME-B Sem 3',
+      fromSemester: 3,
+      toSemester: 4,
+      academicYear: '2025-26',
       dept: 'ME',
       status: 'PENDING',
-      totalStudents: 45,
-      eligible: 40,
-      detained: 5,
+      promotedAt: null,
+      stats: { eligible: 40, detained: 5, conditional: 3, total: 45 },
       createdAt: '2026-04-02T00:00:00.000Z',
     },
   ];
@@ -78,12 +86,14 @@ export class PromotionService {
   ): PromotionBatch {
     const batch: PromotionBatch = {
       id: `promo-${Date.now()}`,
-      semester,
+      className: `${dept} Sem ${semester}`,
+      fromSemester: semester,
+      toSemester: semester + 1,
+      academicYear: '2025-26',
       dept,
       status: 'PENDING',
-      totalStudents: 60,
-      eligible: 55,
-      detained: 5,
+      promotedAt: null,
+      stats: { eligible: 55, detained: 5, conditional: 2, total: 60 },
       createdAt: new Date().toISOString(),
     };
     this.batches.push(batch);
