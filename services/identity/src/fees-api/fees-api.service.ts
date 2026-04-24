@@ -13,7 +13,9 @@ export interface FeeItem {
 
 export interface FeeSummary {
   totalDue: number;
+  totalPaid: number;
   totalOutstanding: number;
+  status: 'PAID' | 'PENDING' | 'OVERDUE';
   items: FeeItem[];
 }
 
@@ -25,10 +27,11 @@ export class FeesApiService {
     const items = this.feeItems.filter((f) => f.usn === usn);
     if (items.length === 0) throw new NotFoundException('Fee records not found');
     const totalDue = items.reduce((sum, f) => sum + f.amount, 0);
-    const totalOutstanding = items
-      .filter((f) => f.status !== 'PAID')
-      .reduce((sum, f) => sum + f.amount, 0);
-    return { totalDue, totalOutstanding, items };
+    const totalPaid = items.filter((f) => f.status === 'PAID').reduce((sum, f) => sum + f.amount, 0);
+    const totalOutstanding = items.filter((f) => f.status !== 'PAID').reduce((sum, f) => sum + f.amount, 0);
+    const hasOverdue = items.some((f) => f.status === 'OVERDUE');
+    const status: FeeSummary['status'] = hasOverdue ? 'OVERDUE' : totalOutstanding === 0 ? 'PAID' : 'PENDING';
+    return { totalDue, totalPaid, totalOutstanding, status, items };
   }
 
   initiatePayment(

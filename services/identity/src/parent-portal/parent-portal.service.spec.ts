@@ -135,7 +135,7 @@ describe('ParentPortalService', () => {
         throw new Error('no fees');
       });
       const result = service.getChildFees('USN_NONE');
-      expect(result).toEqual({ totalDue: 0, totalOutstanding: 0, items: [] });
+      expect(result).toEqual({ totalDue: 0, totalPaid: 0, totalOutstanding: 0, status: 'PENDING', items: [] });
     });
   });
 });

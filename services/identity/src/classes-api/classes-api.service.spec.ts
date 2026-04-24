@@ -4,6 +4,11 @@ import { ClassesApiService, ClassRecord, StudentRoster } from './classes-api.ser
 const makeClass = (overrides: Partial<ClassRecord> = {}): ClassRecord => ({
   id: 'c1',
   name: 'CS-A',
+  departmentCode: 'CSE',
+  section: 'A',
+  strength: 60,
+  classTeacherId: 'teacher-1',
+  classTeacherName: 'Ravi Shankar',
   subject: 'Data Structures',
   subjectCode: 'CS301',
   semester: 5,
@@ -22,6 +27,7 @@ describe('ClassesApiService', () => {
     }).compile();
 
     service = module.get<ClassesApiService>(ClassesApiService);
+    service.classes = []; // reset seeded data for isolation
   });
 
   // ─── getTeacherClasses ──────────────────────────────────────────────────────

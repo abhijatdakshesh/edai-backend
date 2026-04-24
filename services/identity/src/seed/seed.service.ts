@@ -84,10 +84,10 @@ export class SeedService implements OnModuleInit {
 
   private seedClasses(): void {
     this.classesSvc.classes = [
-      { id: 'class-cs501-a', name: 'CS 5A', subject: 'Data Structures & Algorithms', subjectCode: 'CS501', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', studentCount: 60 },
-      { id: 'class-cs504-a', name: 'CS 5B', subject: 'Operating Systems', subjectCode: 'CS504', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', studentCount: 62 },
-      { id: 'class-cs502-a', name: 'CS 5C', subject: 'Database Management Systems', subjectCode: 'CS502', semester: 5, instructorId: 'teacher-002', instructorName: 'Dr. Lakshmi Devi', studentCount: 58 },
-      { id: 'class-cs503-a', name: 'CS 5D', subject: 'Computer Networks', subjectCode: 'CS503', semester: 5, instructorId: 'teacher-003', instructorName: 'Prof. Suresh Kumar', studentCount: 60 },
+      { id: 'class-cs501-a', name: 'CS 5A', departmentCode: 'CSE', section: 'A', subject: 'Data Structures & Algorithms', subjectCode: 'CS501', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', classTeacherId: TEACHER_ID, classTeacherName: 'Ravi Shankar', strength: 60, studentCount: 60 },
+      { id: 'class-cs504-a', name: 'CS 5B', departmentCode: 'CSE', section: 'B', subject: 'Operating Systems', subjectCode: 'CS504', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', classTeacherId: TEACHER_ID, classTeacherName: 'Ravi Shankar', strength: 62, studentCount: 62 },
+      { id: 'class-cs502-a', name: 'CS 5C', departmentCode: 'CSE', section: 'C', subject: 'Database Management Systems', subjectCode: 'CS502', semester: 5, instructorId: 'teacher-002', instructorName: 'Dr. Lakshmi Devi', classTeacherId: 'teacher-002', classTeacherName: 'Dr. Lakshmi Devi', strength: 58, studentCount: 58 },
+      { id: 'class-cs503-a', name: 'CS 5D', departmentCode: 'CSE', section: 'D', subject: 'Computer Networks', subjectCode: 'CS503', semester: 5, instructorId: 'teacher-003', instructorName: 'Prof. Suresh Kumar', classTeacherId: 'teacher-003', classTeacherName: 'Prof. Suresh Kumar', strength: 60, studentCount: 60 },
     ];
 
     const roster = STUDENTS.map((s) => ({ usn: s.usn, name: s.name, dept: s.dept }));
