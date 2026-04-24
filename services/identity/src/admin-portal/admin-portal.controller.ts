@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { AdminPortalService } from './admin-portal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../roles/roles.guard';
@@ -74,16 +75,22 @@ export class AdminPortalController {
     return this.svc.exportAnalytics(type);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'HOD', 'PRINCIPAL', 'DEAN', 'TRUSTEE')
   @Post('exports/download')
   downloadExport(
     @Body() body: { type: string; format: string; filters?: Record<string, unknown>; requestedBy?: string },
-    @Res({ passthrough: true }) res: import('express').Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const ALLOWED_EXTS: Record<string, string> = { CSV: 'csv', XLSX: 'xlsx', PDF: 'pdf', VTU: 'txt' };
+    const CONTENT_TYPES: Record<string, string> = {
+      csv: 'text/csv', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pdf: 'application/pdf', txt: 'text/plain',
+    };
     const safeType = (body.type ?? 'export').replace(/[^a-zA-Z0-9_-]/g, '_');
     const safeExt = ALLOWED_EXTS[(body.format ?? '').toUpperCase()] ?? 'csv';
-    const data = this.svc.exportAnalytics(body.type);
-    res.setHeader('Content-Type', 'text/csv');
+    const data = this.svc.exportAnalytics(safeType);
+    res.setHeader('Content-Type', CONTENT_TYPES[safeExt] ?? 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="export_${safeType}.${safeExt}"`);
     return JSON.stringify(data);
   }

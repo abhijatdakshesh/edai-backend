@@ -11,16 +11,20 @@ export class CommsController {
     private readonly studentPortalSvc: StudentPortalService,
   ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get('comms/announcements')
   getAnnouncements(@Request() req: any) {
-    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID;
+    if (!institutionId) throw new BadRequestException('institutionId not resolvable from token');
     return this.svc.getAnnouncements(institutionId);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('comms/calls')
   getCallsByClass(@Query('classId') classId: string, @Request() req: any) {
     if (!classId) throw new BadRequestException('classId is required');
-    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID;
+    if (!institutionId) throw new BadRequestException('institutionId not resolvable from token');
     return this.svc.getCallsByClass(classId, institutionId);
   }
 
@@ -57,8 +61,10 @@ export class CommsController {
   @Post('comms/announcements')
   createAnnouncement(
     @Body() body: { title: string; content: string; audience: string },
+    @Request() req: any,
   ) {
-    return this.svc.createAnnouncement(body.title, body.content, body.audience);
+    const institutionId: string = req.user?.institutionId ?? process.env.INSTITUTION_ID ?? 'default';
+    return this.svc.createAnnouncement(body.title, body.content, body.audience, institutionId);
   }
 
   @Post('parent-comms/calls/trigger')

@@ -8,6 +8,7 @@ export interface AICallLog {
   studentUsn: string;
   parentId: string;
   classId?: string;
+  institutionId?: string;
   outcome: 'ANSWERED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY';
   duration: number;
   transcript?: string;
@@ -44,7 +45,7 @@ export class CommsService {
 
   getCallsByClass(classId: string, institutionId?: string): AICallLog[] {
     return this.callLogs.filter(
-      (c) => c.classId === classId && (!institutionId || (c as any).institutionId === institutionId),
+      (c) => c.classId === classId && (!institutionId || c.institutionId === institutionId),
     );
   }
 
