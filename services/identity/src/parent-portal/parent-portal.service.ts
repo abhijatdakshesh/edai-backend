@@ -85,7 +85,7 @@ export class ParentPortalService {
     try {
       return this.feesSvc.getStudentFees(usn);
     } catch {
-      return { totalDue: 0, totalOutstanding: 0, items: [] };
+      return { totalDue: 0, totalPaid: 0, totalOutstanding: 0, status: 'PAID' as const, items: [] };
     }
   }
 
