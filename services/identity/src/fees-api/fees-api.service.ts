@@ -30,7 +30,7 @@ export class FeesApiService {
     const totalPaid = items.filter((f) => f.status === 'PAID').reduce((sum, f) => sum + f.amount, 0);
     const totalOutstanding = items.filter((f) => f.status !== 'PAID').reduce((sum, f) => sum + f.amount, 0);
     const hasOverdue = items.some((f) => f.status === 'OVERDUE');
-    const status: FeeSummary['status'] = totalOutstanding === 0 ? 'PAID' : hasOverdue ? 'OVERDUE' : 'PENDING';
+    const status: FeeSummary['status'] = hasOverdue ? 'OVERDUE' : totalOutstanding === 0 ? 'PAID' : 'PENDING';
     return { totalDue, totalPaid, totalOutstanding, status, items };
   }
 
