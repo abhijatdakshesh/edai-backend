@@ -58,6 +58,7 @@ export class CommsController {
     return this.svc.sendSms(body.phone, body.message);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('comms/announcements')
   createAnnouncement(
     @Body() body: { title: string; content: string; audience: string },

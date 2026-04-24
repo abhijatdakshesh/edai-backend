@@ -90,9 +90,13 @@ export class AdminPortalController {
     const safeType = (body.type ?? 'export').replace(/[^a-zA-Z0-9_-]/g, '_');
     const safeExt = ALLOWED_EXTS[(body.format ?? '').toUpperCase()] ?? 'csv';
     const data = this.svc.exportAnalytics(safeType);
-    res.setHeader('Content-Type', CONTENT_TYPES[safeExt] ?? 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="export_${safeType}.${safeExt}"`);
-    return JSON.stringify(data);
+    // Stub: always return CSV regardless of requested format — binary generation (XLSX/PDF) requires dedicated service
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="export_${safeType}.csv"`);
+    const rows = Array.isArray(data) ? data : [data];
+    const headers = rows.length > 0 ? Object.keys(rows[0] as object).join(',') : 'data';
+    const body_csv = rows.map((r) => Object.values(r as object).map(String).join(',')).join('\n');
+    return `${headers}\n${body_csv}`;
   }
 
   @Get('analytics/performance')
