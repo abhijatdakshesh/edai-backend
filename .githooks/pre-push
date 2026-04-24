@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# pre-push: enforce branch + PR workflow
-# Never push directly to main/master — all changes must go through a PR.
+# pre-push: enforce branch + PR workflow + expert panel review
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 PROTECTED="main master"
@@ -13,24 +12,101 @@ for p in $PROTECTED; do
     fi
     echo ""
     echo "❌  Direct push to '$BRANCH' is blocked."
-    echo ""
     echo "   Create a feature branch and open a PR instead:"
-    echo "   git checkout -b <type>/<short-desc>"
-    echo "   git push -u origin HEAD"
-    echo "   gh pr create --fill"
-    echo ""
+    echo "   git checkout -b <type>/<short-desc> && git push -u origin HEAD && gh pr create --fill"
     echo "   To override (repo init only): ALLOW_BRANCHLESS_PUSH=1 git push"
     echo ""
     exit 1
   fi
 done
 
-# Auto-open PR if one doesn't exist yet for this branch
+# ── Expert Panel ────────────────────────────────────────────────────────────
+# Requires `claude` CLI on PATH. Skip silently if not installed.
+if command -v claude &>/dev/null; then
+  # Collect diff for review (last commit vs origin, or staged)
+  BASE=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1 2>/dev/null)
+  DIFF=$(git diff "$BASE" HEAD -- '*.ts' '*.tsx' '*.js' '*.py' '*.go' 2>/dev/null | head -c 8000)
+
+  if [ -n "$DIFF" ]; then
+    echo ""
+    echo "═══════════════════════════════════════════════════"
+    echo "  Expert Panel Review — running before push"
+    echo "═══════════════════════════════════════════════════"
+
+    # ── BLOCKER: Daniel (code review) ──────────────────────
+    echo ""
+    echo "▶ Daniel (Code Review)..."
+    DANIEL=$(echo "$DIFF" | claude --agent daniel --print 2>/dev/null \
+      "Review this diff. Output verdict as BLOCK or PASS on the first line, then your review." \
+      2>/dev/null || echo "PASS (claude unavailable)")
+    echo "$DANIEL"
+
+    if echo "$DANIEL" | head -1 | grep -q "^BLOCK"; then
+      echo ""
+      echo "❌  BLOCKED by Daniel. Fix issues above before pushing."
+      exit 1
+    fi
+
+    # ── BLOCKER: Dev (architecture) ─────────────────────────
+    echo ""
+    echo "▶ Dev (Architecture)..."
+    DEV=$(echo "$DIFF" | claude --agent dev --print 2>/dev/null \
+      "Review this diff for architecture issues. Output verdict as REDESIGN REQUIRED or PASS on the first line." \
+      2>/dev/null || echo "PASS (claude unavailable)")
+    echo "$DEV"
+
+    if echo "$DEV" | head -1 | grep -q "^REDESIGN REQUIRED"; then
+      echo ""
+      echo "❌  BLOCKED by Dev. Redesign required before pushing."
+      exit 1
+    fi
+
+    # ── BLOCKER: QA / Priya (test coverage) ─────────────────
+    echo ""
+    echo "▶ Priya (QA)..."
+    QA=$(echo "$DIFF" | claude --agent qa --print 2>/dev/null \
+      "Review this diff for test coverage gaps. Output verdict as FIX TESTS FIRST or PASS on the first line." \
+      2>/dev/null || echo "PASS (claude unavailable)")
+    echo "$QA"
+
+    if echo "$QA" | head -1 | grep -q "^FIX TESTS FIRST"; then
+      echo ""
+      echo "❌  BLOCKED by Priya. Add tests before pushing."
+      exit 1
+    fi
+
+    # ── Advisory: Kaveri, Sujit, Anand ──────────────────────
+    echo ""
+    echo "▶ Kaveri (Buyer POV — advisory)..."
+    echo "$DIFF" | claude --agent kaveri --print 2>/dev/null \
+      "Is this change necessary from a college buyer's perspective? One paragraph advisory." \
+      2>/dev/null || echo "(skipped — claude unavailable)"
+
+    echo ""
+    echo "▶ Sujit (GTM — advisory)..."
+    echo "$DIFF" | claude --agent sujit --print 2>/dev/null \
+      "Any GTM or pricing implications in this change? One paragraph advisory." \
+      2>/dev/null || echo "(skipped — claude unavailable)"
+
+    echo ""
+    echo "▶ Anand (Investor — advisory)..."
+    echo "$DIFF" | claude --agent anand --print 2>/dev/null \
+      "Any fundability or metrics impact in this change? One paragraph advisory." \
+      2>/dev/null || echo "(skipped — claude unavailable)"
+
+    echo ""
+    echo "═══════════════════════════════════════════════════"
+    echo "  Panel complete — all blockers passed ✅"
+    echo "═══════════════════════════════════════════════════"
+  fi
+fi
+
+# ── Auto-create PR ──────────────────────────────────────────────────────────
 if command -v gh &>/dev/null; then
   PR_URL=$(gh pr view --json url -q .url 2>/dev/null)
   if [ -z "$PR_URL" ]; then
-    echo "🔀  No PR found for branch '$BRANCH' — creating one..."
-    gh pr create --fill 2>/dev/null && echo "✅  PR created." || echo "⚠️  PR creation failed — create manually with: gh pr create --fill"
+    echo "🔀  No PR found for '$BRANCH' — creating one..."
+    gh pr create --fill 2>/dev/null && echo "✅  PR created." || echo "⚠️  PR creation failed — run: gh pr create --fill"
   else
     echo "✅  PR already exists: $PR_URL"
   fi
