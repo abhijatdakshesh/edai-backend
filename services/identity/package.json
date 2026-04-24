@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "migration:run": "ts-node src/migrations/run.ts",
     "lint": "eslint 'src/**/*.ts' --fix || true",
-    "test": "jest --passWithNoTests"
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -35,12 +36,48 @@
   },
   "devDependencies": {
     "vercel": "^48.0.0",
-    "@types/express": "^4.17.21",
+    "@nestjs/testing": "^10.4.2",
     "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.2",
     "@types/passport-jwt": "^4.0.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.2"
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": ["ts-jest", {
+        "tsconfig": "tsconfig.json"
+      }]
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s",
+      "!**/*.spec.(t|j)s",
+      "!**/main.ts",
+      "!**/*.module.ts",
+      "!**/bootstrap-app.ts",
+      "!**/vercel-handler.ts",
+      "!**/migrations/**",
+      "!**/seed/**",
+      "!**/health/**",
+      "!**/events/events.gateway.ts",
+      "!**/events/events.module.ts",
+      "!**/directory/**"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "branches": 80
+      }
+    }
   }
 }

@@ -200,9 +200,11 @@ export class AttendanceService {
   }>> {
     const subjectMap: Record<string, { total: number; attended: number }> = {};
     for (const r of this.records.filter((rec) => rec.studentId === studentUsn)) {
-      if (!subjectMap[r.subjectId]) subjectMap[r.subjectId] = { total: 0, attended: 0 };
-      subjectMap[r.subjectId]!.total++;
-      if (r.status === 'PRESENT' || r.status === 'LATE') subjectMap[r.subjectId]!.attended++;
+      const sid = r.subjectId ?? 'unknown';
+      if (!subjectMap[sid]) subjectMap[sid] = { total: 0, attended: 0 };
+      const subjectEntry = subjectMap[sid] as { total: number; attended: number };
+      subjectEntry.total++;
+      if (r.status === 'PRESENT' || r.status === 'LATE') subjectEntry.attended++;
     }
 
     return Object.entries(subjectMap).map(([subjectId, { total, attended }]) => {
