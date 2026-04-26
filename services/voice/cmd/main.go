@@ -36,6 +36,12 @@ func main() {
 	// Public webhook base URL (Cloudflare tunnel / ngrok in dev, HTTPS host in prod)
 	webhookBase := getenv("WEBHOOK_BASE_URL", "http://localhost:8090")
 
+	// In dev (tunnel), skip Twilio signature validation; enforce in production.
+	if getenv("TWILIO_SKIP_SIG_VALIDATION", "false") == "true" {
+		api.SkipSigValidation = true
+		log.Println("WARNING: Twilio signature validation disabled (dev mode)")
+	}
+
 	sessions := orchestrator.NewSessionRegistry()
 	server := api.NewServer(sessions, aiEngineURL, sarvamClient, twilioClient, webhookBase)
 

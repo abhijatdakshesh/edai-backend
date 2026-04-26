@@ -131,18 +131,25 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.health)
 }
 
+// SkipSigValidation disables X-Twilio-Signature checking (dev/tunnel mode only).
+var SkipSigValidation = false
+
 // twilioSig validates X-Twilio-Signature before allowing the handler to run.
+// In production (SkipSigValidation=false) rejects requests with invalid signatures.
 func (s *Server) twilioSig(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sig := r.Header.Get("X-Twilio-Signature")
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		fullURL := s.WebhookBase + r.URL.RequestURI()
-		if !telephony.ValidateTwilioSignature(s.Twilio.AuthToken, fullURL, r.PostForm, sig) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
+		if !SkipSigValidation {
+			sig := r.Header.Get("X-Twilio-Signature")
+			fullURL := s.WebhookBase + r.URL.RequestURI()
+			if !telephony.ValidateTwilioSignature(s.Twilio.AuthToken, fullURL, r.PostForm, sig) {
+				log.Printf("[sig] REJECTED path=%s sig=%q url=%s", r.URL.Path, sig, fullURL)
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
 		}
 		next(w, r)
 	}
