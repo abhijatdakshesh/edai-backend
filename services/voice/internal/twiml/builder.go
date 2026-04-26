@@ -55,3 +55,20 @@ func SayAndGather(text, lang, action string, numDigits, timeout int) string {
 		esc(action), numDigits, timeout, esc(lang), esc(text))
 	return Response(inner)
 }
+
+// InteractiveGather plays audio and listens for speech OR DTMF.
+// Fires action URL with SpeechResult + Digits. Falls back to action on timeout.
+func InteractiveGather(audioURL, action, speechLang string) string {
+	inner := fmt.Sprintf(
+		`<Gather input="speech dtmf" action="%s" method="POST" language="%s" timeout="8" speechTimeout="2" numDigits="1"><Play>%s</Play></Gather><Redirect method="POST">%s</Redirect>`,
+		esc(action), esc(speechLang), esc(audioURL), esc(action))
+	return Response(inner)
+}
+
+// InteractiveSay speaks text and listens for speech OR DTMF (fallback, no audio).
+func InteractiveSay(text, ttsLang, action, speechLang string) string {
+	inner := fmt.Sprintf(
+		`<Gather input="speech dtmf" action="%s" method="POST" language="%s" timeout="8" speechTimeout="2" numDigits="1"><Say language="%s">%s</Say></Gather><Redirect method="POST">%s</Redirect>`,
+		esc(action), esc(speechLang), esc(ttsLang), esc(text), esc(action))
+	return Response(inner)
+}

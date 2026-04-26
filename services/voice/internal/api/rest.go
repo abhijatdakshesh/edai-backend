@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ type Server struct {
 
 var allLangs = []string{"kn", "hi", "ta", "te", "en"}
 var allCallTypes = []string{"ABSENT_CALL", "FEE_REMINDER", "WEEKLY_UPDATE", "ASSIGNMENT_MISS", "EXAM_REMINDER"}
+var allIntents = []string{"ACK", "SICK", "CALLBACK", "GOODBYE", "UNSUBSCRIBE"}
 
 func NewServer(
 	sessions *orchestrator.SessionRegistry,
@@ -62,27 +64,31 @@ func NewServer(
 	return s
 }
 
-// pregenAllAudio generates WAV for all lang×callType combos at startup.
+// pregenAllAudio generates WAV for all lang×callType and lang×intent combos.
 func (s *Server) pregenAllAudio() {
-	log.Println("[pregen] Starting pre-generation of all language audio...")
+	log.Println("[pregen] Starting pre-generation (openings + responses)...")
+	gen := func(key, script, lang string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		audio, err := s.Sarvam.Synthesise(ctx, script, lang, "anushka")
+		cancel()
+		if err != nil {
+			log.Printf("[pregen] FAILED %s: %v", key, err)
+			return
+		}
+		s.audioMu.Lock()
+		s.prebuilt[key] = audio
+		s.audioMu.Unlock()
+		log.Printf("[pregen] OK %s bytes=%d", key, len(audio))
+	}
 	for _, lang := range allLangs {
 		for _, callType := range allCallTypes {
-			key := lang + ":" + callType
-			script := exoml.OpeningScript(lang, callType, "your child")
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			audio, err := s.Sarvam.Synthesise(ctx, script, lang, "anushka")
-			cancel()
-			if err != nil {
-				log.Printf("[pregen] FAILED %s: %v", key, err)
-				continue
-			}
-			s.audioMu.Lock()
-			s.prebuilt[key] = audio
-			s.audioMu.Unlock()
-			log.Printf("[pregen] OK %s bytes=%d", key, len(audio))
+			gen(lang+":"+callType, exoml.OpeningScript(lang, callType, "your child"), lang)
+		}
+		for _, intent := range allIntents {
+			gen("resp:"+lang+":"+intent, exoml.ResponseScript(lang, intent), lang)
 		}
 	}
-	log.Println("[pregen] Done pre-generating all audio")
+	log.Println("[pregen] Done — all audio ready")
 }
 
 // runAudioGC removes expired audio entries every 5 minutes.
@@ -248,46 +254,99 @@ func (s *Server) twilioAnswer(w http.ResponseWriter, r *http.Request) {
 	sess.TransitionTo(orchestrator.StateConnected)
 
 	gatherURL := fmt.Sprintf("%s/voice/webhook/twilio/gather?callId=%s", s.WebhookBase, callID)
+	speechLang := tts.LangCode(sess.Language)
 
-	// Use per-call audio if ready, otherwise fall back to prebuilt lang audio.
-	audioKey := ""
+	// Prefer per-call personalised audio, then prebuilt, then Twilio built-in TTS.
 	s.audioMu.RLock()
-	if _, ok := s.audioStore[callID]; ok {
-		audioKey = "call:" + callID
-	} else if _, ok := s.prebuilt[sess.Language+":"+sess.CallType]; ok {
-		audioKey = "prebuilt:" + sess.Language + ":" + sess.CallType
-	}
+	_, hasCallAudio := s.audioStore[callID]
+	_, hasPrebuilt := s.prebuilt[sess.Language+":"+sess.CallType]
 	s.audioMu.RUnlock()
 
-	if audioKey != "" {
-		audioURL := fmt.Sprintf("%s/voice/audio/%s?key=%s", s.WebhookBase, callID, audioKey)
-		w.Write([]byte(twiml.PlayAndGather(audioURL, gatherURL, 1, 8)))
+	if hasCallAudio {
+		audioURL := fmt.Sprintf("%s/voice/audio/%s", s.WebhookBase, callID)
+		w.Write([]byte(twiml.InteractiveGather(audioURL, gatherURL, speechLang)))
 		return
 	}
-
-	// No audio at all — fall back to Twilio built-in TTS.
+	if hasPrebuilt {
+		audioURL := fmt.Sprintf("%s/voice/audio/open?key=%s:%s", s.WebhookBase, sess.Language, sess.CallType)
+		w.Write([]byte(twiml.InteractiveGather(audioURL, gatherURL, speechLang)))
+		return
+	}
 	script := exoml.OpeningScript(sess.Language, sess.CallType, studentNameFromContext(sess))
-	langCode := tts.LangCode(sess.Language)
-	w.Write([]byte(twiml.SayAndGather(script, langCode, gatherURL, 1, 8)))
+	w.Write([]byte(twiml.InteractiveSay(script, speechLang, gatherURL, speechLang)))
 }
 
-// twilioGather handles DTMF input. Press 9 to opt out of automated calls.
+// twilioGather handles parent speech/DTMF input and plays a contextual response.
 func (s *Server) twilioGather(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
 	callID := r.URL.Query().Get("callId")
+	speech := r.FormValue("SpeechResult")
 	digits := r.FormValue("Digits")
-	log.Printf("[gather] callID=%s digits=%s", callID, digits)
+	log.Printf("[gather] callID=%s digits=%q speech=%q", callID, digits, speech)
 
-	if sess, ok := s.Sessions.Get(callID); ok {
+	w.Header().Set("Content-Type", "text/xml")
+
+	sess, ok := s.Sessions.Get(callID)
+	if !ok {
+		w.Write([]byte(twiml.SayAndHangup("Thank you. Goodbye.", "en-IN")))
+		return
+	}
+	if digits != "" {
 		sess.PushDTMF(digits)
 	}
 
-	w.Header().Set("Content-Type", "text/xml")
-	if digits == "9" {
-		w.Write([]byte(twiml.SayAndHangup("You have been unsubscribed from automated calls. Goodbye.", "en-IN")))
+	intent := detectIntent(speech, digits)
+	lang := sess.Language
+	log.Printf("[gather] callID=%s intent=%s lang=%s", callID, intent, lang)
+
+	respKey := "resp:" + lang + ":" + intent
+	s.audioMu.RLock()
+	_, hasResp := s.prebuilt[respKey]
+	s.audioMu.RUnlock()
+
+	if hasResp {
+		audioURL := fmt.Sprintf("%s/voice/audio/resp?key=%s", s.WebhookBase, respKey)
+		w.Write([]byte(twiml.PlayAndHangup(audioURL)))
 		return
 	}
-	w.Write([]byte(twiml.Response("<Hangup/>")))
+	// Fallback TTS response
+	w.Write([]byte(twiml.SayAndHangup(exoml.ResponseScript(lang, intent), tts.LangCode(lang))))
+}
+
+// detectIntent maps speech transcript and DTMF digits to a response intent.
+func detectIntent(speech, digits string) string {
+	switch digits {
+	case "1":
+		return "ACK"
+	case "2":
+		return "SICK"
+	case "3":
+		return "CALLBACK"
+	case "9":
+		return "UNSUBSCRIBE"
+	}
+	if speech == "" {
+		return "GOODBYE"
+	}
+	lower := strings.ToLower(speech)
+	for _, w := range []string{"sick", "ill", "fever", "hospital", "doctor", "unwell",
+		"bimaar", "bimari", "taklif", "noi", "odambu", "vyadhi", "jaramu", "javvaru"} {
+		if strings.Contains(lower, w) {
+			return "SICK"
+		}
+	}
+	for _, w := range []string{"teacher", "call back", "callback", "speak", "talk", "principal",
+		"adhyapak", "shikshak", "aasiriyar", "guruvugaru", "matlaadi", "maataadi"} {
+		if strings.Contains(lower, w) {
+			return "CALLBACK"
+		}
+	}
+	for _, w := range []string{"ok", "okay", "yes", "noted", "understand", "haan", "theek",
+		"sahi", "sari", "ama", "aama", "avunu", "purinchindi"} {
+		if strings.Contains(lower, w) {
+			return "ACK"
+		}
+	}
+	return "GOODBYE"
 }
 
 // twilioStatus handles call status callbacks from Twilio.
@@ -328,17 +387,21 @@ func (s *Server) twilioStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// serveAudio streams WAV audio. key param selects call-specific or prebuilt audio.
+// serveAudio serves WAV audio from the prebuilt map or per-call store.
+// Paths: /voice/audio/<callID>  (per-call personalised)
+//        /voice/audio/open?key=lang:callType  (prebuilt opening)
+//        /voice/audio/resp?key=resp:lang:intent  (prebuilt response)
 func (s *Server) serveAudio(w http.ResponseWriter, r *http.Request) {
+	segment := r.URL.Path[len("/voice/audio/"):]
 	key := r.URL.Query().Get("key")
-	var audio []byte
 
+	var audio []byte
 	s.audioMu.RLock()
-	if key != "" && len(key) > 9 && key[:9] == "prebuilt:" {
-		audio = s.prebuilt[key[9:]] // "lang:callType"
+	if segment == "open" || segment == "resp" {
+		audio = s.prebuilt[key]
 	} else {
-		callID := r.URL.Path[len("/voice/audio/"):]
-		if e, ok := s.audioStore[callID]; ok && time.Now().Before(e.expiresAt) {
+		// Per-call personalised audio
+		if e, ok := s.audioStore[segment]; ok && time.Now().Before(e.expiresAt) {
 			audio = e.data
 		}
 	}
