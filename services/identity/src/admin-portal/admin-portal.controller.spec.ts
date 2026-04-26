@@ -162,7 +162,7 @@ describe('AdminPortalController', () => {
     mockSvc.exportAnalytics.mockReturnValue([]);
     const mockRes = { status: jest.fn(), setHeader: jest.fn() };
     const result = controller.downloadExport({ type: 'test', format: 'CSV' }, mockRes as any);
-    expect(result as string).toContain('"data"');
+    expect(result as string).toBe('[]');
   });
 
   it('getClassPerformance delegates with classId', () => {

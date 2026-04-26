@@ -17,6 +17,8 @@ export interface AICallLog {
   duration: number;
   transcript?: string;
   summary?: string;
+  parentPhone?: string;
+  language?: string;
 }
 
 export interface Announcement {

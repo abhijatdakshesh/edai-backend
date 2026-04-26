@@ -211,7 +211,7 @@ describe('CommsService', () => {
   // ─── triggerCall ────────────────────────────────────────────────────────────
 
   describe('triggerCall()', () => {
-    it('returns QUEUED status with a callId and scheduledAt 5 min in future', () => {
+    it('returns QUEUED status with a callId and scheduledAt 5 min in future', async () => {
       service.grantConsent('USN001', ['ATTENDANCE_ALERTS']);
       const before = Date.now();
       const result = await service.triggerCall('USN001', 'ATTENDANCE');
