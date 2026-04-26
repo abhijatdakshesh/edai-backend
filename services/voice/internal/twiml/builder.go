@@ -1,18 +1,29 @@
 // Package twiml builds Twilio Markup Language XML responses.
 package twiml
 
-import "fmt"
+import (
+	"encoding/xml"
+	"fmt"
+	"strings"
+)
+
+// esc XML-escapes a string for safe interpolation into TwiML.
+func esc(s string) string {
+	var b strings.Builder
+	xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
 
 func Response(inner string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response>%s</Response>`, inner)
 }
 
 func Say(text, lang string) string {
-	return fmt.Sprintf(`<Say language="%s">%s</Say>`, lang, text)
+	return fmt.Sprintf(`<Say language="%s">%s</Say>`, esc(lang), esc(text))
 }
 
 func Play(audioURL string) string {
-	return fmt.Sprintf(`<Play>%s</Play>`, audioURL)
+	return fmt.Sprintf(`<Play>%s</Play>`, esc(audioURL))
 }
 
 func Pause(seconds int) string {
@@ -20,10 +31,6 @@ func Pause(seconds int) string {
 }
 
 func Hangup() string { return "<Hangup/>" }
-
-func Gather(action string, numDigits, timeout int) string {
-	return fmt.Sprintf(`<Gather action="%s" method="POST" numDigits="%d" timeout="%d"/>`, action, numDigits, timeout)
-}
 
 // PlayAndHangup plays audio then hangs up.
 func PlayAndHangup(audioURL string) string {
@@ -35,14 +42,16 @@ func SayAndHangup(text, lang string) string {
 	return Response(Say(text, lang) + Pause(1) + Hangup())
 }
 
-// PlayAndGather plays audio then waits for DTMF.
+// PlayAndGather plays audio inside <Gather> so early DTMF is captured.
 func PlayAndGather(audioURL, action string, numDigits, timeout int) string {
 	inner := fmt.Sprintf(`<Gather action="%s" method="POST" numDigits="%d" timeout="%d"><Play>%s</Play></Gather>`,
-		action, numDigits, timeout, audioURL)
+		esc(action), numDigits, timeout, esc(audioURL))
 	return Response(inner)
 }
 
-// SayAndGather speaks text then waits for DTMF.
+// SayAndGather speaks text inside <Gather> so early DTMF is captured. (#12 fix)
 func SayAndGather(text, lang, action string, numDigits, timeout int) string {
-	return Response(Say(text, lang) + Gather(action, numDigits, timeout))
+	inner := fmt.Sprintf(`<Gather action="%s" method="POST" numDigits="%d" timeout="%d"><Say language="%s">%s</Say></Gather>`,
+		esc(action), numDigits, timeout, esc(lang), esc(text))
+	return Response(inner)
 }

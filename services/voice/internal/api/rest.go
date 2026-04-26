@@ -118,11 +118,28 @@ func (s *Server) getAudio(callID string) ([]byte, bool) {
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/calls/trigger", s.triggerCall)
 	mux.HandleFunc("/voice/calls/", s.getCallStatus)
-	mux.HandleFunc("/voice/webhook/twilio/answer", s.twilioAnswer)
-	mux.HandleFunc("/voice/webhook/twilio/gather", s.twilioGather)
-	mux.HandleFunc("/voice/webhook/twilio/status", s.twilioStatus)
+	mux.HandleFunc("/voice/webhook/twilio/answer", s.twilioSig(s.twilioAnswer))
+	mux.HandleFunc("/voice/webhook/twilio/gather", s.twilioSig(s.twilioGather))
+	mux.HandleFunc("/voice/webhook/twilio/status", s.twilioSig(s.twilioStatus))
 	mux.HandleFunc("/voice/audio/", s.serveAudio)
 	mux.HandleFunc("/health", s.health)
+}
+
+// twilioSig validates X-Twilio-Signature before allowing the handler to run.
+func (s *Server) twilioSig(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sig := r.Header.Get("X-Twilio-Signature")
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		fullURL := s.WebhookBase + r.URL.RequestURI()
+		if !telephony.ValidateTwilioSignature(s.Twilio.AuthToken, fullURL, r.PostForm, sig) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 type triggerCallReq struct {
@@ -159,7 +176,8 @@ func (s *Server) triggerCall(w http.ResponseWriter, r *http.Request) {
 
 	// Pre-generate TTS audio so it's ready when Twilio answers.
 	go func() {
-		script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
+		studentName := studentNameFromContext(sess)
+		script := exoml.OpeningScript(sess.Language, sess.CallType, studentName)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		audio, err := s.Sarvam.Synthesise(ctx, script, sess.Language, "anushka")
@@ -248,7 +266,7 @@ func (s *Server) twilioAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No audio at all — fall back to Twilio built-in TTS.
-	script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
+	script := exoml.OpeningScript(sess.Language, sess.CallType, studentNameFromContext(sess))
 	langCode := tts.LangCode(sess.Language)
 	w.Write([]byte(twiml.SayAndGather(script, langCode, gatherURL, 1, 8)))
 }
@@ -279,6 +297,7 @@ func (s *Server) twilioStatus(w http.ResponseWriter, r *http.Request) {
 	status := r.FormValue("CallStatus")
 	log.Printf("[status] callID=%s status=%s", callID, status)
 
+	terminal := false
 	if sess, ok := s.Sessions.Get(callID); ok {
 		switch status {
 		case "ringing":
@@ -287,13 +306,24 @@ func (s *Server) twilioStatus(w http.ResponseWriter, r *http.Request) {
 			sess.TransitionTo(orchestrator.StateConnected)
 		case "completed":
 			sess.TransitionTo(orchestrator.StateCompleted)
+			terminal = true
 		case "no-answer":
 			sess.TransitionTo(orchestrator.StateNoAnswer)
+			terminal = true
 		case "busy":
 			sess.TransitionTo(orchestrator.StateBusy)
+			terminal = true
 		case "failed":
 			sess.TransitionTo(orchestrator.StateFailed)
+			terminal = true
 		}
+	}
+	// Remove completed sessions after grace period to prevent memory leak.
+	if terminal {
+		go func() {
+			time.Sleep(5 * time.Minute)
+			s.Sessions.Remove(callID)
+		}()
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -321,6 +351,15 @@ func (s *Server) serveAudio(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "audio/wav")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audio)))
 	w.Write(audio)
+}
+
+// studentNameFromContext extracts the student display name from session context.
+// Falls back to StudentID if name is absent (prevents UUID being spoken aloud).
+func studentNameFromContext(sess *orchestrator.CallSession) string {
+	if name, ok := sess.StudentContext["name"].(string); ok && name != "" {
+		return name
+	}
+	return sess.StudentID
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

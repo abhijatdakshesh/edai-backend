@@ -77,7 +77,7 @@ func main() {
 		)
 		sessions.Add(sess)
 		log.Printf("Kafka auto-call: callID=%s student=%s lang=%s phone=%s",
-			callID, evt.StudentID, evt.ParentLanguage, evt.ParentPhone)
+			callID, evt.StudentID, evt.ParentLanguage, maskPhone(evt.ParentPhone))
 
 		answerURL := webhookBase + "/voice/webhook/twilio/answer?callId=" + callID
 		statusURL := webhookBase + "/voice/webhook/twilio/status?callId=" + callID
@@ -117,4 +117,12 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// maskPhone masks a phone number for safe logging (DPDP Act 2023).
+func maskPhone(phone string) string {
+	if len(phone) <= 5 {
+		return "****"
+	}
+	return phone[:3] + "****" + phone[len(phone)-2:]
 }

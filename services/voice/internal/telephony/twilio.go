@@ -4,10 +4,14 @@ package telephony
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 )
 
@@ -17,6 +21,29 @@ type TwilioClient struct {
 	AuthToken  string
 	FromNumber string
 	HTTPClient *http.Client
+}
+
+// ValidateTwilioSignature verifies X-Twilio-Signature per Twilio's HMAC-SHA1 scheme.
+// fullURL must be the exact URL Twilio called (scheme + host + path + query).
+// postParams is r.PostForm (parsed before calling this).
+func ValidateTwilioSignature(authToken, fullURL string, postParams url.Values, signature string) bool {
+	if signature == "" {
+		return false
+	}
+	// Build validation string: URL + sorted(key+value pairs)
+	s := fullURL
+	keys := make([]string, 0, len(postParams))
+	for k := range postParams {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		s += k + postParams.Get(k)
+	}
+	mac := hmac.New(sha1.New, []byte(authToken))
+	mac.Write([]byte(s))
+	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(signature))
 }
 
 func NewTwilioClient(accountSID, authToken, fromNumber string) *TwilioClient {
