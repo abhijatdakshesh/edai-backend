@@ -214,7 +214,7 @@ describe('CommsService', () => {
     it('returns QUEUED status with a callId and scheduledAt 5 min in future', () => {
       service.grantConsent('USN001', ['ATTENDANCE_ALERTS']);
       const before = Date.now();
-      const result = service.triggerCall('USN001', 'ATTENDANCE');
+      const result = await service.triggerCall('USN001', 'ATTENDANCE');
       const after = Date.now();
       expect(result.status).toBe('QUEUED');
       expect(result.callId).toMatch(/^call-/);
