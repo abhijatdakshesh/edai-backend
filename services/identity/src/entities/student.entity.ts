@@ -9,6 +9,11 @@ export interface Student {
   photoUrl?: string;
   biometricRef?: string;
   institutionId: string;
+  homeState?: string;
+  parentPhone?: string;
+  parentName?: string;
+  consentVoice?: boolean;
+  parentPreferredLanguage?: string;
   createdAt: string;
 }
 

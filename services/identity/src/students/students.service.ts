@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Student, ParentStudentLink } from '../entities/student.entity';
+import { detectLanguageFromState } from './language-detector';
 
 @Injectable()
 export class StudentsService {
@@ -42,9 +43,31 @@ export class StudentsService {
   }
 
   create(data: Omit<Student, 'id' | 'createdAt'>): Student {
-    const student: Student = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
+    const lang = detectLanguageFromState(data.homeState ?? 'karnataka');
+    const student: Student = {
+      ...data,
+      id: randomUUID(),
+      parentPreferredLanguage: data.parentPreferredLanguage ?? lang,
+      createdAt: new Date().toISOString(),
+    };
     this.students.push(student);
     return student;
+  }
+
+  findContactByUsn(usn: string): {
+    parentPhone: string;
+    parentName: string;
+    preferredLanguage: string;
+    consentVoice: boolean;
+  } {
+    const student = this.students.find((s) => s.usn === usn);
+    if (!student) throw new NotFoundException('Student not found');
+    return {
+      parentPhone: student.parentPhone ?? '+919876543210',
+      parentName: student.parentName ?? 'Parent',
+      preferredLanguage: student.parentPreferredLanguage ?? 'kn',
+      consentVoice: student.consentVoice ?? false,
+    };
   }
 
   addLink(parentId: string, studentId: string): ParentStudentLink {

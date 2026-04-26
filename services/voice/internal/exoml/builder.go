@@ -54,6 +54,19 @@ func SayAndGather(text, lang, audioURL, dtmfAction string, numDigits, timeout in
 	return Response(speakPart + Gather(dtmfAction, numDigits, timeout))
 }
 
+// PlayAndGather plays an audio URL then waits for DTMF input.
+// Does NOT modify the existing SayAndGather function.
+func PlayAndGather(audioURL, dtmfAction string, numDigits, timeout int) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response><Gather action="%s" method="POST" numDigits="%d" timeout="%d"><Play>%s</Play></Gather></Response>`,
+		dtmfAction, numDigits, timeout, audioURL)
+}
+
+// PlayAndHangup plays an audio URL then hangs up.
+// Does NOT modify the existing SayAndHangup function.
+func PlayAndHangup(audioURL string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response><Play>%s</Play><Hangup/></Response>`, audioURL)
+}
+
 // OpeningScript returns the greeting script for each language and call type.
 func OpeningScript(lang, callType, studentID string) string {
 	scripts := map[string]map[string]string{

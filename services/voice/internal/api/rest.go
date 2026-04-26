@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -171,14 +172,17 @@ func (s *Server) exotelAnswer(w http.ResponseWriter, r *http.Request) {
 	script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
 	langCode := tts.LangCode(sess.Language)
 
-	var audioURL string
 	if audio, ok := s.getAudio(callSID); ok && len(audio) > 0 {
-		audioURL = s.PublicBase + "/voice/audio/" + callSID
-		_ = audio // already stored; serveAudio will stream it
+		_ = audio // already stored; serveAudio will stream it on demand
+		audioURL := s.PublicBase + "/voice/audio/" + callSID
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(exoml.PlayAndHangup(audioURL)))
+		return
 	}
 
+	// Sarvam audio not yet ready — fall back to Exotel built-in TTS.
 	w.Header().Set("Content-Type", "text/xml")
-	w.Write([]byte(exoml.SayAndHangup(script, langCode, audioURL)))
+	w.Write([]byte(exoml.SayAndHangup(script, langCode, "")))
 }
 
 func (s *Server) exotelWebhook(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +229,7 @@ func (s *Server) serveAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Content-Length", string(rune(len(audio))))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audio)))
 	w.Write(audio)
 }
 
