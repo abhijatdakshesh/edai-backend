@@ -12,5 +12,5 @@ func SynthesiseForLang(ctx context.Context, client *SarvamClient, text, lang str
 	if client == nil || client.APIKey == "" {
 		return nil, fmt.Errorf("sarvam client not configured")
 	}
-	return client.Synthesise(ctx, text, lang, "meera")
+	return client.Synthesise(ctx, text, lang, "pavithra")
 }

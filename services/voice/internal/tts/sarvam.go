@@ -65,13 +65,13 @@ func (c *SarvamClient) Synthesise(ctx context.Context, text, lang, speaker strin
 		return nil, fmt.Errorf("SARVAM_API_KEY not set")
 	}
 	if speaker == "" {
-		speaker = "meera"
+		speaker = "pavithra"
 	}
 	body, err := json.Marshal(ttsRequest{
 		Inputs:              []string{text},
 		TargetLanguageCode:  LangCode(lang),
 		Speaker:             speaker,
-		Model:               "bulbul:v1",
+		Model:               "bulbul:v2",
 		Pitch:               0,
 		Pace:                1.0,
 		Loudness:            1.5,

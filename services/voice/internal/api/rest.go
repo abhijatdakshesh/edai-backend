@@ -14,7 +14,9 @@ import (
 
 	"github.com/edai/voice/internal/exoml"
 	"github.com/edai/voice/internal/orchestrator"
+	"github.com/edai/voice/internal/telephony"
 	"github.com/edai/voice/internal/tts"
+	"github.com/edai/voice/internal/twiml"
 )
 
 // audioEntry holds a pre-generated TTS audio buffer.
@@ -25,22 +27,30 @@ type audioEntry struct {
 
 // Server holds shared dependencies for all HTTP handlers.
 type Server struct {
-	Sessions   *orchestrator.SessionRegistry
-	AIEngine   string
-	Sarvam     *tts.SarvamClient
-	PublicBase string // e.g. https://your-tunnel.trycloudflare.com
+	Sessions    *orchestrator.SessionRegistry
+	AIEngine    string
+	Sarvam      *tts.SarvamClient
+	Twilio      *telephony.TwilioClient
+	WebhookBase string // e.g. https://your-tunnel.trycloudflare.com
 
 	audioMu    sync.RWMutex
 	audioStore map[string]*audioEntry // callID → WAV bytes
 }
 
-func NewServer(sessions *orchestrator.SessionRegistry, aiEngine string, sarvam *tts.SarvamClient, publicBase string) *Server {
+func NewServer(
+	sessions *orchestrator.SessionRegistry,
+	aiEngine string,
+	sarvam *tts.SarvamClient,
+	twilio *telephony.TwilioClient,
+	webhookBase string,
+) *Server {
 	s := &Server{
-		Sessions:   sessions,
-		AIEngine:   aiEngine,
-		Sarvam:     sarvam,
-		PublicBase: publicBase,
-		audioStore: make(map[string]*audioEntry),
+		Sessions:    sessions,
+		AIEngine:    aiEngine,
+		Sarvam:      sarvam,
+		Twilio:      twilio,
+		WebhookBase: webhookBase,
+		audioStore:  make(map[string]*audioEntry),
 	}
 	go s.runAudioGC()
 	return s
@@ -79,9 +89,9 @@ func (s *Server) getAudio(callID string) ([]byte, bool) {
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/calls/trigger", s.triggerCall)
 	mux.HandleFunc("/voice/calls/", s.getCallStatus)
-	mux.HandleFunc("/voice/webhook/exotel", s.exotelWebhook)
-	mux.HandleFunc("/voice/webhook/exotel/answer", s.exotelAnswer)
-	mux.HandleFunc("/voice/webhook/exotel/dtmf", s.exotelDTMF)
+	mux.HandleFunc("/voice/webhook/twilio/answer", s.twilioAnswer)
+	mux.HandleFunc("/voice/webhook/twilio/gather", s.twilioGather)
+	mux.HandleFunc("/voice/webhook/twilio/status", s.twilioStatus)
 	mux.HandleFunc("/voice/audio/", s.serveAudio)
 	mux.HandleFunc("/health", s.health)
 }
@@ -89,6 +99,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 type triggerCallReq struct {
 	StudentID      string                 `json:"studentId"`
 	ParentID       string                 `json:"parentId"`
+	ParentPhone    string                 `json:"parentPhone"`
 	Language       string                 `json:"language"`
 	CallType       string                 `json:"callType"`
 	InstitutionID  string                 `json:"institutionId"`
@@ -108,23 +119,44 @@ func (s *Server) triggerCall(w http.ResponseWriter, r *http.Request) {
 	if req.Language == "" {
 		req.Language = "en"
 	}
+	if req.ParentPhone == "" {
+		http.Error(w, "parentPhone required", http.StatusBadRequest)
+		return
+	}
 
 	callID := uuid.New().String()
 	sess := orchestrator.NewCallSession(callID, req.StudentID, req.ParentID, req.Language, req.CallType, req.InstitutionID, req.StudentContext)
 	s.Sessions.Add(sess)
 
-	// Pre-generate TTS audio in background so it's ready when Exotel answers
+	// Pre-generate TTS audio so it's ready when Twilio answers.
 	go func() {
 		script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		audio, err := s.Sarvam.Synthesise(ctx, script, sess.Language, "meera")
+		audio, err := s.Sarvam.Synthesise(ctx, script, sess.Language, "pavithra")
 		if err != nil {
-			log.Printf("[TTS] Sarvam failed for callID=%s lang=%s: %v (will use Say fallback)", callID, sess.Language, err)
+			log.Printf("[TTS] Sarvam failed callID=%s lang=%s: %v (will use Say fallback)", callID, sess.Language, err)
 			return
 		}
 		s.storeAudio(callID, audio)
-		log.Printf("[TTS] Sarvam audio ready for callID=%s lang=%s bytes=%d", callID, sess.Language, len(audio))
+		log.Printf("[TTS] audio ready callID=%s lang=%s bytes=%d", callID, sess.Language, len(audio))
+	}()
+
+	// Place the outbound Twilio call.
+	answerURL := fmt.Sprintf("%s/voice/webhook/twilio/answer?callId=%s", s.WebhookBase, callID)
+	statusURL := fmt.Sprintf("%s/voice/webhook/twilio/status?callId=%s", s.WebhookBase, callID)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		sid, err := s.Twilio.PlaceCallWithURL(ctx, req.ParentPhone, answerURL, statusURL)
+		if err != nil {
+			log.Printf("[Twilio] place call failed callID=%s: %v", callID, err)
+			sess.TransitionTo(orchestrator.StateFailed)
+			return
+		}
+		log.Printf("[Twilio] call placed callID=%s twilioSid=%s", callID, sid)
+		sess.TransitionTo(orchestrator.StateRinging)
 	}()
 
 	log.Printf("[trigger] callID=%s student=%s lang=%s type=%s", callID, req.StudentID, req.Language, req.CallType)
@@ -152,45 +184,63 @@ func (s *Server) getCallStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// exotelAnswer is called by Exotel when the parent picks up.
-// Returns ExoML — either <Play> with Sarvam AI audio or <Say> fallback.
-func (s *Server) exotelAnswer(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	callSID := r.FormValue("CallSid")
-	log.Printf("[answer] callSID=%s", callSID)
+// twilioAnswer is called by Twilio when the parent picks up.
+// Returns TwiML: <Play> with Sarvam AI audio or <Say> fallback.
+func (s *Server) twilioAnswer(w http.ResponseWriter, r *http.Request) {
+	callID := r.URL.Query().Get("callId")
+	log.Printf("[answer] callID=%s", callID)
 
-	sess, ok := s.Sessions.Get(callSID)
+	w.Header().Set("Content-Type", "text/xml")
+
+	sess, ok := s.Sessions.Get(callID)
 	if !ok {
-		// Unknown session — play a generic message and hang up
-		w.Header().Set("Content-Type", "text/xml")
-		w.Write([]byte(exoml.SayAndHangup("Hello, this is RVCE college. Please contact us at the main office.", "en-IN", "")))
+		w.Write([]byte(twiml.SayAndHangup("Hello, this is an automated call from RVCE college. Please contact the main office.", "en-IN")))
 		return
 	}
 
 	sess.TransitionTo(orchestrator.StateConnected)
 
-	script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
-	langCode := tts.LangCode(sess.Language)
+	gatherURL := fmt.Sprintf("%s/voice/webhook/twilio/gather?callId=%s", s.WebhookBase, callID)
 
-	if audio, ok := s.getAudio(callSID); ok && len(audio) > 0 {
-		_ = audio // already stored; serveAudio will stream it on demand
-		audioURL := s.PublicBase + "/voice/audio/" + callSID
-		w.Header().Set("Content-Type", "text/xml")
-		w.Write([]byte(exoml.PlayAndHangup(audioURL)))
+	if _, ok := s.getAudio(callID); ok {
+		audioURL := fmt.Sprintf("%s/voice/audio/%s", s.WebhookBase, callID)
+		w.Write([]byte(twiml.PlayAndGather(audioURL, gatherURL, 1, 8)))
 		return
 	}
 
-	// Sarvam audio not yet ready — fall back to Exotel built-in TTS.
-	w.Header().Set("Content-Type", "text/xml")
-	w.Write([]byte(exoml.SayAndHangup(script, langCode, "")))
+	// Sarvam audio not ready — fall back to Twilio built-in TTS.
+	script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
+	langCode := tts.LangCode(sess.Language)
+	w.Write([]byte(twiml.SayAndGather(script, langCode, gatherURL, 1, 8)))
 }
 
-func (s *Server) exotelWebhook(w http.ResponseWriter, r *http.Request) {
+// twilioGather handles DTMF input. Press 9 to opt out of automated calls.
+func (s *Server) twilioGather(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	callSID := r.FormValue("CallSid")
-	status := r.FormValue("Status")
-	log.Printf("[webhook] callSID=%s status=%s", callSID, status)
-	if sess, ok := s.Sessions.Get(callSID); ok {
+	callID := r.URL.Query().Get("callId")
+	digits := r.FormValue("Digits")
+	log.Printf("[gather] callID=%s digits=%s", callID, digits)
+
+	if sess, ok := s.Sessions.Get(callID); ok {
+		sess.PushDTMF(digits)
+	}
+
+	w.Header().Set("Content-Type", "text/xml")
+	if digits == "9" {
+		w.Write([]byte(twiml.SayAndHangup("You have been unsubscribed from automated calls. Goodbye.", "en-IN")))
+		return
+	}
+	w.Write([]byte(twiml.Response("<Hangup/>")))
+}
+
+// twilioStatus handles call status callbacks from Twilio.
+func (s *Server) twilioStatus(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	callID := r.URL.Query().Get("callId")
+	status := r.FormValue("CallStatus")
+	log.Printf("[status] callID=%s status=%s", callID, status)
+
+	if sess, ok := s.Sessions.Get(callID); ok {
 		switch status {
 		case "ringing":
 			sess.TransitionTo(orchestrator.StateRinging)
@@ -205,17 +255,6 @@ func (s *Server) exotelWebhook(w http.ResponseWriter, r *http.Request) {
 		case "failed":
 			sess.TransitionTo(orchestrator.StateFailed)
 		}
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) exotelDTMF(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	callSID := r.FormValue("CallSid")
-	digits := r.FormValue("Digits")
-	log.Printf("[dtmf] callSID=%s digits=%s", callSID, digits)
-	if sess, ok := s.Sessions.Get(callSID); ok {
-		sess.PushDTMF(digits)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
