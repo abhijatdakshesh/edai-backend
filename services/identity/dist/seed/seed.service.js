@@ -24,8 +24,9 @@ const classes_api_service_1 = require("../classes-api/classes-api.service");
 const student_portal_service_1 = require("../student-portal/student-portal.service");
 const parent_portal_service_1 = require("../parent-portal/parent-portal.service");
 const comms_service_1 = require("../comms/comms.service");
+const admin_portal_service_1 = require("../admin-portal/admin-portal.service");
 const STUDENTS = [
-    { usn: '1RV21CS001', name: 'Arjun Mehta', dept: 'Computer Science', semester: 5, cgpa: 8.2 },
+    { usn: '1RV21CS001', name: 'Arjun Kumar', dept: 'Computer Science', semester: 5, cgpa: 8.2 },
     { usn: '1RV21CS002', name: 'Sneha Reddy', dept: 'Computer Science', semester: 5, cgpa: 7.9 },
     { usn: '1RV21CS003', name: 'Priya Sharma', dept: 'Computer Science', semester: 5, cgpa: 6.8 },
     { usn: '1RV21CS004', name: 'Karan Joshi', dept: 'Computer Science', semester: 5, cgpa: 8.7 },
@@ -37,9 +38,9 @@ const SUBJECTS = [
     { code: 'CS503', name: 'Computer Networks' },
     { code: 'CS504', name: 'Operating Systems' },
 ];
-const TEACHER_ID = 'teacher-seed-001';
+const TEACHER_ID = 'u-faculty-01';
 let SeedService = SeedService_1 = class SeedService {
-    constructor(coursesSvc, attendanceSvc, assignmentsSvc, iaSvc, feesSvc, vtuSvc, wellnessSvc, jobsSvc, classesSvc, studentPortalSvc, parentPortalSvc, commsSvc) {
+    constructor(coursesSvc, attendanceSvc, assignmentsSvc, iaSvc, feesSvc, vtuSvc, wellnessSvc, jobsSvc, classesSvc, studentPortalSvc, parentPortalSvc, commsSvc, adminPortalSvc) {
         this.coursesSvc = coursesSvc;
         this.attendanceSvc = attendanceSvc;
         this.assignmentsSvc = assignmentsSvc;
@@ -52,6 +53,7 @@ let SeedService = SeedService_1 = class SeedService {
         this.studentPortalSvc = studentPortalSvc;
         this.parentPortalSvc = parentPortalSvc;
         this.commsSvc = commsSvc;
+        this.adminPortalSvc = adminPortalSvc;
         this.logger = new common_1.Logger(SeedService_1.name);
     }
     onModuleInit() {
@@ -69,14 +71,15 @@ let SeedService = SeedService_1 = class SeedService {
         this.seedParentPortal();
         this.seedComms();
         this.seedAcademicResults();
+        this.seedAdminPortal();
         this.logger.log('Seed complete — all modules populated');
     }
     seedCourses() {
         this.coursesSvc.courses = [
-            { id: 'course-1', name: 'Data Structures & Algorithms', code: 'CS501', credits: 4, department: 'Computer Science', instructorName: 'Dr. Anand Rao', instructorId: TEACHER_ID, enrolled: 120 },
+            { id: 'course-1', name: 'Data Structures & Algorithms', code: 'CS501', credits: 4, department: 'Computer Science', instructorName: 'Ravi Shankar', instructorId: TEACHER_ID, enrolled: 120 },
             { id: 'course-2', name: 'Database Management Systems', code: 'CS502', credits: 4, department: 'Computer Science', instructorName: 'Dr. Lakshmi Devi', instructorId: 'teacher-002', enrolled: 115 },
             { id: 'course-3', name: 'Computer Networks', code: 'CS503', credits: 3, department: 'Computer Science', instructorName: 'Prof. Suresh Kumar', instructorId: 'teacher-003', enrolled: 118 },
-            { id: 'course-4', name: 'Operating Systems', code: 'CS504', credits: 4, department: 'Computer Science', instructorName: 'Dr. Anand Rao', instructorId: TEACHER_ID, enrolled: 122 },
+            { id: 'course-4', name: 'Operating Systems', code: 'CS504', credits: 4, department: 'Computer Science', instructorName: 'Ravi Shankar', instructorId: TEACHER_ID, enrolled: 122 },
             { id: 'course-5', name: 'Software Engineering', code: 'CS505', credits: 3, department: 'Computer Science', instructorName: 'Dr. Meena Iyer', instructorId: 'teacher-004', enrolled: 110 },
             { id: 'course-6', name: 'Machine Learning', code: 'CS601', credits: 4, department: 'Computer Science', instructorName: 'Dr. Raj Patel', instructorId: 'teacher-005', enrolled: 90 },
             { id: 'course-7', name: 'Circuit Theory', code: 'EC501', credits: 4, department: 'Electronics', instructorName: 'Dr. Vinod Hegde', instructorId: 'teacher-006', enrolled: 85 },
@@ -85,10 +88,10 @@ let SeedService = SeedService_1 = class SeedService {
     }
     seedClasses() {
         this.classesSvc.classes = [
-            { id: 'class-cs501-a', name: 'CS 5A', subject: 'Data Structures & Algorithms', subjectCode: 'CS501', semester: 5, instructorId: TEACHER_ID, instructorName: 'Dr. Anand Rao', studentCount: 60 },
-            { id: 'class-cs504-a', name: 'CS 5B', subject: 'Operating Systems', subjectCode: 'CS504', semester: 5, instructorId: TEACHER_ID, instructorName: 'Dr. Anand Rao', studentCount: 62 },
-            { id: 'class-cs502-a', name: 'CS 5C', subject: 'Database Management Systems', subjectCode: 'CS502', semester: 5, instructorId: 'teacher-002', instructorName: 'Dr. Lakshmi Devi', studentCount: 58 },
-            { id: 'class-cs503-a', name: 'CS 5D', subject: 'Computer Networks', subjectCode: 'CS503', semester: 5, instructorId: 'teacher-003', instructorName: 'Prof. Suresh Kumar', studentCount: 60 },
+            { id: 'class-cs501-a', name: 'CS 5A', departmentCode: 'CSE', section: 'A', subject: 'Data Structures & Algorithms', subjectCode: 'CS501', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', classTeacherId: TEACHER_ID, classTeacherName: 'Ravi Shankar', strength: 60, studentCount: 60 },
+            { id: 'class-cs504-a', name: 'CS 5B', departmentCode: 'CSE', section: 'B', subject: 'Operating Systems', subjectCode: 'CS504', semester: 5, instructorId: TEACHER_ID, instructorName: 'Ravi Shankar', classTeacherId: TEACHER_ID, classTeacherName: 'Ravi Shankar', strength: 62, studentCount: 62 },
+            { id: 'class-cs502-a', name: 'CS 5C', departmentCode: 'CSE', section: 'C', subject: 'Database Management Systems', subjectCode: 'CS502', semester: 5, instructorId: 'teacher-002', instructorName: 'Dr. Lakshmi Devi', classTeacherId: 'teacher-002', classTeacherName: 'Dr. Lakshmi Devi', strength: 58, studentCount: 58 },
+            { id: 'class-cs503-a', name: 'CS 5D', departmentCode: 'CSE', section: 'D', subject: 'Computer Networks', subjectCode: 'CS503', semester: 5, instructorId: 'teacher-003', instructorName: 'Prof. Suresh Kumar', classTeacherId: 'teacher-003', classTeacherName: 'Prof. Suresh Kumar', strength: 60, studentCount: 60 },
         ];
         const roster = STUDENTS.map((s) => ({ usn: s.usn, name: s.name, dept: s.dept }));
         this.classesSvc.rosters.set('class-cs501-a', roster);
@@ -162,9 +165,9 @@ let SeedService = SeedService_1 = class SeedService {
         ];
         this.assignmentsSvc.assignments = assignments;
         const submissions = [
-            { id: 'sub-1', assignmentId: 'asn-1', usn: '1RV21CS001', studentName: 'Arjun Mehta', submittedAt: '2026-04-20T10:00:00Z', marks: 18, feedback: 'Excellent implementation', status: 'GRADED' },
+            { id: 'sub-1', assignmentId: 'asn-1', usn: '1RV21CS001', studentName: 'Arjun Kumar', submittedAt: '2026-04-20T10:00:00Z', marks: 18, feedback: 'Excellent implementation', status: 'GRADED' },
             { id: 'sub-2', assignmentId: 'asn-1', usn: '1RV21CS002', studentName: 'Sneha Reddy', submittedAt: '2026-04-21T09:30:00Z', status: 'SUBMITTED' },
-            { id: 'sub-3', assignmentId: 'asn-2', usn: '1RV21CS001', studentName: 'Arjun Mehta', submittedAt: '2026-04-22T14:00:00Z', status: 'SUBMITTED' },
+            { id: 'sub-3', assignmentId: 'asn-2', usn: '1RV21CS001', studentName: 'Arjun Kumar', submittedAt: '2026-04-22T14:00:00Z', status: 'SUBMITTED' },
             { id: 'sub-4', assignmentId: 'asn-1', usn: '1RV21CS003', studentName: 'Priya Sharma', status: 'PENDING' },
             { id: 'sub-5', assignmentId: 'asn-1', usn: '1RV21CS004', studentName: 'Karan Joshi', submittedAt: '2026-04-20T16:00:00Z', status: 'SUBMITTED' },
         ];
@@ -211,12 +214,13 @@ let SeedService = SeedService_1 = class SeedService {
             closeDate: '2026-04-30',
             semester: 5,
             isActive: true,
+            subjectCodes: SUBJECTS.map((s) => s.code),
         };
         this.vtuSvc.windows = [win];
         this.vtuSvc.eligibilities = STUDENTS.map((s) => ({
             windowId: win.id,
             usn: s.usn,
-            eligibleSubjects: SUBJECTS.map((sub) => sub.code),
+            eligibleSubjects: s.cgpa >= 6.0 ? SUBJECTS.map((sub) => sub.code) : [],
             isEligible: s.cgpa >= 6.0,
         }));
         this.vtuSvc.registrations = [
@@ -294,7 +298,8 @@ let SeedService = SeedService_1 = class SeedService {
         };
         this.studentPortalSvc.hostelData.set('default', defaultHostel);
         this.studentPortalSvc.staff = [
-            { name: 'Dr. Anand Rao', role: 'Professor & HoD', department: 'Computer Science', email: 'anand.rao@rvce.edu.in', phone: '+91-9876543210' },
+            { name: 'Dr. Meena Rao', role: 'Professor & HoD', department: 'Computer Science', email: 'meena.rao@rvce.edu.in', phone: '+91-9876543210' },
+            { name: 'Ravi Shankar', role: 'Assistant Professor', department: 'Computer Science', email: 'teacher@rvce.edu.in', phone: '+91-9876543217' },
             { name: 'Dr. Lakshmi Devi', role: 'Associate Professor', department: 'Computer Science', email: 'lakshmi.devi@rvce.edu.in', phone: '+91-9876543211' },
             { name: 'Prof. Suresh Kumar', role: 'Assistant Professor', department: 'Computer Science', email: 'suresh.kumar@rvce.edu.in', phone: '+91-9876543212' },
             { name: 'Dr. Meena Iyer', role: 'Associate Professor', department: 'Computer Science', email: 'meena.iyer@rvce.edu.in', phone: '+91-9876543213' },
@@ -304,7 +309,7 @@ let SeedService = SeedService_1 = class SeedService {
         ];
     }
     seedParentPortal() {
-        const parentId = 'parent-seed-001';
+        const parentId = 'u-parent-01';
         this.parentPortalSvc.parentChildMap.set(parentId, ['1RV21CS001', '1RV21CS003']);
         for (const s of STUDENTS) {
             this.parentPortalSvc.childProfiles.set(s.usn, {
@@ -319,6 +324,7 @@ let SeedService = SeedService_1 = class SeedService {
     }
     seedComms() {
         const now = new Date();
+        const triggers = ['LOW_ATTENDANCE', 'PERFORMANCE_DROP', 'FEE_DUE', 'LOW_ATTENDANCE', 'GENERAL'];
         this.commsSvc.callLogs = STUDENTS.slice(0, 5).map((s, i) => {
             const calledAt = new Date(now);
             calledAt.setDate(calledAt.getDate() - i);
@@ -328,7 +334,11 @@ let SeedService = SeedService_1 = class SeedService {
                 calledAt: calledAt.toISOString(),
                 studentName: s.name,
                 studentUsn: s.usn,
-                parentId: 'parent-seed-001',
+                parentId: 'u-parent-01',
+                parentPhone: '+919876543210',
+                triggeredBy: triggers[i],
+                language: 'en',
+                institutionId: process.env.INSTITUTION_ID ?? 'rvce',
                 outcome: outcomes[i],
                 duration: outcomes[i] === 'ANSWERED' ? 120 + Math.floor(Math.random() * 180) : 0,
                 transcript: outcomes[i] === 'ANSWERED' ? `Parent acknowledged absence of ${s.name} on ${calledAt.toLocaleDateString()}` : undefined,
@@ -336,9 +346,22 @@ let SeedService = SeedService_1 = class SeedService {
             };
         });
         this.commsSvc.messages = [
-            { id: 'msg-1', parentId: 'parent-seed-001', content: 'Your child was absent today. Please ensure they attend tomorrow.', direction: 'OUTBOUND', sentAt: now.toISOString(), channel: 'WHATSAPP' },
-            { id: 'msg-2', parentId: 'parent-seed-001', content: 'Noted, thank you for informing us.', direction: 'INBOUND', sentAt: new Date(now.getTime() + 60000).toISOString(), channel: 'WHATSAPP' },
-            { id: 'msg-3', parentId: 'parent-seed-001', content: 'Fee reminder: ₹52,500 due by 30-Apr-2026', direction: 'OUTBOUND', sentAt: new Date(now.getTime() - 86400000).toISOString(), channel: 'SMS' },
+            {
+                id: 'msg-1', parentId: 'u-parent-01', parentName: 'Suresh Kumar',
+                studentUsn: STUDENTS[0].usn, recipientId: 'teacher-001', recipientName: 'Ravi Shankar',
+                subject: 'Attendance Concern', body: 'My son was absent on 22-Apr due to illness. Please note.',
+                status: 'REPLIED', createdAt: new Date(now.getTime() - 86400000 * 2).toISOString(),
+                replies: [
+                    { id: 'reply-1', fromId: 'teacher-001', fromName: 'Ravi Shankar', body: 'Noted. Please submit a medical certificate.', createdAt: new Date(now.getTime() - 86400000).toISOString() },
+                ],
+            },
+            {
+                id: 'msg-2', parentId: 'u-parent-01', parentName: 'Suresh Kumar',
+                studentUsn: STUDENTS[0].usn, recipientId: 'teacher-002', recipientName: 'Dr. Lakshmi Devi',
+                subject: 'Fee Payment Query', body: 'Can the lab fee be paid in installments?',
+                status: 'READ', createdAt: new Date(now.getTime() - 86400000).toISOString(),
+                replies: [],
+            },
         ];
     }
     seedAcademicResults() {
@@ -369,6 +392,13 @@ let SeedService = SeedService_1 = class SeedService {
             ],
         }));
     }
+    seedAdminPortal() {
+        const dashboard = this.adminPortalSvc.getDashboard();
+        this.logger.log(`Admin portal ready — ${dashboard.totalStudents} students, ` +
+            `${dashboard.totalFaculty} faculty, ` +
+            `fees collected ₹${dashboard.feesCollected.toLocaleString('en-IN')}, ` +
+            `${dashboard.alerts.length} active alerts`);
+    }
 };
 exports.SeedService = SeedService;
 exports.SeedService = SeedService = SeedService_1 = __decorate([
@@ -384,6 +414,7 @@ exports.SeedService = SeedService = SeedService_1 = __decorate([
         classes_api_service_1.ClassesApiService,
         student_portal_service_1.StudentPortalService,
         parent_portal_service_1.ParentPortalService,
-        comms_service_1.CommsService])
+        comms_service_1.CommsService,
+        admin_portal_service_1.AdminPortalService])
 ], SeedService);
 //# sourceMappingURL=seed.service.js.map

@@ -179,6 +179,115 @@ describe('AssignmentsApiService', () => {
     });
   });
 
+  // ─── getAllAssignments ───────────────────────────────────────────────────────
+
+  describe('getAllAssignments()', () => {
+    it('returns all assignments regardless of status', () => {
+      service.createAssignment(
+        { title: 'A', dueDate: '2026-05-01', subjectCode: 'CS101', description: 'd', maxMarks: 10 },
+        't1',
+      );
+      service.createAssignment(
+        { title: 'B', dueDate: '2026-05-02', subjectCode: 'CS102', description: 'd', maxMarks: 20 },
+        't2',
+      );
+      expect(service.getAllAssignments()).toHaveLength(2);
+    });
+
+    it('returns empty array when no assignments exist', () => {
+      expect(service.getAllAssignments()).toEqual([]);
+    });
+  });
+
+  // ─── getAssignmentsByCourse ──────────────────────────────────────────────────
+
+  describe('getAssignmentsByCourse()', () => {
+    it('returns assignments matching the given subjectCode', () => {
+      service.createAssignment(
+        { title: 'A', dueDate: '2026-05-01', subjectCode: 'CS301', description: 'd', maxMarks: 10 },
+        't1',
+      );
+      service.createAssignment(
+        { title: 'B', dueDate: '2026-05-02', subjectCode: 'CS302', description: 'd', maxMarks: 20 },
+        't2',
+      );
+      const result = service.getAssignmentsByCourse('CS301');
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('A');
+    });
+
+    it('returns empty array for unknown course', () => {
+      expect(service.getAssignmentsByCourse('UNKNOWN')).toEqual([]);
+    });
+  });
+
+  // ─── getAssignmentById ───────────────────────────────────────────────────────
+
+  describe('getAssignmentById()', () => {
+    it('returns the assignment for a known id', () => {
+      const { id } = service.createAssignment(
+        { title: 'Test Assignment', dueDate: '2026-05-01', subjectCode: 'CS101', description: 'd', maxMarks: 10 },
+        't1',
+      );
+      const result = service.getAssignmentById(id);
+      expect(result.id).toBe(id);
+      expect(result.title).toBe('Test Assignment');
+    });
+
+    it('throws NotFoundException for unknown id', () => {
+      expect(() => service.getAssignmentById('non-existent')).toThrow(NotFoundException);
+    });
+  });
+
+  // ─── submitAssignment ────────────────────────────────────────────────────────
+
+  describe('submitAssignment()', () => {
+    it('creates a submission and returns submissionId + status SUBMITTED', () => {
+      const result = service.submitAssignment('asn-1', 'USN001', { text: 'My answer' });
+      expect(result.status).toBe('SUBMITTED');
+      expect(result.submissionId).toMatch(/^sub-asn-1-USN001-/);
+      expect(result.submittedAt).toBeDefined();
+    });
+
+    it('adds the submission to the submissions array', () => {
+      service.submitAssignment('asn-1', 'USN001', { fileUrl: 'http://example.com/file.pdf' });
+      expect(service.submissions).toHaveLength(1);
+      expect(service.submissions[0].usn).toBe('USN001');
+      expect(service.submissions[0].status).toBe('SUBMITTED');
+    });
+
+    it('handles submission without fileUrl or text', () => {
+      const result = service.submitAssignment('asn-1', 'USN002', {});
+      expect(result.status).toBe('SUBMITTED');
+    });
+  });
+
+  // ─── gradeSubmissionById ─────────────────────────────────────────────────────
+
+  describe('gradeSubmissionById()', () => {
+    it('grades an existing submission by sub id', () => {
+      service.submissions.push({
+        id: 'sub-x',
+        assignmentId: 'asn-1',
+        usn: 'USN001',
+        studentName: 'Alice',
+        status: 'SUBMITTED',
+      });
+      const result = service.gradeSubmissionById('sub-x', 19, 'Excellent');
+      expect(result.ok).toBe(true);
+      expect(result.submissionId).toBe('sub-x');
+      expect(result.marks).toBe(19);
+      expect(result.feedback).toBe('Excellent');
+      expect(service.submissions[0].status).toBe('GRADED');
+    });
+
+    it('returns ok:true even when submission not found (no-op)', () => {
+      const result = service.gradeSubmissionById('non-existent', 10, 'feedback');
+      expect(result.ok).toBe(true);
+      expect(result.submissionId).toBe('non-existent');
+    });
+  });
+
   // ─── gradeSubmission ─────────────────────────────────────────────────────────
 
   describe('gradeSubmission()', () => {

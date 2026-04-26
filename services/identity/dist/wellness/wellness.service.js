@@ -62,6 +62,21 @@ let WellnessService = class WellnessService {
     getResources() {
         return this.resources;
     }
+    assessStress(usn, answers) {
+        const values = Object.values(answers);
+        const avg = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 3;
+        const score = Math.round(avg * 20);
+        const level = score < 40 ? 'LOW' : score < 70 ? 'MEDIUM' : 'HIGH';
+        const recommendations = level === 'LOW'
+            ? ['Keep up your healthy habits!']
+            : level === 'MEDIUM'
+                ? ['Try mindfulness exercises', 'Maintain a study schedule']
+                : ['Book a counseling session', 'Practice deep breathing', 'Reach out to a friend'];
+        return { score, level, recommendations };
+    }
+    generateStudyPlan(usn, examDate, subjects) {
+        return this.getStudyPlan(usn);
+    }
 };
 exports.WellnessService = WellnessService;
 exports.WellnessService = WellnessService = __decorate([

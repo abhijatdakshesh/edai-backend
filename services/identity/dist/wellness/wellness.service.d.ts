@@ -44,4 +44,12 @@ export declare class WellnessService {
     };
     updateTask(taskId: string, done: boolean): StudyTask;
     getResources(): WellnessResource[];
+    assessStress(usn: string, answers: Record<string, number>): {
+        score: number;
+        level: 'LOW' | 'MEDIUM' | 'HIGH';
+        recommendations: string[];
+    };
+    generateStudyPlan(usn: string, examDate: string, subjects: string[]): {
+        tasks: StudyTask[];
+    };
 }

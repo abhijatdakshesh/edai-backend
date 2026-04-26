@@ -58,6 +58,40 @@ let AssignmentsApiService = class AssignmentsApiService {
         sub.status = 'GRADED';
         return sub;
     }
+    getAllAssignments() {
+        return this.assignments;
+    }
+    getAssignmentsByCourse(courseId) {
+        return this.assignments.filter((a) => a.subjectCode === courseId);
+    }
+    getAssignmentById(id) {
+        const a = this.assignments.find((a) => a.id === id);
+        if (!a)
+            throw new common_1.NotFoundException('Assignment not found');
+        return a;
+    }
+    submitAssignment(id, usn, body) {
+        const submissionId = `sub-${id}-${usn}-${Date.now()}`;
+        const sub = {
+            id: submissionId,
+            assignmentId: id,
+            usn,
+            studentName: `Student ${usn}`,
+            submittedAt: new Date().toISOString(),
+            status: 'SUBMITTED',
+        };
+        this.submissions.push(sub);
+        return { submissionId, submittedAt: sub.submittedAt, status: 'SUBMITTED' };
+    }
+    gradeSubmissionById(subId, marks, feedback) {
+        const sub = this.submissions.find((s) => s.id === subId);
+        if (sub) {
+            sub.marks = marks;
+            sub.feedback = feedback;
+            sub.status = 'GRADED';
+        }
+        return { ok: true, submissionId: subId, marks, feedback };
+    }
 };
 exports.AssignmentsApiService = AssignmentsApiService;
 exports.AssignmentsApiService = AssignmentsApiService = __decorate([

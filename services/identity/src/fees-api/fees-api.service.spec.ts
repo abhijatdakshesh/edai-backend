@@ -131,16 +131,16 @@ describe('FeesApiService', () => {
       expect(summary.nextDue).toBe('2026-06-01');
     });
 
-    it('falls back to 45000 when no items exist', () => {
+    it('returns zero totalDue when no items exist', () => {
       const summary = service.getFeeSummary('USN_EMPTY');
-      expect(summary.totalDue).toBe(45000);
+      expect(summary.totalDue).toBe(0);
       expect(summary.overdueCount).toBe(0);
     });
   });
 
   describe('verifyPayment()', () => {
-    it('returns success with receiptId and paidAt', () => {
-      const result = service.verifyPayment('order_123', 'pay_456', 'sig_789');
+    it('returns success with receiptId and paidAt', async () => {
+      const result = await service.verifyPayment('order_123', 'pay_456', 'sig_789');
       expect(result.success).toBe(true);
       expect(result.receiptId).toMatch(/^rcpt_/);
       expect(result.paidAt).toBeDefined();
@@ -165,27 +165,184 @@ describe('FeesApiService', () => {
     });
   });
 
+  // ─── initiatePaymentGateway ─────────────────────────────────────────────────
+
+  describe('initiatePaymentGateway()', () => {
+    it('returns currency INR and prefill with lowercase USN email', () => {
+      const result = service.initiatePaymentGateway('1RV21CS001', 50000, ['f-1']);
+      expect(result.currency).toBe('INR');
+      expect(result.orderId).toMatch(/^order_/);
+      expect(result.amount).toBe(50000);
+      expect(result.prefill.email).toBe('1rv21cs001@rvce.edu.in');
+      expect(result.key).toBeTruthy();
+    });
+
+    it('lowercases USN in email prefill', () => {
+      const result = service.initiatePaymentGateway('1RV21CS999', 10000, []);
+      expect(result.prefill.email).toBe('1rv21cs999@rvce.edu.in');
+    });
+
+    it('includes student name with USN', () => {
+      const result = service.initiatePaymentGateway('USN042', 30000, ['f1', 'f2']);
+      expect(result.prefill.name).toContain('USN042');
+    });
+  });
+
+  // ─── getFeeSummary ──────────────────────────────────────────────────────────
+
+  describe('getFeeSummary() — totalPaid coverage', () => {
+    it('returns correct totalPaid from PAID items', () => {
+      service.feeItems.push(
+        makeFeeItem({ id: 'f1', usn: 'USN040', amount: 45000, status: 'PAID' }),
+        makeFeeItem({ id: 'f2', usn: 'USN040', amount: 5000, status: 'PENDING', dueDate: '2026-07-01' }),
+      );
+      const result = service.getFeeSummary('USN040');
+      expect(result.totalPaid).toBe(45000);
+    });
+
+    it('nextDue is the PENDING item dueDate when one exists', () => {
+      service.feeItems.push(
+        makeFeeItem({ id: 'f1', usn: 'USN041', amount: 50000, status: 'PENDING', dueDate: '2026-07-01' }),
+      );
+      expect(service.getFeeSummary('USN041').nextDue).toBe('2026-07-01');
+    });
+
+    it('overdueCount reflects OVERDUE items only', () => {
+      service.feeItems.push(
+        makeFeeItem({ id: 'f1', usn: 'USN043', amount: 10000, status: 'OVERDUE' }),
+        makeFeeItem({ id: 'f2', usn: 'USN043', amount: 10000, status: 'OVERDUE' }),
+        makeFeeItem({ id: 'f3', usn: 'USN043', amount: 10000, status: 'PENDING' }),
+      );
+      expect(service.getFeeSummary('USN043').overdueCount).toBe(2);
+    });
+  });
+
+  // ─── verifyPayment (stub behavior documented) ───────────────────────────────
+
+  describe('verifyPayment() — stub behavior', () => {
+    it('returns success: true (stub — HMAC verification not yet implemented)', async () => {
+      const result = await service.verifyPayment('order_123', 'pay_456', 'sig_789');
+      expect(result.success).toBe(true);
+      expect(result.receiptId).toMatch(/^rcpt_/);
+      expect(result.paidAt).toBeDefined();
+    });
+  });
+
+  // ─── verifyPayment() — HMAC production path ────────────────────────────────
+
+  describe('verifyPayment() — HMAC path', () => {
+    const SECRET = 'test-secret-key';
+
+    beforeEach(() => {
+      process.env['RAZORPAY_KEY_SECRET'] = SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env['RAZORPAY_KEY_SECRET'];
+    });
+
+    it('returns success:true for valid HMAC signature', async () => {
+      const crypto = require('crypto');
+      const orderId = 'order_hmac_1';
+      const paymentId = 'pay_hmac_1';
+      const sig = crypto.createHmac('sha256', SECRET).update(`${orderId}|${paymentId}`).digest('hex');
+      const result = await service.verifyPayment(orderId, paymentId, sig);
+      expect(result.success).toBe(true);
+      expect(result.receiptId).toMatch(/^rcpt_/);
+    });
+
+    it('returns success:false for invalid signature', async () => {
+      const result = await service.verifyPayment('order_hmac_2', 'pay_hmac_2', 'badhex00'.repeat(8));
+      expect(result.success).toBe(false);
+      expect((result as any).error).toBe('invalid_signature');
+    });
+
+    it('marks pending fees as paid on valid HMAC', async () => {
+      const crypto = require('crypto');
+      const paymentId = 'pay_hmac_3';
+      service.feeItems.push(makeFeeItem({ id: 'fee-hmac-1', status: 'PENDING', usn: 'USN001' }));
+      service.initiatePaymentGateway('USN001', 45000, ['fee-hmac-1']);
+      const storedOrder = (service as any).pendingOrders.entries().next().value;
+      if (storedOrder) {
+        const [oid] = storedOrder;
+        const sig = crypto.createHmac('sha256', SECRET).update(`${oid}|${paymentId}`).digest('hex');
+        await service.verifyPayment(oid, paymentId, sig);
+        expect(service.feeItems[0].status).toBe('PAID');
+      }
+    });
+  });
+
+  // ─── getFeeHistory ──────────────────────────────────────────────────────────
+
+  describe('getFeeHistory()', () => {
+    it('returns stub history with correct description format when no stored items', () => {
+      const result = service.getFeeHistory('USN_STUB');
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0].description).toMatch(/Tuition Fee - Semester \d+/);
+    });
+
+    it('returns stored items mapped with description from component and semester', () => {
+      service.feeItems.push(
+        makeFeeItem({ id: 'f1', usn: 'USN099', component: 'Library', semester: 5, status: 'PAID', paidDate: '2026-03-01' }),
+      );
+      const result = service.getFeeHistory('USN099');
+      expect(result).toHaveLength(1);
+      expect(result[0].description).toBe('Library - Semester 5');
+      expect(result[0].status).toBe('PAID');
+    });
+  });
+
   // ─── markPaid ───────────────────────────────────────────────────────────────
 
   describe('markPaid()', () => {
-    it('sets matching fees to PAID and sets paidDate', () => {
+    it('sets matching fees to PAID and sets paidDate', async () => {
       service.feeItems.push(
         makeFeeItem({ id: 'f1', status: 'PENDING' }),
         makeFeeItem({ id: 'f2', status: 'OVERDUE' }),
         makeFeeItem({ id: 'f3', status: 'PENDING' }),
       );
 
-      service.markPaid(['f1', 'f2']);
+      await service.markPaid(['f1', 'f2']);
       expect(service.feeItems[0].status).toBe('PAID');
       expect(service.feeItems[0].paidDate).toBeDefined();
       expect(service.feeItems[1].status).toBe('PAID');
-      expect(service.feeItems[2].status).toBe('PENDING'); // not in list
+      expect(service.feeItems[2].status).toBe('PENDING');
     });
 
-    it('silently ignores unknown fee ids', () => {
+    it('silently ignores unknown fee ids', async () => {
       service.feeItems.push(makeFeeItem({ id: 'f1', status: 'PENDING' }));
-      expect(() => service.markPaid(['f-nonexistent'])).not.toThrow();
+      await expect(service.markPaid(['f-nonexistent'])).resolves.toBeUndefined();
       expect(service.feeItems[0].status).toBe('PENDING');
+    });
+  });
+
+  // ─── onModuleInit (DB hydration) ─────────────────────────────────────────────
+
+  describe('onModuleInit()', () => {
+    it('skips hydration when no feeRepo injected', async () => {
+      const svc = new FeesApiService();
+      await svc.onModuleInit();
+      expect(svc.feeItems).toEqual([]);
+    });
+
+    it('hydrates feeItems from DB rows when feeRepo is present', async () => {
+      const mockRow = { id: 'f1', usn: 'USN1', component: 'Tuition', semester: 5, amount: '50000', status: 'PENDING', dueDate: '2026-05-01', paidDate: null };
+      const mockRepo = { find: jest.fn().mockResolvedValue([mockRow]), manager: {} };
+      const svc = new FeesApiService(mockRepo as any);
+      await svc.onModuleInit();
+      expect(svc.feeItems).toHaveLength(1);
+      expect(svc.feeItems[0].id).toBe('f1');
+      expect(svc.feeItems[0].amount).toBe(50000);
+      expect(svc.feeItems[0].paidDate).toBeUndefined();
+    });
+
+    it('maps amount from DB decimal string to number', async () => {
+      const mockRow = { id: 'f2', usn: 'USN2', component: 'Lab', semester: 3, amount: '12345.50', status: 'PAID', dueDate: '2026-01-01', paidDate: '2026-01-15' };
+      const mockRepo = { find: jest.fn().mockResolvedValue([mockRow]), manager: {} };
+      const svc = new FeesApiService(mockRepo as any);
+      await svc.onModuleInit();
+      expect(svc.feeItems[0].amount).toBe(12345.5);
+      expect(svc.feeItems[0].paidDate).toBe('2026-01-15');
     });
   });
 });

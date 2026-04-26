@@ -58,19 +58,31 @@ export declare class StudentPortalService {
     staff: StaffMember[];
     constructor(attendanceSvc: AttendanceApiService, assignmentsSvc: AssignmentsApiService, feesSvc: FeesApiService, coursesSvc: CoursesService);
     getDashboard(usn: string): {
-        attendance: number;
-        cgpa: number;
-        pendingAssignments: number;
-        activeAlerts: string[];
-        courses: {
-            id: string;
-            name: string;
-            code: string;
-        }[];
-        upcomingEvents: {
-            id: string;
-            title: string;
+        stats: {
+            attendancePct: number;
+            cgpa: number;
+            pendingAssignments: number;
+            feeStatus: "PENDING" | "PAID" | "OVERDUE" | "PARTIAL";
+        };
+        upcoming: ({
             date: string;
+            event: string;
+            type: "assignment";
+        } | {
+            date: string;
+            event: string;
+            type: "exam";
+        } | {
+            date: string;
+            event: string;
+            type: "event";
+        })[];
+        courses: {
+            code: string;
+            name: string;
+            faculty: string;
+            attendance: number;
+            nextClass: string;
         }[];
     };
     getSchedule(usn: string): {

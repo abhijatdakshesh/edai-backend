@@ -1,9 +1,14 @@
 export interface ClassRecord {
     id: string;
     name: string;
+    departmentCode: string;
+    semester: number;
+    section: string;
+    strength: number;
+    classTeacherId: string;
+    classTeacherName: string;
     subject: string;
     subjectCode: string;
-    semester: number;
     instructorId: string;
     instructorName: string;
     studentCount: number;
@@ -31,4 +36,10 @@ export declare class ClassesApiService {
     getAllClasses(): ClassRecord[];
     getTeacherDashboard(teacherId: string): TeacherDashboard;
     getClassStudents(classId: string): StudentRoster[];
+    getClassById(id: string): ClassRecord;
+    getStudentsByClass(classId: string): Array<{
+        usn: string;
+        name: string;
+        attendancePct: number;
+    }>;
 }

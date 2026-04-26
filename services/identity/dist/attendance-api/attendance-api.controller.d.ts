@@ -4,7 +4,42 @@ export declare class AttendanceApiController {
     private readonly svc;
     private readonly events;
     constructor(svc: AttendanceApiService, events: EventsGateway);
+    getStudentAttendanceSummary(usn: string): {
+        courseId: string;
+        courseName: string;
+        courseCode: string;
+        totalClasses: number;
+        attended: number;
+        pct: number;
+        canMiss: number;
+        mustAttend: number;
+    }[];
     getStudentAttendance(usn: string): import("./attendance-api.service").StudentAttendanceSummary;
+    getClassAttendanceSummary(classId: string): {
+        classId: string;
+        className: string;
+        date: string;
+        totalStudents: number;
+        present: number;
+        absent: number;
+        late: number;
+        pct: number;
+    };
+    getAtRiskStudents(classId: string): {
+        usn: string;
+        name: string;
+        pct: number;
+        parentPhone: string;
+        lastCallDate?: string;
+    }[];
+    markBulkAlt(body: {
+        classId: string;
+        date: string;
+        entries: Array<{
+            studentUsn: string;
+            status: 'PRESENT' | 'ABSENT' | 'LATE';
+        }>;
+    }, req: any): import("./attendance-api.service").AttendanceRecord[];
     markBulk(body: {
         classId: string;
         date: string;

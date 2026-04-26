@@ -80,6 +80,9 @@ let IaService = class IaService {
     uploadResults(subjectCode, sem) {
         return { message: `Results for ${subjectCode} sem ${sem} queued for upload` };
     }
+    getMarksBySubject(subjectId) {
+        return this.entries.filter((e) => e.subjectCode === subjectId);
+    }
 };
 exports.IaService = IaService;
 exports.IaService = IaService = __decorate([

@@ -32,4 +32,27 @@ export declare class IaController {
     }): {
         message: string;
     };
+    submitBySubjectId(subjectId: string, req: any): import("./ia.service").IASubmission;
+    getMarksBySubject(subjectId: string): import("./ia.service").IAEntry[];
+    bulkSaveMarks(body: {
+        subjectCode: string;
+        sem: number;
+        marks: Array<{
+            usn: string;
+            ia1: number;
+            ia2: number;
+            ia3: number;
+        }>;
+    }, req: any): {
+        jobId: string;
+        status: string;
+        count: number;
+    };
+    confirmBulkMarks(body: {
+        jobId: string;
+    }): {
+        ok: boolean;
+        jobId: string;
+        confirmedAt: string;
+    };
 }

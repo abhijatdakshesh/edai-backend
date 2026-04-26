@@ -22,4 +22,29 @@ export declare class AssignmentsApiController {
         marks: number;
         feedback: string;
     }): import("./assignments-api.service").Submission;
+    getAllAssignments(): import("./assignments-api.service").Assignment[];
+    getAssignmentsByCourse(courseId: string): import("./assignments-api.service").Assignment[];
+    getStudentAssignmentsByUsn(usn: string): {
+        assignment: import("./assignments-api.service").Assignment;
+        submission?: import("./assignments-api.service").Submission;
+    }[];
+    getAssignmentDetail(id: string): import("./assignments-api.service").Assignment;
+    getSubmissionsById(id: string): import("./assignments-api.service").Submission[];
+    submitAssignment(id: string, body: {
+        fileUrl?: string;
+        text?: string;
+    }, req: any): {
+        submissionId: string;
+        submittedAt: string;
+        status: "SUBMITTED";
+    };
+    gradeSubmissionById(subId: string, body: {
+        marks: number;
+        feedback: string;
+    }): {
+        ok: true;
+        submissionId: string;
+        marks: number;
+        feedback: string;
+    };
 }

@@ -10,7 +10,12 @@ exports.ClassesApiService = void 0;
 const common_1 = require("@nestjs/common");
 let ClassesApiService = class ClassesApiService {
     constructor() {
-        this.classes = [];
+        this.classes = [
+            { id: 'cls-1', name: 'CSE-A', departmentCode: 'CSE', semester: 5, section: 'A', strength: 60, classTeacherId: 'fac-1', classTeacherName: 'Dr. Sharma', subject: 'Data Structures', subjectCode: 'CS501', instructorId: 'fac-1', instructorName: 'Dr. Sharma', studentCount: 60 },
+            { id: 'cls-2', name: 'CSE-B', departmentCode: 'CSE', semester: 5, section: 'B', strength: 58, classTeacherId: 'fac-2', classTeacherName: 'Dr. Reddy', subject: 'Algorithms', subjectCode: 'CS502', instructorId: 'fac-2', instructorName: 'Dr. Reddy', studentCount: 58 },
+            { id: 'cls-3', name: 'ECE-A', departmentCode: 'ECE', semester: 3, section: 'A', strength: 55, classTeacherId: 'fac-3', classTeacherName: 'Dr. Patel', subject: 'Signals & Systems', subjectCode: 'EC301', instructorId: 'fac-3', instructorName: 'Dr. Patel', studentCount: 55 },
+            { id: 'cls-4', name: 'ME-A', departmentCode: 'ME', semester: 3, section: 'A', strength: 45, classTeacherId: 'fac-4', classTeacherName: 'Dr. Kumar', subject: 'Thermodynamics', subjectCode: 'ME301', instructorId: 'fac-4', instructorName: 'Dr. Kumar', studentCount: 45 },
+        ];
         this.rosters = new Map();
     }
     getTeacherClasses(teacherId) {
@@ -35,6 +40,20 @@ let ClassesApiService = class ClassesApiService {
     }
     getClassStudents(classId) {
         return this.rosters.get(classId) ?? [];
+    }
+    getClassById(id) {
+        const cls = this.classes.find((c) => c.id === id);
+        if (!cls)
+            throw new common_1.NotFoundException('Class not found');
+        return cls;
+    }
+    getStudentsByClass(classId) {
+        const roster = this.rosters.get(classId) ?? [];
+        return roster.map((s) => ({
+            usn: s.usn,
+            name: s.name,
+            attendancePct: Math.floor(70 + Math.random() * 25),
+        }));
     }
 };
 exports.ClassesApiService = ClassesApiService;

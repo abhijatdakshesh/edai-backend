@@ -24,18 +24,18 @@ let WellnessController = class WellnessController {
         return this.svc.getSlots();
     }
     getMySessions(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getMySessions(usn);
     }
     bookSession(body, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.bookSession(usn, body.slotId, body.reason);
     }
     getRiskScore(usn) {
         return this.svc.getRiskScore(usn);
     }
     getStudyPlan(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getStudyPlan(usn);
     }
     updateTask(id, body) {
@@ -43,6 +43,28 @@ let WellnessController = class WellnessController {
     }
     getResources() {
         return this.svc.getResources();
+    }
+    bookSessionAlias(body, req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.bookSession(usn, body.slotId, body.reason);
+    }
+    getMyRiskScore(req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.getRiskScore(usn);
+    }
+    completeTask(id) {
+        return this.svc.updateTask(id, true);
+    }
+    getResourcesAlias() {
+        return this.svc.getResources();
+    }
+    stressAssessment(body, req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.assessStress(usn, body.answers);
+    }
+    generateStudyPlan(body, req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.generateStudyPlan(usn, body.examDate, body.subjects);
     }
 };
 exports.WellnessController = WellnessController;
@@ -95,6 +117,50 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], WellnessController.prototype, "getResources", null);
+__decorate([
+    (0, common_1.Post)('counselor/book'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "bookSessionAlias", null);
+__decorate([
+    (0, common_1.Get)('wellness/risk-score/me'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "getMyRiskScore", null);
+__decorate([
+    (0, common_1.Patch)('wellness/study-plan/tasks/:id/complete'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "completeTask", null);
+__decorate([
+    (0, common_1.Get)('wellness/resources'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "getResourcesAlias", null);
+__decorate([
+    (0, common_1.Post)('wellness/stress-assessment'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "stressAssessment", null);
+__decorate([
+    (0, common_1.Post)('wellness/study-plan/generate'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], WellnessController.prototype, "generateStudyPlan", null);
 exports.WellnessController = WellnessController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

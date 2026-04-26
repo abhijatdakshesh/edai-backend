@@ -21,19 +21,19 @@ let StudentPortalController = class StudentPortalController {
         this.svc = svc;
     }
     getDashboard(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getDashboard(usn);
     }
     getSchedule(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getSchedule(usn);
     }
     getHostel(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getHostel(usn);
     }
     getExamPrep(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getExamPrep(usn);
     }
     getStaff() {

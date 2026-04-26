@@ -44,6 +44,12 @@ let CoursesService = class CoursesService {
             throw new common_1.NotFoundException('Results not found for USN');
         return result;
     }
+    getCourseById(id) {
+        const course = this.courses.find((c) => c.id === id);
+        if (!course)
+            throw new common_1.NotFoundException('Course not found');
+        return course;
+    }
 };
 exports.CoursesService = CoursesService;
 exports.CoursesService = CoursesService = __decorate([

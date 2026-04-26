@@ -234,6 +234,7 @@ export class SeedService implements OnModuleInit {
       usn: s.usn,
       eligibleSubjects: s.cgpa >= 6.0 ? SUBJECTS.map((sub) => sub.code) : [],
       isEligible: s.cgpa >= 6.0,
+      category: 'REGULAR' as const,
     }));
 
     this.vtuSvc.registrations = [
@@ -287,6 +288,22 @@ export class SeedService implements OnModuleInit {
       likelihood: s.cgpa >= 7.5 ? 'HIGH' : s.cgpa >= 6.5 ? 'MEDIUM' : 'LOW',
       skillGaps: s.cgpa >= 7.5 ? ['System Design'] : s.cgpa >= 6.5 ? ['DSA', 'System Design'] : ['DSA', 'SQL', 'Communication'],
     }));
+
+    // Placement drives (CRM)
+    this.jobsSvc.drives = [
+      { id: 'drive-1', company: 'Microsoft', scheduledDate: '2026-05-10', venue: 'Main Auditorium', rounds: ['Online Test', 'Technical Interview', 'HR Interview'], eligibleDepts: ['CSE', 'ISE', 'AIML'], minCgpa: 7.0, status: 'SCHEDULED', offersExtended: 0 },
+      { id: 'drive-2', company: 'Infosys', scheduledDate: '2026-04-20', venue: 'Seminar Hall A', rounds: ['Aptitude', 'Technical', 'HR'], eligibleDepts: ['CSE', 'ECE', 'ISE', 'ME'], minCgpa: 6.0, status: 'COMPLETED', offersExtended: 45 },
+      { id: 'drive-3', company: 'Wipro Elite', scheduledDate: '2026-05-18', venue: 'Online', rounds: ['WILP Test', 'Technical Round'], eligibleDepts: ['CSE', 'ISE'], minCgpa: 6.5, status: 'SCHEDULED', offersExtended: 0 },
+    ];
+
+    // Alumni outcomes
+    this.jobsSvc.alumni = [
+      { usn: '1RV20CS001', name: 'Priya Nair',    graduationYear: 2024, company: 'Google',    role: 'SWE',             packageLpa: 42, dept: 'CSE', location: 'Bengaluru' },
+      { usn: '1RV20CS002', name: 'Arjun Mehta',   graduationYear: 2024, company: 'Microsoft', role: 'SDE II',          packageLpa: 38, dept: 'CSE', location: 'Hyderabad' },
+      { usn: '1RV20EC001', name: 'Suresh Kumar',  graduationYear: 2024, company: 'Qualcomm',  role: 'DSP Engineer',    packageLpa: 22, dept: 'ECE', location: 'Bengaluru' },
+      { usn: '1RV19CS005', name: 'Ananya Bhat',   graduationYear: 2023, company: 'Amazon',    role: 'SDE I',           packageLpa: 28, dept: 'CSE', location: 'Bengaluru' },
+      { usn: '1RV19ME003', name: 'Rahul Sharma',  graduationYear: 2023, company: 'Bosch',     role: 'GTE',             packageLpa: 6,  dept: 'ME',  location: 'Pune' },
+    ];
   }
 
   private seedStudentPortal(): void {
@@ -365,6 +382,12 @@ export class SeedService implements OnModuleInit {
         summary: outcomes[i] === 'ANSWERED' ? `Parent was informed and will follow up with student` : undefined,
       };
     });
+
+    // Seed DPDP consent for all students and parent u-parent-01
+    STUDENTS.forEach((s) => {
+      this.commsSvc.grantConsent(s.usn, ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL']);
+    });
+    this.commsSvc.grantConsent('u-parent-01', ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL']);
 
     this.commsSvc.messages = [
       { id: 'msg-1', parentId: 'u-parent-01', content: 'Your child was absent today. Please ensure they attend tomorrow.', direction: 'OUTBOUND', sentAt: now.toISOString(), channel: 'WHATSAPP' },

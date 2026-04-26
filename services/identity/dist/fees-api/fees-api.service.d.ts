@@ -10,7 +10,9 @@ export interface FeeItem {
 }
 export interface FeeSummary {
     totalDue: number;
+    totalPaid: number;
     totalOutstanding: number;
+    status: 'PAID' | 'PENDING' | 'OVERDUE';
     items: FeeItem[];
 }
 export declare class FeesApiService {
@@ -21,4 +23,32 @@ export declare class FeesApiService {
         orderId: string;
     };
     markPaid(feeIds: string[]): void;
+    getFeeHistory(usn: string): Array<{
+        id: string;
+        date: string;
+        amount: number;
+        status: string;
+        description: string;
+    }>;
+    getFeeSummary(usn: string): {
+        totalDue: number;
+        totalPaid: number;
+        nextDue: string;
+        overdueCount: number;
+    };
+    initiatePaymentGateway(usn: string, amount: number, feeIds: string[]): {
+        orderId: string;
+        amount: number;
+        currency: 'INR';
+        key: string;
+        prefill: {
+            name: string;
+            email: string;
+        };
+    };
+    verifyPayment(orderId: string, paymentId: string, signature: string): {
+        success: true;
+        receiptId: string;
+        paidAt: string;
+    };
 }

@@ -11,6 +11,7 @@ import { ClassesApiService } from '../classes-api/classes-api.service';
 import { StudentPortalService } from '../student-portal/student-portal.service';
 import { ParentPortalService } from '../parent-portal/parent-portal.service';
 import { CommsService } from '../comms/comms.service';
+import { AdminPortalService } from '../admin-portal/admin-portal.service';
 export declare class SeedService implements OnModuleInit {
     private readonly coursesSvc;
     private readonly attendanceSvc;
@@ -24,8 +25,9 @@ export declare class SeedService implements OnModuleInit {
     private readonly studentPortalSvc;
     private readonly parentPortalSvc;
     private readonly commsSvc;
+    private readonly adminPortalSvc;
     private readonly logger;
-    constructor(coursesSvc: CoursesService, attendanceSvc: AttendanceApiService, assignmentsSvc: AssignmentsApiService, iaSvc: IaService, feesSvc: FeesApiService, vtuSvc: VtuService, wellnessSvc: WellnessService, jobsSvc: JobsService, classesSvc: ClassesApiService, studentPortalSvc: StudentPortalService, parentPortalSvc: ParentPortalService, commsSvc: CommsService);
+    constructor(coursesSvc: CoursesService, attendanceSvc: AttendanceApiService, assignmentsSvc: AssignmentsApiService, iaSvc: IaService, feesSvc: FeesApiService, vtuSvc: VtuService, wellnessSvc: WellnessService, jobsSvc: JobsService, classesSvc: ClassesApiService, studentPortalSvc: StudentPortalService, parentPortalSvc: ParentPortalService, commsSvc: CommsService, adminPortalSvc: AdminPortalService);
     onModuleInit(): void;
     private seedCourses;
     private seedClasses;
@@ -40,4 +42,5 @@ export declare class SeedService implements OnModuleInit {
     private seedParentPortal;
     private seedComms;
     private seedAcademicResults;
+    private seedAdminPortal;
 }

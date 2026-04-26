@@ -159,22 +159,44 @@ export class AdminPortalService {
     ];
   }
 
+  /** Compute NAAC grade from score using official NAAC rubric (3rd cycle onwards) */
+  static computeNaacGrade(score: number): string {
+    if (score >= 3.51) return 'A++';
+    if (score >= 3.26) return 'A+';
+    if (score >= 3.01) return 'A';
+    if (score >= 2.76) return 'B++';
+    if (score >= 2.51) return 'B+';
+    if (score >= 2.01) return 'B';
+    if (score >= 1.51) return 'C';
+    return 'D';
+  }
+
+  /** Compute weighted NAAC score from criteria scores */
+  static computeNaacScore(criteria: Array<{ score: number; weight: number }>): number {
+    const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0);
+    const weightedSum = criteria.reduce((sum, c) => sum + c.score * c.weight, 0);
+    return totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) / 100 : 0;
+  }
+
   getNaacMetrics() {
-    const now = '2026-04-01T00:00:00.000Z';
+    const now = new Date().toISOString();
+    const criteria = [
+      { id: 'c1', name: 'Curricular Aspects', score: 3.0, maxScore: 4.0, weight: 150, lastUpdated: now, trend: 'STABLE' as const },
+      { id: 'c2', name: 'Teaching-Learning and Evaluation', score: 3.2, maxScore: 4.0, weight: 300, lastUpdated: now, trend: 'UP' as const },
+      { id: 'c3', name: 'Research, Innovations and Extension', score: 2.8, maxScore: 4.0, weight: 150, lastUpdated: now, trend: 'UP' as const },
+      { id: 'c4', name: 'Infrastructure and Learning Resources', score: 3.4, maxScore: 4.0, weight: 100, lastUpdated: now, trend: 'STABLE' as const },
+      { id: 'c5', name: 'Student Support and Progression', score: 3.1, maxScore: 4.0, weight: 100, lastUpdated: now, trend: 'UP' as const },
+      { id: 'c6', name: 'Governance, Leadership and Management', score: 3.0, maxScore: 4.0, weight: 100, lastUpdated: now, trend: 'STABLE' as const },
+      { id: 'c7', name: 'Institutional Values and Best Practices', score: 3.3, maxScore: 4.0, weight: 100, lastUpdated: now, trend: 'UP' as const },
+    ];
+    const overallScore = AdminPortalService.computeNaacScore(criteria);
+    const grade = AdminPortalService.computeNaacGrade(overallScore);
     return {
-      overallScore: 3.12,
-      grade: 'A',
+      overallScore,
+      grade,
       lastAssessed: '2023-11-15',
       upcomingAuditDate: '2028-11-15',
-      criteria: [
-        { id: 'c1', name: 'Curricular Aspects', score: 3.0, maxScore: 4.0, lastUpdated: now, trend: 'STABLE' },
-        { id: 'c2', name: 'Teaching-Learning and Evaluation', score: 3.2, maxScore: 4.0, lastUpdated: now, trend: 'UP' },
-        { id: 'c3', name: 'Research, Innovations and Extension', score: 2.8, maxScore: 4.0, lastUpdated: now, trend: 'UP' },
-        { id: 'c4', name: 'Infrastructure and Learning Resources', score: 3.4, maxScore: 4.0, lastUpdated: now, trend: 'STABLE' },
-        { id: 'c5', name: 'Student Support and Progression', score: 3.1, maxScore: 4.0, lastUpdated: now, trend: 'UP' },
-        { id: 'c6', name: 'Governance, Leadership and Management', score: 3.0, maxScore: 4.0, lastUpdated: now, trend: 'STABLE' },
-        { id: 'c7', name: 'Institutional Values and Best Practices', score: 3.3, maxScore: 4.0, lastUpdated: now, trend: 'UP' },
-      ],
+      criteria, // use the computed criteria array, not a duplicate
       strengths: [
         'Strong industry partnerships for placements',
         'Modern infrastructure and labs',
@@ -264,15 +286,31 @@ export class AdminPortalService {
     };
   }
 
-  exportAnalytics(
-    type?: string,
-  ): { url: string; filename: string; generatedAt: string } {
+  exportAnalytics(type?: string): { url: string; filename: string; generatedAt: string } {
     const label = type ?? 'all';
     return {
       url: `https://edai.in/exports/${label}-${Date.now()}.csv`,
       filename: `analytics-${label}-export.csv`,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  getExportRows(type: string): Record<string, unknown>[] {
+    const t = type.toLowerCase();
+    if (t.includes('attendance')) return this.getAttendanceTrend();
+    if (t.includes('fee')) return this.getFeeCollection();
+    if (t.includes('placement')) return this.getPlacementPredictions();
+    if (t.includes('naac')) return this.getNaacMetrics().criteria as unknown as Record<string, unknown>[];
+    if (t.includes('grievance')) return [
+      { id: 'g-1', category: 'Academic', status: 'RESOLVED', raisedAt: '2026-01-10', resolvedAt: '2026-01-14' },
+      { id: 'g-2', category: 'Infrastructure', status: 'OPEN', raisedAt: '2026-02-05', resolvedAt: null },
+    ];
+    if (t.includes('mark') || t.includes('distribution')) return [
+      { range: '90-100', count: 45 }, { range: '75-89', count: 130 },
+      { range: '60-74', count: 180 }, { range: '50-59', count: 65 }, { range: '<50', count: 30 },
+    ];
+    const d = this.getDashboard();
+    return [{ totalStudents: d.totalStudents, totalFaculty: d.totalFaculty, avgAttendance: d.avgAttendance, feesCollected: d.feesCollected }];
   }
 
   getClassPerformance(

@@ -31,6 +31,12 @@ let ClassesApiController = class ClassesApiController {
     getAllClasses() {
         return this.svc.getAllClasses();
     }
+    getClass(id) {
+        return this.svc.getClassById(id);
+    }
+    getStudentsForClass(classId) {
+        return this.svc.getStudentsByClass(classId);
+    }
 };
 exports.ClassesApiController = ClassesApiController;
 __decorate([
@@ -53,6 +59,20 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], ClassesApiController.prototype, "getAllClasses", null);
+__decorate([
+    (0, common_1.Get)('classes/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ClassesApiController.prototype, "getClass", null);
+__decorate([
+    (0, common_1.Get)('classes/:classId/students'),
+    __param(0, (0, common_1.Param)('classId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ClassesApiController.prototype, "getStudentsForClass", null);
 exports.ClassesApiController = ClassesApiController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

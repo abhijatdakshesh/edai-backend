@@ -37,6 +37,15 @@ let ParentPortalController = class ParentPortalController {
     getChildFees(usn) {
         return this.svc.getChildFees(usn);
     }
+    getChild(usn) {
+        return this.svc.getChild(usn);
+    }
+    payFees(usn, body) {
+        return this.svc.payFees(usn, body.amount, body.feeIds);
+    }
+    checkScholarship(usn) {
+        return this.svc.checkScholarship(usn);
+    }
 };
 exports.ParentPortalController = ParentPortalController;
 __decorate([
@@ -74,6 +83,28 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], ParentPortalController.prototype, "getChildFees", null);
+__decorate([
+    (0, common_1.Get)('parent/children/:usn'),
+    __param(0, (0, common_1.Param)('usn')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ParentPortalController.prototype, "getChild", null);
+__decorate([
+    (0, common_1.Post)('parent/children/:usn/fees/pay'),
+    __param(0, (0, common_1.Param)('usn')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], ParentPortalController.prototype, "payFees", null);
+__decorate([
+    (0, common_1.Get)('parent/children/:usn/scholarship-eligibility'),
+    __param(0, (0, common_1.Param)('usn')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ParentPortalController.prototype, "checkScholarship", null);
 exports.ParentPortalController = ParentPortalController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

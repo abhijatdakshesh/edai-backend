@@ -140,4 +140,36 @@ describe('WellnessService', () => {
       expect(result[0].title).toBeDefined();
     });
   });
+
+  // ─── assessStress ─────────────────────────────────────────────────────────
+
+  describe('assessStress()', () => {
+    it('returns LOW level for low average score', () => {
+      const result = service.assessStress('USN001', { q1: 1, q2: 1, q3: 1 });
+      expect(result.level).toBe('LOW');
+      expect(result.score).toBeLessThan(40);
+      expect(result.recommendations[0]).toContain('healthy');
+    });
+
+    it('returns MEDIUM level for mid average score', () => {
+      const result = service.assessStress('USN001', { q1: 3, q2: 3, q3: 3 });
+      expect(result.level).toBe('MEDIUM');
+      expect(result.score).toBeGreaterThanOrEqual(40);
+      expect(result.score).toBeLessThan(70);
+      expect(result.recommendations).toContain('Try mindfulness exercises');
+    });
+
+    it('returns HIGH level for high average score', () => {
+      const result = service.assessStress('USN001', { q1: 5, q2: 5, q3: 5 });
+      expect(result.level).toBe('HIGH');
+      expect(result.score).toBeGreaterThanOrEqual(70);
+      expect(result.recommendations).toContain('Book a counseling session');
+    });
+
+    it('defaults avg to 3 (MEDIUM) when answers is empty', () => {
+      const result = service.assessStress('USN001', {});
+      expect(result.score).toBe(60);
+      expect(result.level).toBe('MEDIUM');
+    });
+  });
 });

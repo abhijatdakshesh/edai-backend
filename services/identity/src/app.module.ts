@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
@@ -26,9 +27,12 @@ import { DepartmentsModule } from './departments/departments.module';
 import { SeedModule } from './seed/seed.module';
 import { PromotionModule } from './promotion/promotion.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { AbcCreditsModule } from './abc-credits/abc-credits.module';
 
 @Module({
   imports: [
+    // Database (connects when DATABASE_URL is set; no-op in tests)
+    DatabaseModule,
     // Existing
     AuthModule,
     UsersModule,
@@ -56,6 +60,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
     DepartmentsModule,
     PromotionModule,
     ChatbotModule,
+    AbcCreditsModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],

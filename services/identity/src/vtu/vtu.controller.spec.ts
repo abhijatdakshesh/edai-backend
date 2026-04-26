@@ -103,4 +103,22 @@ describe('VtuController', () => {
     controller.getChildVtuStatus('USN001', 'win-1');
     expect(mockSvc.getStudentStatus).toHaveBeenCalledWith('USN001', 'win-1');
   });
+
+  it('getStudentStatus falls back to UNKNOWN when user absent', () => {
+    mockSvc.getStudentStatus.mockReturnValue({});
+    controller.getStudentStatus('win-1', {});
+    expect(mockSvc.getStudentStatus).toHaveBeenCalledWith('UNKNOWN', 'win-1');
+  });
+
+  it('registerStudent falls back to sub when sapId absent', () => {
+    mockSvc.registerStudent.mockReturnValue({});
+    controller.registerStudent({ windowId: 'win-1', subjectCodes: ['CS301'] }, { user: { sub: 'u2' } });
+    expect(mockSvc.registerStudent).toHaveBeenCalledWith('u2', 'win-1', ['CS301']);
+  });
+
+  it('registerStudent falls back to UNKNOWN when user absent', () => {
+    mockSvc.registerStudent.mockReturnValue({});
+    controller.registerStudent({ windowId: 'win-1', subjectCodes: [] }, {});
+    expect(mockSvc.registerStudent).toHaveBeenCalledWith('UNKNOWN', 'win-1', []);
+  });
 });

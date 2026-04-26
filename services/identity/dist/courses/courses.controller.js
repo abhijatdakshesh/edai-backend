@@ -24,15 +24,22 @@ let CoursesController = class CoursesController {
         return this.coursesService.getCourses();
     }
     enroll(id, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.coursesService.enroll(id, usn);
     }
     unenroll(id, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.coursesService.unenroll(id, usn);
     }
     getResults(usn) {
         return this.coursesService.getResults(usn);
+    }
+    getCourse(id) {
+        return this.coursesService.getCourseById(id);
+    }
+    enrollStudent(id, req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.coursesService.enroll(id, usn);
     }
 };
 exports.CoursesController = CoursesController;
@@ -65,6 +72,21 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], CoursesController.prototype, "getResults", null);
+__decorate([
+    (0, common_1.Get)('courses/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "getCourse", null);
+__decorate([
+    (0, common_1.Post)('student/courses/:courseId/enroll'),
+    __param(0, (0, common_1.Param)('courseId')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], CoursesController.prototype, "enrollStudent", null);
 exports.CoursesController = CoursesController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

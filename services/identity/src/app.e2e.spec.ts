@@ -17,6 +17,8 @@
  */
 
 import 'reflect-metadata';
+// Set required env vars before any module imports that may read them at init time
+process.env['JWT_SECRET'] = process.env['JWT_SECRET'] ?? 'e2e-test-secret-do-not-use-in-prod';
 import * as express from 'express';
 import * as supertest from 'supertest';
 import type { INestApplication } from '@nestjs/common';
@@ -779,6 +781,11 @@ describe('PATCH /api/ia/teacher/marks/:subjectId/submit', () => {
 
 describe('POST /api/comms/calls/trigger', () => {
   it('returns 200 with callId for admin', async () => {
+    // Grant consent first (DPDP requirement)
+    await http
+      .post('/api/consent/grant')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ principalId: '1RV21CS001', channels: ['ATTENDANCE_ALERTS'] });
     const res = await http
       .post('/api/comms/calls/trigger')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -813,6 +820,11 @@ describe('POST /api/comms/announcements', () => {
 
 describe('POST /api/parent-comms/calls/trigger', () => {
   it('returns 200 with callId', async () => {
+    // Grant consent first (DPDP requirement)
+    await http
+      .post('/api/consent/grant')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ principalId: 'u-parent-01', channels: ['ATTENDANCE_ALERTS'] });
     const res = await http
       .post('/api/parent-comms/calls/trigger')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -1119,13 +1131,29 @@ describe('POST /api/chatbot/sessions/resolve', () => {
 // ─── 13. Admin analytics new routes ──────────────────────────────────────────
 
 describe('GET /api/analytics/export', () => {
-  it('returns 200 with url and filename for admin', async () => {
+  it('returns 200 CSV download for admin', async () => {
     const res = await http
-      .get('/api/analytics/export')
+      .get('/api/analytics/export?type=attendance&format=csv')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.url).toBeTruthy();
-    expect(res.body.filename).toBeTruthy();
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment');
+  });
+
+  it('returns 200 XLSX download for admin', async () => {
+    const res = await http
+      .get('/api/analytics/export?type=attendance&format=xlsx')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml');
+  });
+
+  it('returns 200 PDF download for admin', async () => {
+    const res = await http
+      .get('/api/analytics/export?type=fee&format=pdf')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
   });
 
   it('returns 403 for student', async () => {

@@ -131,4 +131,23 @@ describe('AttendanceApiController', () => {
     expect(mockSvc.correctRecord).toHaveBeenCalledWith('r1', 'P', 'admin-1');
     expect(result).toBe(mockRecord);
   });
+
+  it('markBulk falls back to unknown when user absent', () => {
+    const body = { classId: 'c2', date: '2026-04-20', records: [] };
+    mockSvc.markBulk.mockReturnValue([]);
+    controller.markBulk(body, {});
+    expect(mockSvc.markBulk).toHaveBeenCalledWith('c2', '2026-04-20', [], 'unknown');
+  });
+
+  it('getTeacherSummary falls back to unknown when user absent', () => {
+    mockSvc.getTeacherSummary.mockReturnValue([]);
+    controller.getTeacherSummary({});
+    expect(mockSvc.getTeacherSummary).toHaveBeenCalledWith('unknown');
+  });
+
+  it('correctRecord falls back to unknown when user absent', () => {
+    mockSvc.correctRecord.mockReturnValue({ id: 'r2', status: 'A' });
+    controller.correctRecord('r2', { status: 'A' }, {});
+    expect(mockSvc.correctRecord).toHaveBeenCalledWith('r2', 'A', 'unknown');
+  });
 });

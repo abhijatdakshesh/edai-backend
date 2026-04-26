@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CommsService, AICallLog, Message } from './comms.service';
 import { EventsGateway } from '../events/events.gateway';
+import { ConsentService } from './consent.service';
 
 const mockEvents = { emitAiCallCompleted: jest.fn() };
 
@@ -23,6 +24,7 @@ describe('CommsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommsService,
+        ConsentService,
         { provide: EventsGateway, useValue: mockEvents },
       ],
     }).compile();
@@ -124,6 +126,233 @@ describe('CommsService', () => {
     it('does NOT emit when call log is not found', () => {
       service.completeCall('no-such-call', 'USN001');
       expect(mockEvents.emitAiCallCompleted).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── getAnnouncements ───────────────────────────────────────────────────────
+
+  describe('getAnnouncements()', () => {
+    it('returns only announcements for the given institutionId', () => {
+      service.createAnnouncement('Title RVCE', 'Content', 'ALL', 'rvce');
+      service.createAnnouncement('Title RVITM', 'Content', 'ALL', 'rvitm');
+      expect(service.getAnnouncements('rvce')).toHaveLength(1);
+      expect(service.getAnnouncements('rvce')[0].title).toBe('Title RVCE');
+    });
+
+    it('returns empty array for unknown institutionId (multi-tenant isolation)', () => {
+      service.createAnnouncement('Title', 'Content', 'ALL', 'rvce');
+      expect(service.getAnnouncements('unknown-tenant')).toEqual([]);
+    });
+
+    it('returns empty array when no announcements exist', () => {
+      expect(service.getAnnouncements('rvce')).toEqual([]);
+    });
+  });
+
+  // ─── createAnnouncement ─────────────────────────────────────────────────────
+
+  describe('createAnnouncement()', () => {
+    it('defaults institutionId to "default" when not provided', () => {
+      const ann = service.createAnnouncement('Test', 'Body', 'STUDENTS');
+      expect(ann.institutionId).toBe('default');
+      expect(service.getAnnouncements('default')).toHaveLength(1);
+    });
+
+    it('pushes announcement to the announcements array', () => {
+      service.createAnnouncement('T1', 'C1', 'ALL', 'rvce');
+      service.createAnnouncement('T2', 'C2', 'FACULTY', 'rvce');
+      expect(service.announcements).toHaveLength(2);
+    });
+
+    it('returns the created announcement with all fields', () => {
+      const ann = service.createAnnouncement('Hello', 'World', 'ADMIN', 'rvce');
+      expect(ann.id).toMatch(/^ann-/);
+      expect(ann.title).toBe('Hello');
+      expect(ann.audience).toBe('ADMIN');
+      expect(ann.institutionId).toBe('rvce');
+      expect(ann.createdAt).toBeDefined();
+    });
+  });
+
+  // ─── getCallsByClass ────────────────────────────────────────────────────────
+
+  describe('getCallsByClass()', () => {
+    it('returns calls for the given classId', () => {
+      service.callLogs.push(
+        makeCall({ id: 'c1', classId: 'class-cs501-a' }),
+        makeCall({ id: 'c2', classId: 'class-ec601-b' }),
+      );
+      expect(service.getCallsByClass('class-cs501-a')).toHaveLength(1);
+    });
+
+    it('filters by institutionId when provided', () => {
+      service.callLogs.push(
+        makeCall({ id: 'c1', classId: 'cls-1', institutionId: 'rvce' }),
+        makeCall({ id: 'c2', classId: 'cls-1', institutionId: 'rvitm' }),
+      );
+      expect(service.getCallsByClass('cls-1', 'rvce')).toHaveLength(1);
+      expect(service.getCallsByClass('cls-1', 'rvce')[0].institutionId).toBe('rvce');
+    });
+
+    it('returns all classId matches when no institutionId filter', () => {
+      service.callLogs.push(
+        makeCall({ id: 'c1', classId: 'cls-1', institutionId: 'rvce' }),
+        makeCall({ id: 'c2', classId: 'cls-1', institutionId: 'rvitm' }),
+      );
+      expect(service.getCallsByClass('cls-1')).toHaveLength(2);
+    });
+
+    it('returns empty array when no calls match classId', () => {
+      service.callLogs.push(makeCall({ id: 'c1', classId: 'cls-a' }));
+      expect(service.getCallsByClass('cls-b')).toEqual([]);
+    });
+  });
+
+  // ─── triggerCall ────────────────────────────────────────────────────────────
+
+  describe('triggerCall()', () => {
+    it('returns QUEUED status with a callId and scheduledAt 5 min in future', () => {
+      service.grantConsent('USN001', ['ATTENDANCE_ALERTS']);
+      const before = Date.now();
+      const result = service.triggerCall('USN001', 'ATTENDANCE');
+      const after = Date.now();
+      expect(result.status).toBe('QUEUED');
+      expect(result.callId).toMatch(/^call-/);
+      const scheduled = new Date(result.scheduledAt).getTime();
+      expect(scheduled).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 100);
+      expect(scheduled).toBeLessThanOrEqual(after + 5 * 60 * 1000 + 100);
+    });
+  });
+
+  // ─── sendSms ────────────────────────────────────────────────────────────────
+
+  describe('sendSms()', () => {
+    it('returns messageId and status SENT', () => {
+      const result = service.sendSms('+919876543210', 'Attendance alert');
+      expect(result.status).toBe('SENT');
+      expect(result.messageId).toMatch(/^sms-/);
+    });
+  });
+
+  // ─── triggerParentCall ──────────────────────────────────────────────────────
+
+  describe('triggerParentCall()', () => {
+    it('returns callId and QUEUED status', () => {
+      service.grantConsent('parent-01', ['ATTENDANCE_ALERTS']);
+      const result = service.triggerParentCall('parent-01', '1RV21CS001');
+      expect(result.callId).toMatch(/^pcall-/);
+      expect(result.status).toBe('QUEUED');
+    });
+  });
+
+  // ─── getNotifications ───────────────────────────────────────────────────────
+
+  describe('getNotifications()', () => {
+    it('returns stub 2-item array when no stored notifications for parentId', () => {
+      const result = service.getNotifications('new-parent');
+      expect(result).toHaveLength(2);
+      expect(['ATTENDANCE', 'FEES']).toContain(result[0].type);
+    });
+
+    it('returns only stored notifications when they exist for parentId', () => {
+      service.notifications.push({
+        id: 'n1',
+        parentId: 'parent-stored',
+        type: 'MARKS',
+        title: 'Marks Updated',
+        message: 'IA marks released',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+      const result = service.getNotifications('parent-stored');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('n1');
+    });
+
+    it('does not cross-contaminate notifications between parents', () => {
+      service.notifications.push({
+        id: 'n1', parentId: 'p-a', type: 'FEES', title: 'Fee', message: 'Due', read: false, createdAt: new Date().toISOString(),
+      });
+      expect(service.getNotifications('p-b')).toHaveLength(2); // stub fallback
+    });
+  });
+
+  // ─── markNotificationRead ───────────────────────────────────────────────────
+
+  describe('markNotificationRead()', () => {
+    it('marks a known notification as read', () => {
+      service.notifications.push({
+        id: 'n-unread', parentId: 'p1', type: 'FEES', title: 'Fee Due', message: 'Pay now', read: false, createdAt: new Date().toISOString(),
+      });
+      const result = service.markNotificationRead('n-unread');
+      expect(result.ok).toBe(true);
+      expect(service.notifications[0].read).toBe(true);
+    });
+
+    it('is a no-op (does not throw) for unknown notification id', () => {
+      expect(() => service.markNotificationRead('unknown-id')).not.toThrow();
+      expect(service.markNotificationRead('unknown-id').ok).toBe(true);
+    });
+  });
+
+  // ─── markAllRead ────────────────────────────────────────────────────────────
+
+  describe('markAllRead()', () => {
+    it('marks all unread notifications for a parentId and returns count', () => {
+      service.notifications.push(
+        { id: 'n1', parentId: 'p-all', type: 'A', title: 'T', message: 'M', read: false, createdAt: new Date().toISOString() },
+        { id: 'n2', parentId: 'p-all', type: 'B', title: 'T', message: 'M', read: false, createdAt: new Date().toISOString() },
+        { id: 'n3', parentId: 'p-all', type: 'C', title: 'T', message: 'M', read: true, createdAt: new Date().toISOString() },
+      );
+      const result = service.markAllRead('p-all');
+      expect(result.ok).toBe(true);
+      expect(result.count).toBe(2);
+      expect(service.notifications.every((n) => n.parentId !== 'p-all' || n.read)).toBe(true);
+    });
+
+    it('returns count 0 when all already read', () => {
+      service.notifications.push({
+        id: 'n1', parentId: 'p-done', type: 'A', title: 'T', message: 'M', read: true, createdAt: new Date().toISOString(),
+      });
+      expect(service.markAllRead('p-done').count).toBe(0);
+    });
+
+    it('returns count 0 for parentId with no notifications', () => {
+      expect(service.markAllRead('nobody').count).toBe(0);
+    });
+  });
+
+  // ─── onModuleInit (DB hydration) ─────────────────────────────────────────────
+
+  describe('onModuleInit()', () => {
+    it('skips hydration when no repos injected', async () => {
+      const mockEvts = { emitAiCallCompleted: jest.fn() };
+      const consent = new ConsentService();
+      const svc = new CommsService(mockEvts as any, consent);
+      await svc.onModuleInit();
+      expect(svc.callLogs).toEqual([]);
+      expect(svc.announcements).toEqual([]);
+    });
+
+    it('hydrates callLogs from DB, converts Date calledAt to ISO string', async () => {
+      const mockRow = { id: 'call-db-1', studentUsn: 'USN001', studentName: 'Alice', parentId: 'p1', outcome: 'ANSWERED', duration: 60, transcript: null, summary: null, institutionId: 'rvce', classId: 'CS-A', calledAt: new Date('2026-04-01T10:00:00Z') };
+      const mockCallRepo = { find: jest.fn().mockResolvedValue([mockRow]), order: {}, take: 500 };
+      const consent = new ConsentService();
+      const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, mockCallRepo as any, undefined);
+      await svc.onModuleInit();
+      expect(svc.callLogs).toHaveLength(1);
+      expect(svc.callLogs[0].calledAt).toBe('2026-04-01T10:00:00.000Z');
+    });
+
+    it('hydrates announcements from DB', async () => {
+      const mockRow = { id: 'ann-db-1', institutionId: 'rvce', title: 'Holiday', content: 'No class', audience: 'ALL', createdAt: new Date('2026-04-10T09:00:00Z') };
+      const mockAnnRepo = { find: jest.fn().mockResolvedValue([mockRow]) };
+      const consent = new ConsentService();
+      const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, undefined, mockAnnRepo as any);
+      await svc.onModuleInit();
+      expect(svc.announcements).toHaveLength(1);
+      expect(svc.announcements[0].title).toBe('Holiday');
+      expect(svc.announcements[0].createdAt).toBe('2026-04-10T09:00:00.000Z');
     });
   });
 });

@@ -34,4 +34,5 @@ export declare class IaService {
     uploadResults(subjectCode: string, sem: number): {
         message: string;
     };
+    getMarksBySubject(subjectId: string): IAEntry[];
 }

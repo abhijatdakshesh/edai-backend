@@ -33,7 +33,8 @@ describe('StudentsController', () => {
     const mockStudent = { id: 's-1', name: 'Alice' };
     mockStudentsService.findById.mockReturnValue(mockStudent);
 
-    controller.findById('s-1', 's-1'); // default value
+    // Call without second arg — TypeScript default 's-1' kicks in
+    (controller.findById as Function).call(controller, 's-1');
     expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 's-1');
   });
 

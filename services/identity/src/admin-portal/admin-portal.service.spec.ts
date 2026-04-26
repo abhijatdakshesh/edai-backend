@@ -105,6 +105,117 @@ describe('AdminPortalService', () => {
     });
   });
 
+  // ─── getAttendanceTrend ──────────────────────────────────────────────────────
+
+  describe('getAttendanceTrend()', () => {
+    it('returns 6-month trend array with month and pct fields', () => {
+      const result = service.getAttendanceTrend();
+      expect(result).toHaveLength(6);
+      result.forEach((r) => {
+        expect(typeof r.month).toBe('string');
+        expect(typeof r.pct).toBe('number');
+        expect(r.pct).toBeGreaterThanOrEqual(0);
+        expect(r.pct).toBeLessThanOrEqual(100);
+      });
+    });
+  });
+
+  // ─── getFeeCollection ────────────────────────────────────────────────────────
+
+  describe('getFeeCollection()', () => {
+    it('returns array with collected <= target invariant', () => {
+      const result = service.getFeeCollection();
+      expect(result.length).toBeGreaterThan(0);
+      result.forEach((r) => {
+        expect(r.collected).toBeLessThanOrEqual(r.target);
+      });
+    });
+  });
+
+  // ─── getNaacMetrics ──────────────────────────────────────────────────────────
+
+  describe('getNaacMetrics()', () => {
+    it('returns grade A and 7 criteria each with trend field', () => {
+      const result = service.getNaacMetrics();
+      expect(result.grade).toBe('A');
+      expect(result.criteria).toHaveLength(7);
+      result.criteria.forEach((c) => {
+        expect(['UP', 'DOWN', 'STABLE']).toContain(c.trend);
+        expect(c.score).toBeLessThanOrEqual(c.maxScore);
+      });
+    });
+
+    it('overallScore is between 0 and 4 (NAAC 4-point scale)', () => {
+      const { overallScore } = service.getNaacMetrics();
+      expect(overallScore).toBeGreaterThan(0);
+      expect(overallScore).toBeLessThanOrEqual(4);
+    });
+  });
+
+  // ─── getExportRows ───────────────────────────────────────────────────────────
+
+  describe('getExportRows()', () => {
+    it('returns attendance rows for "attendance" type', () => {
+      const result = service.getExportRows('attendance');
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('returns fee rows for "fee" type', () => {
+      expect(Array.isArray(service.getExportRows('fee'))).toBe(true);
+    });
+
+    it('returns placement rows for "placement" type', () => {
+      expect(service.getExportRows('placement').length).toBeGreaterThan(0);
+    });
+
+    it('returns 7 NAAC criteria for "naac" type', () => {
+      expect(service.getExportRows('naac')).toHaveLength(7);
+    });
+
+    it('returns grievance records for "grievance" type', () => {
+      expect(service.getExportRows('grievance')).toHaveLength(2);
+    });
+
+    it('returns mark distribution for "mark" type with range and count', () => {
+      const result = service.getExportRows('mark');
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]).toHaveProperty('range');
+      expect(result[0]).toHaveProperty('count');
+    });
+
+    it('falls through to dashboard summary for unknown type', () => {
+      const result = service.getExportRows('unknown-type');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toHaveProperty('totalStudents');
+    });
+  });
+
+  // ─── getPlacementPredictions ─────────────────────────────────────────────────
+
+  describe('getPlacementPredictions() — likelihood filter', () => {
+    it('returns empty array for VERY_LOW likelihood (no seed data matches)', () => {
+      expect(service.getPlacementPredictions(undefined, 'VERY_LOW')).toHaveLength(0);
+    });
+
+    it('filters by dept when provided', () => {
+      const result = service.getPlacementPredictions('ECE');
+      result.forEach((r) => expect(r.dept).toBe('ECE'));
+    });
+  });
+
+  // ─── getClassPerformance ─────────────────────────────────────────────────────
+
+  describe('getClassPerformance()', () => {
+    it('returns avgCgpa, topCgpa, passRate with valid ranges', () => {
+      const result = service.getClassPerformance();
+      expect(typeof result.avgCgpa).toBe('number');
+      expect(result.topCgpa).toBeGreaterThanOrEqual(result.avgCgpa);
+      expect(result.passRate).toBeLessThanOrEqual(100);
+      expect(result.passRate).toBeGreaterThan(0);
+    });
+  });
+
   // ─── triggerBulkImport ───────────────────────────────────────────────────────
 
   describe('triggerBulkImport()', () => {
@@ -123,5 +234,30 @@ describe('AdminPortalService', () => {
         expect(result.entityType).toBe(type);
       });
     });
+  });
+
+  describe('exportAnalytics()', () => {
+    it('returns url, filename, generatedAt for named type', () => {
+      const result = service.exportAnalytics('attendance');
+      expect(result.url).toContain('attendance');
+      expect(result.filename).toContain('attendance');
+      expect(result.generatedAt).toBeDefined();
+    });
+
+    it('defaults label to "all" when type is undefined', () => {
+      const result = service.exportAnalytics(undefined);
+      expect(result.filename).toContain('all');
+    });
+  });
+
+  describe('computeNaacGrade() — full rubric boundary tests', () => {
+    it('A++ at 3.51', () => expect(AdminPortalService.computeNaacGrade(3.51)).toBe('A++'));
+    it('A+ at 3.26', () => expect(AdminPortalService.computeNaacGrade(3.26)).toBe('A+'));
+    it('A at 3.01', () => expect(AdminPortalService.computeNaacGrade(3.01)).toBe('A'));
+    it('B++ at 2.76', () => expect(AdminPortalService.computeNaacGrade(2.76)).toBe('B++'));
+    it('B+ at 2.51', () => expect(AdminPortalService.computeNaacGrade(2.51)).toBe('B+'));
+    it('B at 2.01', () => expect(AdminPortalService.computeNaacGrade(2.01)).toBe('B'));
+    it('C at 1.51', () => expect(AdminPortalService.computeNaacGrade(1.51)).toBe('C'));
+    it('D below 1.51', () => expect(AdminPortalService.computeNaacGrade(1.0)).toBe('D'));
   });
 });

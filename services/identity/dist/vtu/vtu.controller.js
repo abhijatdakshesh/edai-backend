@@ -34,11 +34,11 @@ let VtuController = class VtuController {
         return win;
     }
     getStudentStatus(windowId, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getStudentStatus(usn, windowId);
     }
     registerStudent(body, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.registerStudent(usn, body.windowId, body.subjectCodes);
     }
     getPendingStudents(windowId) {
@@ -55,6 +55,21 @@ let VtuController = class VtuController {
     }
     getChildVtuStatus(usn, windowId) {
         return this.svc.getStudentStatus(usn, windowId);
+    }
+    getWindow(id) {
+        return this.svc.getWindowById(id);
+    }
+    getDeptOverviewByWindow(wId) {
+        return this.svc.getDeptOverview(wId);
+    }
+    getPendingByWindow(wId) {
+        return this.svc.getPendingStudents(wId);
+    }
+    remindByWindow(wId, body) {
+        return this.svc.sendReminders(wId, body.usnList);
+    }
+    eligibilityCheck(wId) {
+        return this.svc.runEligibility(wId);
     }
 };
 exports.VtuController = VtuController;
@@ -129,6 +144,42 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], VtuController.prototype, "getChildVtuStatus", null);
+__decorate([
+    (0, common_1.Get)('vtu/windows/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], VtuController.prototype, "getWindow", null);
+__decorate([
+    (0, common_1.Get)('vtu/windows/:windowId/dept-overview'),
+    __param(0, (0, common_1.Param)('windowId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], VtuController.prototype, "getDeptOverviewByWindow", null);
+__decorate([
+    (0, common_1.Get)('vtu/windows/:windowId/pending'),
+    __param(0, (0, common_1.Param)('windowId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], VtuController.prototype, "getPendingByWindow", null);
+__decorate([
+    (0, common_1.Post)('vtu/windows/:windowId/remind'),
+    __param(0, (0, common_1.Param)('windowId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], VtuController.prototype, "remindByWindow", null);
+__decorate([
+    (0, common_1.Post)('vtu/windows/:windowId/eligibility-check'),
+    __param(0, (0, common_1.Param)('windowId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], VtuController.prototype, "eligibilityCheck", null);
 exports.VtuController = VtuController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

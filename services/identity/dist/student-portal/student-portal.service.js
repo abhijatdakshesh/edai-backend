@@ -26,19 +26,27 @@ let StudentPortalService = class StudentPortalService {
         this.staff = [];
     }
     getDashboard(usn) {
-        let attendance = 0;
-        let cgpa = 7.8;
-        let pendingAssignments = 0;
-        const activeAlerts = [];
+        let attendancePct = 85;
+        const subjectAttendanceMap = new Map();
         try {
             const attSummary = this.attendanceSvc.getStudentAttendance(usn);
-            attendance = attSummary.overall;
-            if (attendance < 75)
-                activeAlerts.push('Attendance below 75%');
+            attendancePct = attSummary.overall;
+            for (const sub of attSummary.subjects) {
+                subjectAttendanceMap.set(sub.code, sub.pct);
+            }
         }
         catch {
-            attendance = 85;
+            attendancePct = 85;
         }
+        let cgpa = 7.8;
+        try {
+            const result = this.coursesSvc.getResults(usn);
+            cgpa = result.cgpa;
+        }
+        catch {
+            cgpa = 7.8;
+        }
+        let pendingAssignments = 0;
         try {
             const asnData = this.assignmentsSvc.getStudentAssignments(usn);
             pendingAssignments = asnData.filter((a) => !a.submission || a.submission.status === 'PENDING').length;
@@ -46,29 +54,56 @@ let StudentPortalService = class StudentPortalService {
         catch {
             pendingAssignments = 0;
         }
+        let feeStatus = 'PAID';
         try {
             const fees = this.feesSvc.getStudentFees(usn);
-            if (fees.totalOutstanding > 0)
-                activeAlerts.push('Fees outstanding');
+            const hasOverdue = fees.items.some((f) => f.status === 'OVERDUE');
+            const hasPending = fees.items.some((f) => f.status === 'PENDING');
+            const hasPaid = fees.items.some((f) => f.status === 'PAID');
+            if (hasOverdue) {
+                feeStatus = 'OVERDUE';
+            }
+            else if (hasPending && hasPaid) {
+                feeStatus = 'PARTIAL';
+            }
+            else if (hasPending) {
+                feeStatus = 'PENDING';
+            }
+            else {
+                feeStatus = 'PAID';
+            }
         }
         catch {
+            feeStatus = 'PAID';
         }
-        const courses = this.coursesSvc.getCourses().slice(0, 4).map((c) => ({
-            id: c.id,
-            name: c.name,
-            code: c.code,
-        }));
-        const upcomingEvents = [
-            { id: 'ev1', title: 'Mid-semester exams', date: '2026-05-10' },
-            { id: 'ev2', title: 'Project submission', date: '2026-05-20' },
+        const schedule = this.schedules.get(usn) ?? this.schedules.get('default') ?? [];
+        const courses = this.coursesSvc.getCourses().slice(0, 4).map((c) => {
+            const nextEntry = schedule.find((s) => s.subject === c.name);
+            const nextClass = nextEntry ? `${nextEntry.dayOfWeek}, ${nextEntry.startTime}` : 'TBD';
+            return {
+                code: c.code,
+                name: c.name,
+                faculty: c.instructorName,
+                attendance: subjectAttendanceMap.get(c.code) ?? 85,
+                nextClass,
+            };
+        });
+        const upcoming = [
+            { date: 'Apr 25', event: 'Implement Binary Search Tree due', type: 'assignment' },
+            { date: 'Apr 28', event: 'SQL Query Optimization due', type: 'assignment' },
+            { date: 'May 02', event: 'Socket Programming Lab due', type: 'assignment' },
+            { date: 'May 10', event: 'Mid-semester exams', type: 'exam' },
+            { date: 'May 20', event: 'Project submission', type: 'event' },
         ];
         return {
-            attendance,
-            cgpa,
-            pendingAssignments,
-            activeAlerts,
+            stats: {
+                attendancePct,
+                cgpa,
+                pendingAssignments,
+                feeStatus,
+            },
+            upcoming,
             courses,
-            upcomingEvents,
         };
     }
     getSchedule(usn) {

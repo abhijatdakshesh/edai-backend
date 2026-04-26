@@ -37,7 +37,7 @@ export class FeesApiController {
   }
 
   @Post('fees/payment/verify')
-  verifyPayment(
+  async verifyPayment(
     @Body() body: { orderId: string; paymentId: string; signature: string },
   ) {
     return this.svc.verifyPayment(body.orderId, body.paymentId, body.signature);

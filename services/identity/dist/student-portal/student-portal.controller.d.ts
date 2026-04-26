@@ -3,19 +3,31 @@ export declare class StudentPortalController {
     private readonly svc;
     constructor(svc: StudentPortalService);
     getDashboard(req: any): {
-        attendance: number;
-        cgpa: number;
-        pendingAssignments: number;
-        activeAlerts: string[];
-        courses: {
-            id: string;
-            name: string;
-            code: string;
-        }[];
-        upcomingEvents: {
-            id: string;
-            title: string;
+        stats: {
+            attendancePct: number;
+            cgpa: number;
+            pendingAssignments: number;
+            feeStatus: "PENDING" | "PAID" | "OVERDUE" | "PARTIAL";
+        };
+        upcoming: ({
             date: string;
+            event: string;
+            type: "assignment";
+        } | {
+            date: string;
+            event: string;
+            type: "exam";
+        } | {
+            date: string;
+            event: string;
+            type: "event";
+        })[];
+        courses: {
+            code: string;
+            name: string;
+            faculty: string;
+            attendance: number;
+            nextClass: string;
         }[];
     };
     getSchedule(req: any): {

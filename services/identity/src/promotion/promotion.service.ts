@@ -1,4 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Optional, OnModuleInit } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PromotionBatchEntity, PromotionAuditEntity } from '../entities/promotion-batch.entity';
+
+export interface PromotionAuditEntry {
+  id: string;
+  batchId: string;
+  action: 'PROMOTED' | 'OVERRIDDEN';
+  actorId: string;
+  actorRole: string;
+  reason?: string;
+  overrides?: Array<{ usn: string; decision: 'PROMOTE' | 'DETAIN' }>;
+  timestamp: string;
+}
 
 export interface PromotionBatch {
   id: string;
@@ -14,7 +28,41 @@ export interface PromotionBatch {
 }
 
 @Injectable()
-export class PromotionService {
+export class PromotionService implements OnModuleInit {
+  constructor(
+    @Optional() @InjectRepository(PromotionBatchEntity)
+    private readonly batchRepo?: Repository<PromotionBatchEntity>,
+    @Optional() @InjectRepository(PromotionAuditEntity)
+    private readonly auditRepo?: Repository<PromotionAuditEntity>,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (this.batchRepo) {
+      const rows = await this.batchRepo.find();
+      if (rows.length > 0) {
+        this.batches = rows.map((r) => ({
+          id: r.id, className: r.className, fromSemester: r.fromSemester,
+          toSemester: r.toSemester, academicYear: r.academicYear, dept: r.dept,
+          status: r.status as PromotionBatch['status'], promotedAt: r.promotedAt,
+          stats: (r.stats as PromotionBatch['stats']) ?? { eligible: 0, detained: 0, conditional: 0, total: 0 },
+          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        }));
+      }
+    }
+    if (this.auditRepo) {
+      const rows = await this.auditRepo.find();
+      rows.forEach((r) => this.auditLog.push({
+        id: r.id, batchId: r.batchId, action: r.action as PromotionAuditEntry['action'],
+        actorId: r.actorId, actorRole: r.actorRole, reason: r.reason ?? undefined,
+        overrides: (r.overrides as PromotionAuditEntry['overrides']) ?? undefined,
+        timestamp: r.timestamp,
+      }));
+    }
+  }
+
+  /** Append-only audit log — never delete or update entries */
+  readonly auditLog: PromotionAuditEntry[] = [];
+
   batches: PromotionBatch[] = [
     {
       id: 'promo-1',
@@ -92,6 +140,7 @@ export class PromotionService {
     dept: string,
     stats?: { eligible: number; detained: number; conditional: number; total: number },
   ): PromotionBatch {
+    if (semester < 1) throw new Error('Semester must be at least 1');
     if (semester >= 8) throw new Error('Semester cannot exceed 8 for a 4-year program');
     const batch: PromotionBatch = {
       id: `promo-${Date.now()}`,
@@ -106,21 +155,70 @@ export class PromotionService {
       createdAt: new Date().toISOString(),
     };
     this.batches.push(batch);
+    this.batchRepo?.save(batch as unknown as PromotionBatchEntity)
+      .catch((e) => console.error('DB persist error (generate)', e));
     return batch;
   }
 
-  promote(batchId: string): { ok: true; batchId: string; promotedAt: string } {
+  async promote(
+    batchId: string,
+    actor?: { id: string; role: string },
+  ): Promise<{ ok: true; batchId: string; promotedAt: string }> {
     const batch = this.getBatchById(batchId);
+    const promotedAt = new Date().toISOString();
     batch.status = 'PROMOTED';
-    return { ok: true, batchId, promotedAt: new Date().toISOString() };
+    batch.promotedAt = promotedAt;
+    const auditEntry: PromotionAuditEntry = {
+      id: `audit-${Date.now()}`,
+      batchId,
+      action: 'PROMOTED',
+      actorId: actor?.id ?? 'system',
+      actorRole: actor?.role ?? 'SYSTEM',
+      timestamp: promotedAt,
+    };
+    this.auditLog.push(auditEntry);
+    if (this.batchRepo && this.auditRepo) {
+      await this.batchRepo.manager.transaction(async (manager) => {
+        await manager.save(PromotionBatchEntity, batch as unknown as PromotionBatchEntity);
+        await manager.save(PromotionAuditEntity, auditEntry as unknown as PromotionAuditEntity);
+      });
+    }
+    return { ok: true, batchId, promotedAt };
   }
 
-  override(
+  async override(
     batchId: string,
     overrides: Array<{ usn: string; decision: 'PROMOTE' | 'DETAIN' }>,
-  ): { ok: true; overrideCount: number } {
+    actor?: { id: string; role: string; reason?: string },
+  ): Promise<{ ok: true; overrideCount: number }> {
     const batch = this.getBatchById(batchId);
     batch.status = 'OVERRIDDEN';
+    const overrideAudit: PromotionAuditEntry = {
+      id: `audit-${Date.now()}`,
+      batchId,
+      action: 'OVERRIDDEN',
+      actorId: actor?.id ?? 'system',
+      actorRole: actor?.role ?? 'SYSTEM',
+      reason: actor?.reason,
+      overrides,
+      timestamp: new Date().toISOString(),
+    };
+    this.auditLog.push(overrideAudit);
+    if (this.batchRepo && this.auditRepo) {
+      await this.batchRepo.manager.transaction(async (manager) => {
+        await manager.save(PromotionBatchEntity, batch as unknown as PromotionBatchEntity);
+        await manager.save(PromotionAuditEntity, overrideAudit as unknown as PromotionAuditEntity);
+      });
+    }
     return { ok: true, overrideCount: overrides.length };
+  }
+
+  /**
+   * Get audit log for a batch — readable by PRINCIPAL/ADMIN/TRUSTEE only.
+   * Caller must enforce role check before calling this method.
+   */
+  getAuditLog(batchId?: string): PromotionAuditEntry[] {
+    if (batchId) return this.auditLog.filter((e) => e.batchId === batchId);
+    return [...this.auditLog];
   }
 }
