@@ -35,7 +35,11 @@ type Server struct {
 
 	audioMu    sync.RWMutex
 	audioStore map[string]*audioEntry // callID → WAV bytes
+	prebuilt   map[string][]byte      // "lang:callType" → WAV bytes (generated at startup)
 }
+
+var allLangs = []string{"kn", "hi", "ta", "te", "en"}
+var allCallTypes = []string{"ABSENT_CALL", "FEE_REMINDER", "WEEKLY_UPDATE", "ASSIGNMENT_MISS", "EXAM_REMINDER"}
 
 func NewServer(
 	sessions *orchestrator.SessionRegistry,
@@ -51,9 +55,34 @@ func NewServer(
 		Twilio:      twilio,
 		WebhookBase: webhookBase,
 		audioStore:  make(map[string]*audioEntry),
+		prebuilt:    make(map[string][]byte),
 	}
 	go s.runAudioGC()
+	go s.pregenAllAudio()
 	return s
+}
+
+// pregenAllAudio generates WAV for all lang×callType combos at startup.
+func (s *Server) pregenAllAudio() {
+	log.Println("[pregen] Starting pre-generation of all language audio...")
+	for _, lang := range allLangs {
+		for _, callType := range allCallTypes {
+			key := lang + ":" + callType
+			script := exoml.OpeningScript(lang, callType, "your child")
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			audio, err := s.Sarvam.Synthesise(ctx, script, lang, "anushka")
+			cancel()
+			if err != nil {
+				log.Printf("[pregen] FAILED %s: %v", key, err)
+				continue
+			}
+			s.audioMu.Lock()
+			s.prebuilt[key] = audio
+			s.audioMu.Unlock()
+			log.Printf("[pregen] OK %s bytes=%d", key, len(audio))
+		}
+	}
+	log.Println("[pregen] Done pre-generating all audio")
 }
 
 // runAudioGC removes expired audio entries every 5 minutes.
@@ -133,7 +162,7 @@ func (s *Server) triggerCall(w http.ResponseWriter, r *http.Request) {
 		script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		audio, err := s.Sarvam.Synthesise(ctx, script, sess.Language, "pavithra")
+		audio, err := s.Sarvam.Synthesise(ctx, script, sess.Language, "anushka")
 		if err != nil {
 			log.Printf("[TTS] Sarvam failed callID=%s lang=%s: %v (will use Say fallback)", callID, sess.Language, err)
 			return
@@ -202,13 +231,23 @@ func (s *Server) twilioAnswer(w http.ResponseWriter, r *http.Request) {
 
 	gatherURL := fmt.Sprintf("%s/voice/webhook/twilio/gather?callId=%s", s.WebhookBase, callID)
 
-	if _, ok := s.getAudio(callID); ok {
-		audioURL := fmt.Sprintf("%s/voice/audio/%s", s.WebhookBase, callID)
+	// Use per-call audio if ready, otherwise fall back to prebuilt lang audio.
+	audioKey := ""
+	s.audioMu.RLock()
+	if _, ok := s.audioStore[callID]; ok {
+		audioKey = "call:" + callID
+	} else if _, ok := s.prebuilt[sess.Language+":"+sess.CallType]; ok {
+		audioKey = "prebuilt:" + sess.Language + ":" + sess.CallType
+	}
+	s.audioMu.RUnlock()
+
+	if audioKey != "" {
+		audioURL := fmt.Sprintf("%s/voice/audio/%s?key=%s", s.WebhookBase, callID, audioKey)
 		w.Write([]byte(twiml.PlayAndGather(audioURL, gatherURL, 1, 8)))
 		return
 	}
 
-	// Sarvam audio not ready — fall back to Twilio built-in TTS.
+	// No audio at all — fall back to Twilio built-in TTS.
 	script := exoml.OpeningScript(sess.Language, sess.CallType, sess.StudentID)
 	langCode := tts.LangCode(sess.Language)
 	w.Write([]byte(twiml.SayAndGather(script, langCode, gatherURL, 1, 8)))
@@ -259,11 +298,23 @@ func (s *Server) twilioStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// serveAudio streams the pre-generated Sarvam WAV for a call.
+// serveAudio streams WAV audio. key param selects call-specific or prebuilt audio.
 func (s *Server) serveAudio(w http.ResponseWriter, r *http.Request) {
-	callID := r.URL.Path[len("/voice/audio/"):]
-	audio, ok := s.getAudio(callID)
-	if !ok {
+	key := r.URL.Query().Get("key")
+	var audio []byte
+
+	s.audioMu.RLock()
+	if key != "" && len(key) > 9 && key[:9] == "prebuilt:" {
+		audio = s.prebuilt[key[9:]] // "lang:callType"
+	} else {
+		callID := r.URL.Path[len("/voice/audio/"):]
+		if e, ok := s.audioStore[callID]; ok && time.Now().Before(e.expiresAt) {
+			audio = e.data
+		}
+	}
+	s.audioMu.RUnlock()
+
+	if len(audio) == 0 {
 		http.Error(w, "audio not found", http.StatusNotFound)
 		return
 	}

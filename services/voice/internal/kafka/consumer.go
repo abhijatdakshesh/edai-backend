@@ -4,7 +4,6 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"time"
 )
