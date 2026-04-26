@@ -13,15 +13,19 @@ import (
 	"github.com/edai/voice/internal/api"
 	"github.com/edai/voice/internal/kafka"
 	"github.com/edai/voice/internal/orchestrator"
+	"github.com/edai/voice/internal/tts"
 )
 
 func main() {
 	port := getenv("PORT", "8090")
 	kafkaBrokers := getenv("KAFKA_BROKERS", "localhost:9092")
 	aiEngineURL := getenv("AI_ENGINE_URL", "http://localhost:8001")
+	sarvamAPIKey := getenv("SARVAM_API_KEY", "")
+	publicBase := getenv("PUBLIC_BASE_URL", "http://localhost:8090")
 
 	sessions := orchestrator.NewSessionRegistry()
-	server := api.NewServer(sessions, aiEngineURL)
+	sarvamClient := tts.NewSarvamClient(sarvamAPIKey)
+	server := api.NewServer(sessions, aiEngineURL, sarvamClient, publicBase)
 
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
