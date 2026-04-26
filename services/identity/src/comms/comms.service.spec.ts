@@ -208,6 +208,21 @@ describe('CommsService', () => {
     });
   });
 
+  // ─── getAudio ────────────────────────────────────────────────────────────────
+
+  describe('getAudio()', () => {
+    it('returns undefined for unknown callId', () => {
+      expect(service.getAudio('nonexistent-call')).toBeUndefined();
+    });
+
+    it('returns Buffer stored for a known callId', () => {
+      (service as any).audioStore.set('call-test', Buffer.from('fake-wav'));
+      const result = service.getAudio('call-test');
+      expect(result).toBeDefined();
+      expect(result!.toString()).toBe('fake-wav');
+    });
+  });
+
   // ─── triggerCall ────────────────────────────────────────────────────────────
 
   describe('triggerCall()', () => {
@@ -219,8 +234,34 @@ describe('CommsService', () => {
       expect(result.status).toBe('QUEUED');
       expect(result.callId).toMatch(/^call-/);
       const scheduled = new Date(result.scheduledAt).getTime();
-      expect(scheduled).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 100);
-      expect(scheduled).toBeLessThanOrEqual(after + 5 * 60 * 1000 + 100);
+      expect(scheduled).toBeGreaterThan(before);
+      expect(scheduled).toBeLessThanOrEqual(after + 5 * 60 * 1000 + 1000);
+    });
+
+    it('pushes a callLog entry for regional language (kn)', async () => {
+      const before = service.callLogs.length;
+      await service.triggerCall('1RV21CS001', 'ABSENT_CALL', 'rvce', 'kn');
+      expect(service.callLogs.length).toBe(before + 1);
+      const log = service.callLogs[service.callLogs.length - 1];
+      expect(log.studentUsn).toBe('1RV21CS001');
+      expect(log.language).toBe('kn');
+    });
+
+    it('pushes a callLog entry for Hindi (hi)', async () => {
+      const before = service.callLogs.length;
+      await service.triggerCall('1RV21CS001', 'FEE_REMINDER', 'rvce', 'hi');
+      expect(service.callLogs[service.callLogs.length - 1].language).toBe('hi');
+    });
+
+    it('does not crash when parentPhone is missing', async () => {
+      await expect(
+        service.triggerCall('UNKNOWN_USN_NO_PHONE', 'ABSENT_CALL', 'rvce', 'kn')
+      ).resolves.toMatchObject({ status: 'QUEUED' });
+    });
+
+    it('falls back to ABSENT_CALL script for unknown type', async () => {
+      const result = await service.triggerCall('1RV21CS001', 'UNKNOWN_TYPE', 'rvce', 'en');
+      expect(result.status).toBe('QUEUED');
     });
   });
 

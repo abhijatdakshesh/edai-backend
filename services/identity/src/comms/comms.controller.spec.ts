@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { CommsController } from './comms.controller';
+import { CommsController, PublicCommsController } from './comms.controller';
 import { CommsService } from './comms.service';
 import { ConsentService } from './consent.service';
 import { StudentPortalService } from '../student-portal/student-portal.service';
@@ -185,10 +185,10 @@ describe('CommsController', () => {
 
   // ─── triggerCall / sendSms / triggerParentCall ───────────────────────────────
 
-  it('triggerCall delegates body to service', () => {
-    mockCommsService.triggerCall.mockReturnValue({ callId: 'c1', status: 'QUEUED', scheduledAt: '' });
-    const result = controller.triggerCall({ studentUsn: 'USN001', type: 'ATTENDANCE' });
-    expect(mockCommsService.triggerCall).toHaveBeenCalledWith('USN001', 'ATTENDANCE');
+  it('triggerCall delegates body to service', async () => {
+    mockCommsService.triggerCall.mockResolvedValue({ callId: 'c1', status: 'QUEUED', scheduledAt: '' });
+    const result = await controller.triggerCall({ studentUsn: 'USN001', type: 'ATTENDANCE' });
+    expect(mockCommsService.triggerCall).toHaveBeenCalledWith('USN001', 'ATTENDANCE', 'rvce', 'en');
     expect(result).toMatchObject({ status: 'QUEUED' });
   });
 
@@ -340,5 +340,63 @@ describe('CommsController', () => {
     controller.getConsent({ user: {} });
     expect(getConsentSpy).toHaveBeenCalledWith('unknown', 'default');
     if (origEnv) process.env['INSTITUTION_ID'] = origEnv;
+  });
+});
+
+// ─── PublicCommsController ────────────────────────────────────────────────────
+
+describe('PublicCommsController', () => {
+  let publicController: PublicCommsController;
+  const mockGetAudio = jest.fn();
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module = await Test.createTestingModule({
+      controllers: [PublicCommsController],
+      providers: [{ provide: CommsService, useValue: { getAudio: mockGetAudio } }],
+    }).compile();
+    publicController = module.get(PublicCommsController);
+  });
+
+  describe('serveTwiml()', () => {
+    it('returns text/xml with <Play> containing the callId audio URL', () => {
+      process.env['TWILIO_WEBHOOK_BASE_URL'] = 'https://test.example.com';
+      const res = { type: jest.fn(), send: jest.fn() } as any;
+      publicController.serveTwiml('call-abc', res);
+      expect(res.type).toHaveBeenCalledWith('text/xml');
+      const xml: string = res.send.mock.calls[0][0];
+      expect(xml).toContain('<Play>');
+      expect(xml).toContain('/api/comms/audio/call-abc');
+      expect(xml).toContain('<Hangup/>');
+      delete process.env['TWILIO_WEBHOOK_BASE_URL'];
+    });
+
+    it('falls back to APP_URL when TWILIO_WEBHOOK_BASE_URL absent', () => {
+      delete process.env['TWILIO_WEBHOOK_BASE_URL'];
+      process.env['APP_URL'] = 'https://app.example.com';
+      const res = { type: jest.fn(), send: jest.fn() } as any;
+      publicController.serveTwiml('call-xyz', res);
+      expect(res.send.mock.calls[0][0]).toContain('https://app.example.com');
+      delete process.env['APP_URL'];
+    });
+  });
+
+  describe('serveAudio()', () => {
+    it('returns 404 when audio not in store', () => {
+      mockGetAudio.mockReturnValue(undefined);
+      const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
+      publicController.serveAudio('call-missing', res);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('returns audio/wav with correct Content-Length when audio found', () => {
+      const buf = Buffer.from('RIFF....fake-wav');
+      mockGetAudio.mockReturnValue(buf);
+      const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() } as any;
+      publicController.serveAudio('call-abc', res);
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'audio/wav');
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Length', buf.length);
+      expect(res.send).toHaveBeenCalledWith(buf);
+    });
   });
 });

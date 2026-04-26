@@ -13,6 +13,10 @@ describe('detectLanguageFromState', () => {
     ['Maharashtra', 'en'],
     ['', 'en'],
     ['  ', 'en'],
+    ['\nKarnataka\n', 'kn'],
+    ['KA', 'en'],
+    ['TN', 'en'],
+    ['Goa', 'en'],
   ])('state "%s" → "%s"', (state, lang) => {
     expect(detectLanguageFromState(state)).toBe(lang);
   });
