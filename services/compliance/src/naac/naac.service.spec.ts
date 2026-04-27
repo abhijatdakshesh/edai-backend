@@ -204,7 +204,7 @@ describe('NaacService', () => {
   // ── getDashboard ────────────────────────────────────────────────────────────
 
   describe('getDashboard', () => {
-    it('returns dashboard with criteria 2 and 3', async () => {
+    it('returns dashboard with all 7 criteria, populating scores for those with snapshots', async () => {
       const snapshots: Partial<NaacCriterionSnapshotEntity>[] = [
         { criterion: 2, score: 180, maxScore: 240, computedAt: new Date('2025-01-01') },
         { criterion: 3, score: 72, maxScore: 100, computedAt: new Date('2025-01-01') },
@@ -213,10 +213,14 @@ describe('NaacService', () => {
 
       const result = await service.getDashboard('2025-2026');
       expect(result.academicYear).toBe('2025-2026');
-      expect(result.criteria).toHaveLength(2);
+      expect(result.criteria).toHaveLength(7);
       const c2 = result.criteria.find((c) => c.criterion === 2)!;
       expect(c2.score).toBe(180);
       expect(c2.pct).toBeCloseTo(75, 0);
+      // Criteria without snapshots still appear with null score but known maxScore
+      const c1 = result.criteria.find((c) => c.criterion === 1)!;
+      expect(c1.score).toBeNull();
+      expect(c1.maxScore).toBe(150);
     });
 
     it('returns null scores for criteria with no snapshots', async () => {

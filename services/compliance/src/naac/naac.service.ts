@@ -5,7 +5,17 @@ import { Queue } from 'bullmq';
 import { IsNull, Repository } from 'typeorm';
 import { NaacCriterionSnapshotEntity } from './entities/naac-criterion-snapshot.entity';
 import { NaacReportEntity, type ReportFormat } from './entities/naac-report.entity';
-import { NaacCriterionCalculatorService, type Criterion2Input, type Criterion3Input } from './naac-criterion-calculator.service';
+import {
+  NaacCriterionCalculatorService,
+  CRITERION_MAX_SCORES,
+  type Criterion1Input,
+  type Criterion2Input,
+  type Criterion3Input,
+  type Criterion4Input,
+  type Criterion5Input,
+  type Criterion6Input,
+  type Criterion7Input,
+} from './naac-criterion-calculator.service';
 import { NAAC_REPORT_QUEUE, type NaacReportJob } from './naac-report.processor';
 
 export interface GenerateReportDto {
@@ -17,7 +27,7 @@ export interface GenerateReportDto {
 export interface ComputeCriterionDto {
   academicYear: string;
   dataPeriodEnd: string;
-  input: Criterion2Input | Criterion3Input;
+  input: Criterion1Input | Criterion2Input | Criterion3Input | Criterion4Input | Criterion5Input | Criterion6Input | Criterion7Input;
 }
 
 @Injectable()
@@ -64,6 +74,11 @@ export class NaacService {
     return qb.getMany();
   }
 
+  async computeAndSaveCriterion1(dto: ComputeCriterionDto & { input: Criterion1Input }): Promise<NaacCriterionSnapshotEntity> {
+    const result = this.calculator.computeCriterion1(dto.input);
+    return this.saveSnapshot(1, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+  }
+
   async computeAndSaveCriterion2(dto: ComputeCriterionDto & { input: Criterion2Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion2(dto.input);
     return this.saveSnapshot(2, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
@@ -72,6 +87,26 @@ export class NaacService {
   async computeAndSaveCriterion3(dto: ComputeCriterionDto & { input: Criterion3Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion3(dto.input);
     return this.saveSnapshot(3, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+  }
+
+  async computeAndSaveCriterion4(dto: ComputeCriterionDto & { input: Criterion4Input }): Promise<NaacCriterionSnapshotEntity> {
+    const result = this.calculator.computeCriterion4(dto.input);
+    return this.saveSnapshot(4, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+  }
+
+  async computeAndSaveCriterion5(dto: ComputeCriterionDto & { input: Criterion5Input }): Promise<NaacCriterionSnapshotEntity> {
+    const result = this.calculator.computeCriterion5(dto.input);
+    return this.saveSnapshot(5, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+  }
+
+  async computeAndSaveCriterion6(dto: ComputeCriterionDto & { input: Criterion6Input }): Promise<NaacCriterionSnapshotEntity> {
+    const result = this.calculator.computeCriterion6(dto.input);
+    return this.saveSnapshot(6, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+  }
+
+  async computeAndSaveCriterion7(dto: ComputeCriterionDto & { input: Criterion7Input }): Promise<NaacCriterionSnapshotEntity> {
+    const result = this.calculator.computeCriterion7(dto.input);
+    return this.saveSnapshot(7, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async getDashboard(academicYear: string): Promise<{
@@ -90,12 +125,12 @@ export class NaacService {
       if (!latestByCriterion.has(snap.criterion)) latestByCriterion.set(snap.criterion, snap);
     }
 
-    const criteria = [2, 3].map((c) => {
+    const criteria = [1, 2, 3, 4, 5, 6, 7].map((c) => {
       const snap = latestByCriterion.get(c);
       return {
         criterion: c,
         score: snap ? Number(snap.score) : null,
-        maxScore: snap ? Number(snap.maxScore) : null,
+        maxScore: snap?.maxScore != null ? Number(snap.maxScore) : CRITERION_MAX_SCORES[c] ?? null,
         pct: snap && snap.score && snap.maxScore ? Math.round((Number(snap.score) / Number(snap.maxScore)) * 10000) / 100 : null,
         lastUpdated: snap?.computedAt ?? new Date(0),
       };
