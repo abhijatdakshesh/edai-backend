@@ -15,15 +15,15 @@ export class StudentsController {
 
   // Must be declared before :id to avoid NestJS swallowing "contact" as an id value.
   @Get(':usn/contact')
-  findContactByUsn(@Param('usn') usn: string): ContactInfo {
+  async findContactByUsn(@Param('usn') usn: string): Promise<ContactInfo> {
     return this.studentsService.findContactByUsn(usn);
   }
 
   @Get(':id')
-  findById(
+  async findById(
     @Param('id') id: string,
     @Headers('x-user-id') requesterId = 's-1',
-  ): Student {
+  ): Promise<Student> {
     return this.studentsService.findById(id, requesterId);
   }
 }

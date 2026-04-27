@@ -4,8 +4,11 @@ import { FeeItemEntity } from '../entities/fee-item.entity';
 import { PromotionBatchEntity, PromotionAuditEntity } from '../entities/promotion-batch.entity';
 import { VtuWindowEntity, VtuEligibilityEntity, VtuRegistrationEntity } from '../entities/vtu.entity';
 import { AiCallLogEntity, ConsentRecordEntity, AnnouncementEntity } from '../entities/comms.entity';
+import { StudentEntity, ParentStudentLinkEntity } from '../entities/student-orm.entity';
 
 const ALL_ENTITIES = [
+  StudentEntity,
+  ParentStudentLinkEntity,
   FeeItemEntity,
   PromotionBatchEntity,
   PromotionAuditEntity,
