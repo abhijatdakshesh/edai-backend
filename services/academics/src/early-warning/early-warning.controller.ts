@@ -1,16 +1,51 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { EarlyWarningService } from './early-warning.service';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { EarlyWarningService, type AcknowledgeAlertDto, type ScoreStudentDto } from './early-warning.service';
 
-@Controller('early-warning')
+@Controller('ews/v1')
 export class EarlyWarningController {
-  constructor(private readonly earlyWarningService: EarlyWarningService) {}
+  constructor(private readonly ews: EarlyWarningService) {}
 
-  @Get(':studentId')
-  assess(
+  @Post('students/:studentId/score')
+  scoreStudent(
     @Param('studentId') studentId: string,
-    @Query('attendance') attendance = '80',
-    @Query('cgpa') cgpa = '7.0',
+    @Body() body: Omit<ScoreStudentDto, 'studentId'>,
   ): unknown {
-    return this.earlyWarningService.assess(studentId, parseFloat(attendance), parseFloat(cgpa));
+    return this.ews.scoreStudent({ ...body, studentId });
+  }
+
+  @Get('students/:studentId/risk')
+  getLatestRisk(@Param('studentId') studentId: string): unknown {
+    return this.ews.getLatestRisk(studentId);
+  }
+
+  @Get('students/:studentId/risk-history')
+  getRiskHistory(
+    @Param('studentId') studentId: string,
+    @Query('days') days = '90',
+  ): unknown {
+    return this.ews.getRiskHistory(studentId, parseInt(days, 10));
+  }
+
+  @Get('alerts')
+  getAlerts(@Query('studentId') studentId?: string): unknown {
+    return this.ews.getActiveAlerts(studentId);
+  }
+
+  @Patch('alerts/:alertId/acknowledge')
+  acknowledge(
+    @Param('alertId') alertId: string,
+    @Body() body: AcknowledgeAlertDto,
+  ): unknown {
+    return this.ews.acknowledgeAlert(alertId, body);
+  }
+
+  @Get('admin/weights')
+  getWeights(): unknown {
+    return this.ews.getWeights();
+  }
+
+  @Post('admin/weights')
+  updateWeights(@Body() body: { factor: string; weight: number }[]): unknown {
+    return this.ews.updateWeights(body as Parameters<typeof this.ews.updateWeights>[0]);
   }
 }
