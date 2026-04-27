@@ -3,9 +3,10 @@
  * All EarlyWarningService calls are mocked.
  */
 
-import { BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, INestApplication, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
+import supertest = require('supertest');
 import { EarlyWarningController, EwsAdminController } from './early-warning.controller';
 import { EarlyWarningService } from './early-warning.service';
 import type { RiskSnapshotEntity } from './entities/risk-snapshot.entity';
@@ -44,11 +45,9 @@ describe('EarlyWarningController', () => {
   let ctrl: EarlyWarningController;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     ({ ctrl } = await buildControllers());
   });
-
-  // ── scoreStudent ──────────────────────────────────────────────────────────
 
   const SCORE_BODY: Omit<ScoreStudentDto, 'studentId'> = {
     academicYear: '2025-2026',
@@ -61,6 +60,8 @@ describe('EarlyWarningController', () => {
     assignmentsTotal: 10,
   };
 
+  // ── scoreStudent ──────────────────────────────────────────────────────────
+
   describe('scoreStudent', () => {
     it('delegates to service with studentId merged in', async () => {
       const snapshot = { id: 's-1', studentId: 'stu-1' } as RiskSnapshotEntity;
@@ -72,6 +73,15 @@ describe('EarlyWarningController', () => {
         expect.objectContaining({ studentId: 'stu-1', academicYear: '2025-2026' }),
       );
       expect(result).toBe(snapshot);
+    });
+
+    it('overwrites studentId in body with path param', async () => {
+      const snapshot = { id: 's-1', studentId: 'stu-param' } as RiskSnapshotEntity;
+      mockEws.scoreStudent.mockResolvedValue(snapshot);
+      await ctrl.scoreStudent('stu-param', { ...SCORE_BODY, studentId: 'stu-injected' } as Omit<ScoreStudentDto, 'studentId'>);
+      expect(mockEws.scoreStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ studentId: 'stu-param' }),
+      );
     });
 
     it('propagates service rejection (DB error)', async () => {
@@ -111,14 +121,14 @@ describe('EarlyWarningController', () => {
       expect(mockEws.getRiskHistory).toHaveBeenCalledWith('stu-1', 30);
     });
 
-    it('throws BadRequestException for non-numeric days', async () => {
-      await expect(ctrl.getRiskHistory('stu-1', 'abc')).rejects.toThrow(BadRequestException);
-    });
-
     it('accepts days=1 (minimum valid boundary)', async () => {
       mockEws.getRiskHistory.mockResolvedValue([]);
-      await expect(ctrl.getRiskHistory('stu-1', '1')).resolves.toBeDefined();
+      await ctrl.getRiskHistory('stu-1', '1');
       expect(mockEws.getRiskHistory).toHaveBeenCalledWith('stu-1', 1);
+    });
+
+    it('throws BadRequestException for non-numeric days', async () => {
+      await expect(ctrl.getRiskHistory('stu-1', 'abc')).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException for days=0', async () => {
@@ -172,7 +182,7 @@ describe('EwsAdminController', () => {
   let admin: EwsAdminController;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     ({ admin } = await buildControllers());
   });
 
@@ -181,6 +191,11 @@ describe('EwsAdminController', () => {
       const weights = [{ factor: 'attendance', weight: 0.35 }] as ScoringWeightEntity[];
       mockEws.getWeights.mockResolvedValue(weights);
       expect(await admin.getWeights()).toBe(weights);
+    });
+
+    it('returns empty array when no weights configured (new institution)', async () => {
+      mockEws.getWeights.mockResolvedValue([]);
+      expect(await admin.getWeights()).toEqual([]);
     });
   });
 
@@ -204,6 +219,14 @@ describe('EwsAdminController', () => {
       await expect(admin.updateWeights([])).rejects.toThrow(BadRequestException);
     });
 
+    it('throws BadRequestException when body is null (non-array)', async () => {
+      await expect(admin.updateWeights(null as never)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when body is a plain object (non-array)', async () => {
+      await expect(admin.updateWeights({ factor: 'attendance', weight: 0.35 } as never)).rejects.toThrow(BadRequestException);
+    });
+
     it('throws BadRequestException for NaN weight', async () => {
       const body = [{ factor: 'attendance' as const, weight: NaN }];
       await expect(admin.updateWeights(body)).rejects.toThrow(BadRequestException);
@@ -211,6 +234,11 @@ describe('EwsAdminController', () => {
 
     it('throws BadRequestException for Infinity weight', async () => {
       const body = [{ factor: 'attendance' as const, weight: Infinity }];
+      await expect(admin.updateWeights(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException for -Infinity weight', async () => {
+      const body = [{ factor: 'attendance' as const, weight: -Infinity }];
       await expect(admin.updateWeights(body)).rejects.toThrow(BadRequestException);
     });
 
@@ -222,57 +250,125 @@ describe('EwsAdminController', () => {
   });
 });
 
-// ── RolesGuard ────────────────────────────────────────────────────────────────
+// ── RolesGuard — unit ─────────────────────────────────────────────────────────
 
 describe('RolesGuard', () => {
-  let guard: RolesGuard;
   let reflector: Reflector;
 
-  beforeEach(async () => {
-    jest.clearAllMocks();
-    ({ guard } = await buildControllers());
+  beforeEach(() => {
+    jest.resetAllMocks();
     reflector = new Reflector();
   });
 
-  function makeCtx(role: string | undefined, requiredRoles: string[]) {
+  function makeCtx(role: string | undefined) {
     const req = { headers: {} as Record<string, string> };
     if (role !== undefined) req.headers['x-user-role'] = role;
     return {
       switchToHttp: () => ({ getRequest: () => req }),
       getHandler: () => ({}),
       getClass: () => ({}),
-      // Provide required roles via reflector spy
-      _roles: requiredRoles,
     } as unknown as import('@nestjs/common').ExecutionContext;
   }
 
   it('allows ADMIN to access admin endpoint', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
-    const guard2 = new RolesGuard(reflector);
-    expect(guard2.canActivate(makeCtx('ADMIN', ['ADMIN', 'PRINCIPAL']))).toBe(true);
+    const guard = new RolesGuard(reflector);
+    expect(guard.canActivate(makeCtx('ADMIN'))).toBe(true);
   });
 
   it('allows PRINCIPAL to access admin endpoint', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
-    const guard2 = new RolesGuard(reflector);
-    expect(guard2.canActivate(makeCtx('PRINCIPAL', ['ADMIN', 'PRINCIPAL']))).toBe(true);
+    const guard = new RolesGuard(reflector);
+    expect(guard.canActivate(makeCtx('PRINCIPAL'))).toBe(true);
   });
 
   it('throws ForbiddenException for STUDENT role', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
-    const guard2 = new RolesGuard(reflector);
-    expect(() => guard2.canActivate(makeCtx('STUDENT', ['ADMIN', 'PRINCIPAL']))).toThrow(ForbiddenException);
+    const guard = new RolesGuard(reflector);
+    expect(() => guard.canActivate(makeCtx('STUDENT'))).toThrow(ForbiddenException);
+  });
+
+  it('throws ForbiddenException for FACULTY role with message including role name', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
+    const guard = new RolesGuard(reflector);
+    expect(() => guard.canActivate(makeCtx('FACULTY'))).toThrow('Role FACULTY is not permitted');
   });
 
   it('throws UnauthorizedException when x-user-role header is missing', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
-    const guard2 = new RolesGuard(reflector);
-    expect(() => guard2.canActivate(makeCtx(undefined, ['ADMIN', 'PRINCIPAL']))).toThrow(UnauthorizedException);
+    const guard = new RolesGuard(reflector);
+    expect(() => guard.canActivate(makeCtx(undefined))).toThrow(UnauthorizedException);
   });
 
-  it('allows any role when no roles are required', () => {
+  it('allows any role when required roles are undefined (no decorator)', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
-    const guard2 = new RolesGuard(reflector);
-    expect(guard2.canActivate(makeCtx('STUDENT', []))).toBe(true);
+    const guard = new RolesGuard(reflector);
+    expect(guard.canActivate(makeCtx('STUDENT'))).toBe(true);
+  });
+
+  it('allows any role when required roles list is explicitly empty []', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([]);
+    const guard = new RolesGuard(reflector);
+    expect(guard.canActivate(makeCtx('STUDENT'))).toBe(true);
+  });
+});
+
+// ── RolesGuard — HTTP pipeline (supertest) ────────────────────────────────────
+
+describe('EwsAdminController — HTTP guard enforcement', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    jest.resetAllMocks();
+    const module = await Test.createTestingModule({
+      controllers: [EwsAdminController],
+      providers: [
+        { provide: EarlyWarningService, useValue: mockEws },
+        RolesGuard,
+        Reflector,
+      ],
+    }).compile();
+    app = module.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(() => app.close());
+
+  beforeEach(() => jest.resetAllMocks());
+
+  it('returns 401 when x-user-role header is absent', () => {
+    return supertest(app.getHttpServer())
+      .get('/ews/v1/admin/weights')
+      .expect(401);
+  });
+
+  it('returns 403 for FACULTY role', () => {
+    return supertest(app.getHttpServer())
+      .get('/ews/v1/admin/weights')
+      .set('x-user-role', 'FACULTY')
+      .expect(403);
+  });
+
+  it('returns 403 for STUDENT role', () => {
+    return supertest(app.getHttpServer())
+      .get('/ews/v1/admin/weights')
+      .set('x-user-role', 'STUDENT')
+      .expect(403);
+  });
+
+  it('returns 200 for ADMIN role', () => {
+    mockEws.getWeights.mockResolvedValue([]);
+    return supertest(app.getHttpServer())
+      .get('/ews/v1/admin/weights')
+      .set('x-user-role', 'ADMIN')
+      .expect(200);
+  });
+
+  it('returns 200 for PRINCIPAL role', () => {
+    mockEws.getWeights.mockResolvedValue([]);
+    return supertest(app.getHttpServer())
+      .get('/ews/v1/admin/weights')
+      .set('x-user-role', 'PRINCIPAL')
+      .expect(200);
   });
 });
