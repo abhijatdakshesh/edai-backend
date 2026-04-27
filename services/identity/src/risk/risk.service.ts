@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
@@ -38,7 +38,7 @@ export interface RiskSummary {
 export class RiskService {
   private readonly logger = new Logger(RiskService.name);
 
-  constructor(@InjectDataSource() private readonly db: DataSource) {}
+  constructor(@Optional() @InjectDataSource() private readonly db: DataSource | null) {}
 
   async getAtRiskStudents(filters: {
     department?: string;
@@ -47,6 +47,7 @@ export class RiskService {
     minScore?: number;
     limit?: number;
   }): Promise<RiskScore[]> {
+    if (!this.db) return [];
     const { department, semester, riskLevel, minScore = 50, limit = 100 } = filters;
 
     let query = `
@@ -114,6 +115,7 @@ export class RiskService {
   }
 
   async getStudentRisk(usn: string): Promise<RiskScore | null> {
+    if (!this.db) return null;
     const rows = await this.db.query(
       `SELECT * FROM student_risk_scores WHERE student_usn = $1`,
       [usn],
@@ -143,6 +145,7 @@ export class RiskService {
   }
 
   async getDepartmentSummary(): Promise<RiskSummary[]> {
+    if (!this.db) return [];
     const rows = await this.db.query(`
       SELECT
         department,
@@ -171,6 +174,7 @@ export class RiskService {
   @Cron('30 2 * * 1')
   async sendWeeklyRiskDigest(): Promise<void> {
     this.logger.log('[Risk] Running Monday morning digest...');
+    if (!this.db) { this.logger.warn('[Risk] No DB — digest skipped.'); return; }
 
     const [critical, high] = await Promise.all([
       this.getAtRiskStudents({ riskLevel: 'CRITICAL', limit: 200 }),
@@ -205,6 +209,7 @@ export class RiskService {
     students: RiskScore[],
     summary?: RiskSummary,
   ): Promise<void> {
+    if (!this.db) return;
     const hodRow = await this.db.query(
       `SELECT email, name FROM faculty WHERE department = $1 AND designation ILIKE '%hod%' LIMIT 1`,
       [department],

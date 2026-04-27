@@ -587,4 +587,38 @@ describe('RiskService', () => {
       );
     });
   });
+
+  // ─── No-DB fallbacks (@Optional guard) ───────────────────────────────────────
+
+  describe('when DATABASE_URL is absent (no DataSource injected)', () => {
+    let noDbService: RiskService;
+
+    beforeEach(async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [RiskService],
+      }).compile();
+      noDbService = module.get<RiskService>(RiskService);
+    });
+
+    it('getAtRiskStudents returns [] without hitting DB', async () => {
+      const result = await noDbService.getAtRiskStudents({ minScore: 50 });
+      expect(result).toEqual([]);
+    });
+
+    it('getStudentRisk returns null without hitting DB', async () => {
+      const result = await noDbService.getStudentRisk('1RV21CS001');
+      expect(result).toBeNull();
+    });
+
+    it('getDepartmentSummary returns [] without hitting DB', async () => {
+      const result = await noDbService.getDepartmentSummary();
+      expect(result).toEqual([]);
+    });
+
+    it('sendWeeklyRiskDigest warns and returns without hitting DB', async () => {
+      const warnSpy = jest.spyOn((noDbService as any).logger, 'warn');
+      await noDbService.sendWeeklyRiskDigest();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('No DB'));
+    });
+  });
 });
