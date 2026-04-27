@@ -65,7 +65,7 @@ export class EwsAdminController {
       throw new BadRequestException('weights must be a non-empty array');
     }
     for (const u of body) {
-      if (typeof u.weight !== 'number' || isNaN(u.weight)) {
+      if (typeof u.weight !== 'number' || !isFinite(u.weight)) {
         throw new BadRequestException(`Invalid weight for factor ${u.factor}: must be a finite number`);
       }
     }

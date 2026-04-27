@@ -10,6 +10,7 @@ import { EarlyWarningService } from './early-warning.service';
 import type { RiskSnapshotEntity } from './entities/risk-snapshot.entity';
 import type { AlertEventEntity } from './entities/alert-event.entity';
 import type { ScoringWeightEntity } from './entities/scoring-weight.entity';
+import type { ScoreStudentDto } from './early-warning.service';
 
 const mockEws = {
   scoreStudent: jest.fn(),
@@ -42,24 +43,33 @@ describe('EarlyWarningController', () => {
 
   // ── scoreStudent ──────────────────────────────────────────────────────────
 
+  const SCORE_BODY: Omit<ScoreStudentDto, 'studentId'> = {
+    academicYear: '2025-2026',
+    semester: 4,
+    attendancePct: 80,
+    marksAvg: 60,
+    feesOverdueDays: 0,
+    examRegistered: true,
+    assignmentsSubmitted: 8,
+    assignmentsTotal: 10,
+  };
+
   describe('scoreStudent', () => {
     it('delegates to service with studentId merged in', async () => {
       const snapshot = { id: 's-1', studentId: 'stu-1' } as RiskSnapshotEntity;
       mockEws.scoreStudent.mockResolvedValue(snapshot);
 
-      const result = await ctrl.scoreStudent('stu-1', {
-        academicYear: '2025-2026',
-        semester: 4,
-        attendancePct: 80,
-        marksAvg: 60,
-        feesOverdueDays: 0,
-        examRegistered: true,
-      } as never);
+      const result = await ctrl.scoreStudent('stu-1', SCORE_BODY);
 
       expect(mockEws.scoreStudent).toHaveBeenCalledWith(
         expect.objectContaining({ studentId: 'stu-1', academicYear: '2025-2026' }),
       );
       expect(result).toBe(snapshot);
+    });
+
+    it('propagates service rejection (DB error)', async () => {
+      mockEws.scoreStudent.mockRejectedValue(new Error('DB connection failed'));
+      await expect(ctrl.scoreStudent('stu-1', SCORE_BODY)).rejects.toThrow('DB connection failed');
     });
   });
 
@@ -96,6 +106,12 @@ describe('EarlyWarningController', () => {
 
     it('throws BadRequestException for non-numeric days', async () => {
       await expect(ctrl.getRiskHistory('stu-1', 'abc')).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts days=1 (minimum valid boundary)', async () => {
+      mockEws.getRiskHistory.mockResolvedValue([]);
+      await expect(ctrl.getRiskHistory('stu-1', '1')).resolves.toBeDefined();
+      expect(mockEws.getRiskHistory).toHaveBeenCalledWith('stu-1', 1);
     });
 
     it('throws BadRequestException for days=0', async () => {
@@ -183,6 +199,11 @@ describe('EwsAdminController', () => {
 
     it('throws BadRequestException for NaN weight', async () => {
       const body = [{ factor: 'attendance' as const, weight: NaN }];
+      await expect(admin.updateWeights(body)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException for Infinity weight', async () => {
+      const body = [{ factor: 'attendance' as const, weight: Infinity }];
       await expect(admin.updateWeights(body)).rejects.toThrow(BadRequestException);
     });
 
