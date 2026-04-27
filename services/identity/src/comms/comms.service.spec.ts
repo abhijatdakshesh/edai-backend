@@ -396,4 +396,111 @@ describe('CommsService', () => {
       expect(svc.announcements[0].createdAt).toBe('2026-04-10T09:00:00.000Z');
     });
   });
+
+  // ─── getAdminCallLogs — institutionId filter ────────────────────────────────
+
+  describe('getAdminCallLogs() — institutionId filter', () => {
+    it('returns all logs when no institutionId provided', () => {
+      service.callLogs.push(
+        makeCall({ id: 'c1', institutionId: 'rvce' }),
+        makeCall({ id: 'c2', institutionId: 'rvitm' }),
+      );
+      expect(service.getAdminCallLogs()).toHaveLength(2);
+    });
+
+    it('returns only logs matching institutionId when provided', () => {
+      service.callLogs.push(
+        makeCall({ id: 'c1', institutionId: 'rvce' }),
+        makeCall({ id: 'c2', institutionId: 'rvitm' }),
+      );
+      const result = service.getAdminCallLogs('rvce');
+      expect(result).toHaveLength(1);
+      expect(result[0].institutionId).toBe('rvce');
+    });
+  });
+
+  // ─── generateSarvamAudio — private method coverage ─────────────────────────
+
+  describe('generateSarvamAudio() — private method', () => {
+    it('returns null when SARVAM_API_KEY is not set', async () => {
+      const savedKey = process.env['SARVAM_API_KEY'];
+      delete process.env['SARVAM_API_KEY'];
+      const result = await (service as any).generateSarvamAudio('hello', 'kn-IN');
+      expect(result).toBeNull();
+      if (savedKey) process.env['SARVAM_API_KEY'] = savedKey;
+    });
+
+    it('returns buffer when Sarvam returns base64 audio', async () => {
+      process.env['SARVAM_API_KEY'] = 'test-key';
+      const fakeAudio = Buffer.from('fake-wav-data').toString('base64');
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        json: () => Promise.resolve({ audios: [fakeAudio] }),
+      } as never);
+      const result = await (service as any).generateSarvamAudio('hello', 'kn-IN');
+      expect(result).toBeInstanceOf(Buffer);
+      delete process.env['SARVAM_API_KEY'];
+    });
+
+    it('returns null when Sarvam returns no audios array', async () => {
+      process.env['SARVAM_API_KEY'] = 'test-key';
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        json: () => Promise.resolve({}),
+      } as never);
+      const result = await (service as any).generateSarvamAudio('hello', 'kn-IN');
+      expect(result).toBeNull();
+      delete process.env['SARVAM_API_KEY'];
+    });
+
+    it('returns null when fetch throws', async () => {
+      process.env['SARVAM_API_KEY'] = 'test-key';
+      global.fetch = jest.fn().mockRejectedValueOnce(new Error('network error'));
+      const result = await (service as any).generateSarvamAudio('hello', 'kn-IN');
+      expect(result).toBeNull();
+      delete process.env['SARVAM_API_KEY'];
+    });
+  });
+
+  // ─── dispatchTwilioCall — private method coverage ──────────────────────────
+
+  describe('dispatchTwilioCall() — private method', () => {
+    it('returns null when TWILIO credentials are missing', async () => {
+      const sid = process.env['TWILIO_ACCOUNT_SID'];
+      const token = process.env['TWILIO_AUTH_TOKEN'];
+      const from = process.env['TWILIO_PHONE_NUMBER'];
+      delete process.env['TWILIO_ACCOUNT_SID'];
+      delete process.env['TWILIO_AUTH_TOKEN'];
+      delete process.env['TWILIO_PHONE_NUMBER'];
+      const result = await (service as any).dispatchTwilioCall('+911234567890', 'http://example.com/twiml');
+      expect(result).toBeNull();
+      if (sid) process.env['TWILIO_ACCOUNT_SID'] = sid;
+      if (token) process.env['TWILIO_AUTH_TOKEN'] = token;
+      if (from) process.env['TWILIO_PHONE_NUMBER'] = from;
+    });
+
+    it('returns call SID string when Twilio responds with sid', async () => {
+      process.env['TWILIO_ACCOUNT_SID'] = 'AC-test';
+      process.env['TWILIO_AUTH_TOKEN'] = 'token-test';
+      process.env['TWILIO_PHONE_NUMBER'] = '+1234567890';
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        json: () => Promise.resolve({ sid: 'CA-test-sid' }),
+      } as never);
+      const result = await (service as any).dispatchTwilioCall('+911234567890', 'http://example.com/twiml');
+      expect(result).toBe('CA-test-sid');
+      delete process.env['TWILIO_ACCOUNT_SID'];
+      delete process.env['TWILIO_AUTH_TOKEN'];
+      delete process.env['TWILIO_PHONE_NUMBER'];
+    });
+
+    it('returns null when Twilio fetch throws', async () => {
+      process.env['TWILIO_ACCOUNT_SID'] = 'AC-test';
+      process.env['TWILIO_AUTH_TOKEN'] = 'token-test';
+      process.env['TWILIO_PHONE_NUMBER'] = '+1234567890';
+      global.fetch = jest.fn().mockRejectedValueOnce(new Error('twilio down'));
+      const result = await (service as any).dispatchTwilioCall('+911234567890', 'http://example.com/twiml');
+      expect(result).toBeNull();
+      delete process.env['TWILIO_ACCOUNT_SID'];
+      delete process.env['TWILIO_AUTH_TOKEN'];
+      delete process.env['TWILIO_PHONE_NUMBER'];
+    });
+  });
 });

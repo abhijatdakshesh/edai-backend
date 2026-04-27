@@ -345,4 +345,44 @@ describe('FeesApiService', () => {
       expect(svc.feeItems[0].paidDate).toBe('2026-01-15');
     });
   });
+
+  // ─── verifyPayment — production guard ──────────────────────────────────────
+
+  describe('verifyPayment() — production guard', () => {
+    it('throws when NODE_ENV is production and RAZORPAY_KEY_SECRET is absent', async () => {
+      const savedEnv = process.env['NODE_ENV'];
+      const savedKey = process.env['RAZORPAY_KEY_SECRET'];
+      process.env['NODE_ENV'] = 'production';
+      delete process.env['RAZORPAY_KEY_SECRET'];
+      await expect(service.verifyPayment('order_1', 'pay_1', 'sig_1')).rejects.toThrow(
+        'RAZORPAY_KEY_SECRET env var is required in production',
+      );
+      process.env['NODE_ENV'] = savedEnv ?? 'test';
+      if (savedKey) process.env['RAZORPAY_KEY_SECRET'] = savedKey;
+    });
+
+    it('returns success when orderId was never registered (dev mode)', async () => {
+      delete process.env['RAZORPAY_KEY_SECRET'];
+      const result = await service.verifyPayment('order_not_registered', 'pay_1', 'sig_1');
+      expect(result.success).toBe(true);
+    });
+  });
+
+  // ─── markPaid — DB transaction path ────────────────────────────────────────
+
+  describe('markPaid() — with DB feeRepo', () => {
+    it('calls manager.transaction and updates each fee via manager.update', async () => {
+      const mockUpdate = jest.fn().mockResolvedValue(undefined);
+      const mockTransaction = jest.fn().mockImplementation(
+        async (cb: (m: { update: typeof mockUpdate }) => Promise<void>) => {
+          await cb({ update: mockUpdate });
+        },
+      );
+      const { FeesApiService: Svc } = await import('./fees-api.service');
+      const svc = new Svc({ find: jest.fn().mockResolvedValue([]), manager: { transaction: mockTransaction } } as never);
+      svc.feeItems.push(makeFeeItem({ id: 'fee-tx-1', status: 'PENDING' }));
+      await svc.markPaid(['fee-tx-1']);
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+    });
+  });
 });

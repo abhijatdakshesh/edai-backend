@@ -116,4 +116,26 @@ describe('ClassesApiService', () => {
       expect(service.getClassStudents('no-class')).toEqual([]);
     });
   });
+
+  // ─── getStudentsByClass ─────────────────────────────────────────────────────
+
+  describe('getStudentsByClass()', () => {
+    it('returns empty array when no roster exists for classId', () => {
+      expect(service.getStudentsByClass('no-such-class')).toEqual([]);
+    });
+
+    it('returns roster entries with attendancePct in 70-95 range', () => {
+      const roster: StudentRoster[] = [
+        { usn: 'USN001', name: 'Alice', dept: 'CSE' },
+        { usn: 'USN002', name: 'Bob', dept: 'CSE' },
+      ];
+      service.rosters.set('cls-roster-1', roster);
+      const result = service.getStudentsByClass('cls-roster-1');
+      expect(result).toHaveLength(2);
+      expect(result[0].usn).toBe('USN001');
+      expect(result[0].name).toBe('Alice');
+      expect(result[0].attendancePct).toBeGreaterThanOrEqual(70);
+      expect(result[0].attendancePct).toBeLessThanOrEqual(95);
+    });
+  });
 });

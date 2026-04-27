@@ -423,6 +423,88 @@ describe('DocumentsService', () => {
     });
   });
 
+  // ── maskName — short parts and empty string ──────────────────────────────
+
+  describe('maskName — via verifyDocument()', () => {
+    it('returns short name parts (≤ 2 chars) verbatim — not masked', async () => {
+      mockQuery.mockResolvedValueOnce([{
+        id: 'doc-uuid-1',
+        doc_type: 'BONAFIDE',
+        student_name: 'A Kumar',
+        reviewed_at: new Date().toISOString(),
+        expires_at: null,
+        status: 'APPROVED',
+      }]);
+      const result = await service.verifyDocument('doc-uuid-1');
+      expect(result?.studentName).toContain('***');
+      expect(result?.studentName).toContain('A');
+    });
+
+    it('returns *** for empty student name', async () => {
+      mockQuery.mockResolvedValueOnce([{
+        id: 'doc-uuid-1',
+        doc_type: 'BONAFIDE',
+        student_name: '',
+        reviewed_at: new Date().toISOString(),
+        expires_at: null,
+        status: 'APPROVED',
+      }]);
+      const result = await service.verifyDocument('doc-uuid-1');
+      expect(result?.studentName).toBe('***');
+    });
+
+    it('falls back to raw doc_type string when not in DOC_LABEL (unknown type)', async () => {
+      mockQuery.mockResolvedValueOnce([{
+        id: 'doc-uuid-1',
+        doc_type: 'LEGACY_CERT',
+        student_name: 'Arjun Sharma',
+        reviewed_at: new Date().toISOString(),
+        expires_at: null,
+        status: 'APPROVED',
+      }]);
+      const result = await service.verifyDocument('doc-uuid-1');
+      expect(result?.docType).toBe('LEGACY_CERT');
+    });
+  });
+
+  // ── generateAiBody — non-Error throw and non-text content ────────────────
+
+  describe('generateAiBody() — edge cases', () => {
+    it('handles non-Error thrown value (string) in AI call', async () => {
+      jest.spyOn(service['anthropic'].messages, 'create').mockRejectedValueOnce('string-error');
+      const result = await service.generateAiBody('BONAFIDE', 'USN001', 'Test Student', 'Bank loan', null);
+      expect(result).toContain('Test Student');
+    });
+
+    it('returns template when AI returns non-text content type', async () => {
+      jest.spyOn(service['anthropic'].messages, 'create').mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 'tu1', name: 'fn', input: {} }],
+      } as never);
+      const result = await service.generateAiBody('BONAFIDE', 'USN001', 'Arjun Kumar', 'Bank loan', null);
+      expect(result).toContain('Arjun Kumar');
+    });
+  });
+
+  // ── generatePdf — null reviewedAt and null aiBody ──────────────────────
+
+  describe('generatePdf() — null aiBody and reviewedAt', () => {
+    it('generates PDF even when reviewedAt is null and aiBody is null', async () => {
+      const token = service.signDownloadToken('doc-null-1', '1RV21CS001');
+      mockQuery.mockResolvedValueOnce([
+        makeDocRow({
+          id: 'doc-null-1',
+          status: 'APPROVED',
+          ai_body: null,
+          reviewed_at: null,
+          signed_token: token,
+        }),
+      ]);
+      const result = await service.generatePdf('doc-null-1', token);
+      expect(result).toBeInstanceOf(Buffer);
+      expect(result.length).toBeGreaterThan(0);
+    }, 15000);
+  });
+
   // ── signDownloadToken ─────────────────────────────────────────────────────
 
   describe('signDownloadToken', () => {
