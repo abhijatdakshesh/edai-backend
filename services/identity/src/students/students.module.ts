@@ -5,11 +5,9 @@ import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
 @Module({
-  imports: [
-    // Conditionally imported — TypeORM is only registered when DATABASE_URL is set.
-    // @Optional() in StudentsService handles the null case gracefully.
-    TypeOrmModule.forFeature([StudentEntity, ParentStudentLinkEntity]),
-  ],
+  imports: process.env['DATABASE_URL']
+    ? [TypeOrmModule.forFeature([StudentEntity, ParentStudentLinkEntity])]
+    : [],
   controllers: [StudentsController],
   providers: [StudentsService],
   exports: [StudentsService],
