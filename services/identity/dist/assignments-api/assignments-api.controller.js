@@ -23,7 +23,7 @@ let AssignmentsApiController = class AssignmentsApiController {
         this.events = events;
     }
     getStudentAssignments(req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.getStudentAssignments(usn);
     }
     getTeacherAssignments(req) {
@@ -44,6 +44,28 @@ let AssignmentsApiController = class AssignmentsApiController {
         const result = this.svc.gradeSubmission(id, usn, body.marks, body.feedback);
         this.events.emitMarksUpdate({ subjectCode: result.assignmentId, sem: 0 });
         return result;
+    }
+    getAllAssignments() {
+        return this.svc.getAllAssignments();
+    }
+    getAssignmentsByCourse(courseId) {
+        return this.svc.getAssignmentsByCourse(courseId);
+    }
+    getStudentAssignmentsByUsn(usn) {
+        return this.svc.getStudentAssignments(usn);
+    }
+    getAssignmentDetail(id) {
+        return this.svc.getAssignmentById(id);
+    }
+    getSubmissionsById(id) {
+        return this.svc.getSubmissions(id);
+    }
+    submitAssignment(id, body, req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.submitAssignment(id, usn, body);
+    }
+    gradeSubmissionById(subId, body) {
+        return this.svc.gradeSubmissionById(subId, body.marks, body.feedback);
     }
 };
 exports.AssignmentsApiController = AssignmentsApiController;
@@ -92,6 +114,57 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", void 0)
 ], AssignmentsApiController.prototype, "gradeSubmission", null);
+__decorate([
+    (0, common_1.Get)('assignments'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "getAllAssignments", null);
+__decorate([
+    (0, common_1.Get)('assignments/course/:courseId'),
+    __param(0, (0, common_1.Param)('courseId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "getAssignmentsByCourse", null);
+__decorate([
+    (0, common_1.Get)('assignments/student/:usn'),
+    __param(0, (0, common_1.Param)('usn')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "getStudentAssignmentsByUsn", null);
+__decorate([
+    (0, common_1.Get)('teacher/assignments/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "getAssignmentDetail", null);
+__decorate([
+    (0, common_1.Get)('assignments/:id/submissions'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "getSubmissionsById", null);
+__decorate([
+    (0, common_1.Post)('assignments/:id/submit'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "submitAssignment", null);
+__decorate([
+    (0, common_1.Post)('assignments/submissions/:submissionId/grade'),
+    __param(0, (0, common_1.Param)('submissionId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], AssignmentsApiController.prototype, "gradeSubmissionById", null);
 exports.AssignmentsApiController = AssignmentsApiController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

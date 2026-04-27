@@ -125,4 +125,23 @@ describe('IaService', () => {
       expect(result.message).toContain('5');
     });
   });
+
+  // ─── getMarksBySubject ───────────────────────────────────────────────────────
+
+  describe('getMarksBySubject()', () => {
+    it('returns all entries for a given subjectCode across all sems', () => {
+      service.entries.push(
+        { usn: 'U1', name: 'Alice', ia1: 18, ia2: 17, ia3: 19, subjectCode: 'CS301', sem: 5 },
+        { usn: 'U2', name: 'Bob', ia1: 15, ia2: 16, ia3: 14, subjectCode: 'CS302', sem: 5 },
+        { usn: 'U3', name: 'Carol', ia1: 20, ia2: 18, ia3: 17, subjectCode: 'CS301', sem: 6 },
+      );
+      const result = service.getMarksBySubject('CS301');
+      expect(result).toHaveLength(2);
+      expect(result.map((e) => e.usn)).toEqual(['U1', 'U3']);
+    });
+
+    it('returns empty array when no entries match', () => {
+      expect(service.getMarksBySubject('UNKNOWN')).toEqual([]);
+    });
+  });
 });

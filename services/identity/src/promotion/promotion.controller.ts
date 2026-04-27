@@ -43,12 +43,12 @@ export class PromotionController {
   }
 
   @Post('promotion/batches/:id/promote')
-  promote(@Param('id') id: string) {
+  async promote(@Param('id') id: string) {
     return this.svc.promote(id);
   }
 
   @Patch('promotion/batches/:id/override')
-  override(
+  async override(
     @Param('id') id: string,
     @Body() body: { overrides: Array<{ usn: string; decision: 'PROMOTE' | 'DETAIN' }> },
   ) {

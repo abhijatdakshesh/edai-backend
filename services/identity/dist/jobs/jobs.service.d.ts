@@ -29,4 +29,16 @@ export declare class JobsService {
         message: string;
     };
     getPredictions(dept?: string, likelihood?: string): PlacementPrediction[];
+    getJob(id: string): Job;
+    getMyApplications(usn: string): Array<{
+        id: string;
+        jobId: string;
+        companyName: string;
+        role: string;
+        status: 'APPLIED' | 'SHORTLISTED' | 'REJECTED';
+        appliedAt: string;
+    }>;
+    withdraw(applicationId: string): {
+        ok: true;
+    };
 }

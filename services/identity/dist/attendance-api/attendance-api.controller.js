@@ -22,8 +22,27 @@ let AttendanceApiController = class AttendanceApiController {
         this.svc = svc;
         this.events = events;
     }
+    getStudentAttendanceSummary(usn) {
+        return this.svc.getStudentAttendanceSummary(usn);
+    }
     getStudentAttendance(usn) {
         return this.svc.getStudentAttendance(usn);
+    }
+    getClassAttendanceSummary(classId) {
+        return this.svc.getClassAttendanceSummary(classId);
+    }
+    getAtRiskStudents(classId) {
+        return this.svc.getAtRiskStudents(classId);
+    }
+    markBulkAlt(body, req) {
+        const markedBy = req.user?.sub ?? 'unknown';
+        const mapped = body.entries.map((e) => ({
+            usn: e.studentUsn,
+            status: (e.status === 'PRESENT' ? 'P' : e.status === 'LATE' ? 'L' : 'A'),
+        }));
+        const result = this.svc.markBulk(body.classId, body.date, mapped, markedBy);
+        this.events.emitAttendanceUpdate({ classId: body.classId, date: body.date });
+        return result;
     }
     markBulk(body, req) {
         const markedBy = req.user?.sub ?? 'unknown';
@@ -48,12 +67,41 @@ let AttendanceApiController = class AttendanceApiController {
 };
 exports.AttendanceApiController = AttendanceApiController;
 __decorate([
+    (0, common_1.Get)('attendance/student/:usn/summary'),
+    __param(0, (0, common_1.Param)('usn')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AttendanceApiController.prototype, "getStudentAttendanceSummary", null);
+__decorate([
     (0, common_1.Get)('attendance/student/:usn'),
     __param(0, (0, common_1.Param)('usn')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], AttendanceApiController.prototype, "getStudentAttendance", null);
+__decorate([
+    (0, common_1.Get)('attendance/class/:classId/summary'),
+    __param(0, (0, common_1.Param)('classId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AttendanceApiController.prototype, "getClassAttendanceSummary", null);
+__decorate([
+    (0, common_1.Get)('attendance/class/:classId/at-risk'),
+    __param(0, (0, common_1.Param)('classId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AttendanceApiController.prototype, "getAtRiskStudents", null);
+__decorate([
+    (0, common_1.Post)('attendance/bulk'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], AttendanceApiController.prototype, "markBulkAlt", null);
 __decorate([
     (0, common_1.Post)('attendance'),
     __param(0, (0, common_1.Body)()),

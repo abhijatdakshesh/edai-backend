@@ -71,4 +71,40 @@ describe('StudentPortalController', () => {
     mockSvc.getStaff.mockReturnValue([{ name: 'Dr. Ram' }]);
     expect(controller.getInstitutionStaff()).toHaveLength(1);
   });
+
+  it('getSchedule falls back to sub when sapId absent', () => {
+    mockSvc.getSchedule.mockReturnValue({});
+    controller.getSchedule({ user: { sub: 'u2' } });
+    expect(mockSvc.getSchedule).toHaveBeenCalledWith('u2');
+  });
+
+  it('getSchedule falls back to UNKNOWN when user absent', () => {
+    mockSvc.getSchedule.mockReturnValue({});
+    controller.getSchedule({});
+    expect(mockSvc.getSchedule).toHaveBeenCalledWith('UNKNOWN');
+  });
+
+  it('getHostel falls back to sapId when present', () => {
+    mockSvc.getHostel.mockReturnValue({});
+    controller.getHostel({ user: { sapId: 'SAP001', sub: 'u1' } });
+    expect(mockSvc.getHostel).toHaveBeenCalledWith('SAP001');
+  });
+
+  it('getHostel falls back to UNKNOWN when user absent', () => {
+    mockSvc.getHostel.mockReturnValue({});
+    controller.getHostel({});
+    expect(mockSvc.getHostel).toHaveBeenCalledWith('UNKNOWN');
+  });
+
+  it('getExamPrep falls back to sapId when present', () => {
+    mockSvc.getExamPrep.mockReturnValue({});
+    controller.getExamPrep({ user: { sapId: 'SAP001', sub: 'u1' } });
+    expect(mockSvc.getExamPrep).toHaveBeenCalledWith('SAP001');
+  });
+
+  it('getExamPrep falls back to UNKNOWN when user absent', () => {
+    mockSvc.getExamPrep.mockReturnValue({});
+    controller.getExamPrep({});
+    expect(mockSvc.getExamPrep).toHaveBeenCalledWith('UNKNOWN');
+  });
 });

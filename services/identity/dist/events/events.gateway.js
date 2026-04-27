@@ -50,9 +50,9 @@ __decorate([
 ], EventsGateway.prototype, "server", void 0);
 exports.EventsGateway = EventsGateway = EventsGateway_1 = __decorate([
     (0, common_1.Injectable)(),
-    (0, websockets_1.WebSocketGateway)({
-        cors: { origin: '*' },
-        namespace: '/',
+    (0, websockets_1.WebSocketGateway)(3002, {
+        cors: { origin: ['http://localhost:3000', 'http://localhost:3001'], credentials: true },
+        transports: ['websocket', 'polling'],
     })
 ], EventsGateway);
 //# sourceMappingURL=events.gateway.js.map

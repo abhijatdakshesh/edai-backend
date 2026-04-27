@@ -11,6 +11,7 @@ const mockSvc = {
   confirm: jest.fn(),
   sendReminders: jest.fn(),
   uploadResults: jest.fn(),
+  getMarksBySubject: jest.fn(),
 };
 
 const mockEvents = {
@@ -79,5 +80,55 @@ describe('IaController', () => {
     mockSvc.uploadResults.mockReturnValue({ message: 'queued' });
     controller.uploadResults({ subjectCode: 'CS301', sem: 5 });
     expect(mockSvc.uploadResults).toHaveBeenCalledWith('CS301', 5);
+  });
+
+  it('saveMarks falls back to unknown when user absent', () => {
+    mockSvc.saveMarks.mockReturnValue({ id: 'sub-2', status: 'DRAFT' });
+    controller.saveMarks({ subjectCode: 'CS301', sem: 5, marks: [] }, {});
+    expect(mockSvc.saveMarks).toHaveBeenCalledWith('CS301', 5, [], 'unknown');
+  });
+
+  it('submitForReview falls back to unknown when user absent', () => {
+    mockSvc.submitForReview.mockReturnValue({ status: 'SUBMITTED' });
+    controller.submitForReview({ subjectCode: 'CS301', sem: 5 }, {});
+    expect(mockSvc.submitForReview).toHaveBeenCalledWith('CS301', 5, 'unknown');
+  });
+
+  it('submitBySubjectId delegates with subjectId and teacherId from sub', () => {
+    mockSvc.submitForReview.mockReturnValue({ status: 'SUBMITTED' });
+    controller.submitBySubjectId('CS301', { user: { sub: 'teacher-2' } });
+    expect(mockSvc.submitForReview).toHaveBeenCalledWith('CS301', 5, 'teacher-2');
+  });
+
+  it('submitBySubjectId falls back to unknown when user absent', () => {
+    mockSvc.submitForReview.mockReturnValue({ status: 'SUBMITTED' });
+    controller.submitBySubjectId('CS301', {});
+    expect(mockSvc.submitForReview).toHaveBeenCalledWith('CS301', 5, 'unknown');
+  });
+
+  it('getMarksBySubject delegates with subjectId', () => {
+    mockSvc.getMarksBySubject.mockReturnValue([]);
+    controller.getMarksBySubject('CS301');
+    expect(mockSvc.getMarksBySubject).toHaveBeenCalledWith('CS301');
+  });
+
+  it('bulkSaveMarks returns jobId and QUEUED status', () => {
+    const body = { subjectCode: 'CS301', sem: 5, marks: [{ usn: 'U1', ia1: 18, ia2: 17, ia3: 19 }] };
+    const result = controller.bulkSaveMarks(body, { user: { sub: 'teacher-1' } });
+    expect(result.status).toBe('QUEUED');
+    expect(result.count).toBe(1);
+  });
+
+  it('bulkSaveMarks falls back to unknown when user absent', () => {
+    const body = { subjectCode: 'CS301', sem: 5, marks: [] };
+    const result = controller.bulkSaveMarks(body, {});
+    expect(result.status).toBe('QUEUED');
+  });
+
+  it('confirmBulkMarks returns ok with jobId and confirmedAt', () => {
+    const result = controller.confirmBulkMarks({ jobId: 'bulk-1' });
+    expect(result.ok).toBe(true);
+    expect(result.jobId).toBe('bulk-1');
+    expect(result.confirmedAt).toBeDefined();
   });
 });

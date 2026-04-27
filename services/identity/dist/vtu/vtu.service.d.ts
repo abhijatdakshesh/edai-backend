@@ -5,6 +5,7 @@ export interface VtuWindow {
     closeDate: string;
     semester: number;
     isActive: boolean;
+    subjectCodes: string[];
 }
 export interface VtuRegistration {
     windowId: string;
@@ -29,10 +30,12 @@ export declare class VtuService {
         openDate: string;
         closeDate: string;
         semester: number;
+        subjectCodes?: string[];
     }): VtuWindow;
     getStudentStatus(usn: string, windowId: string): {
         status: string;
         eligibleSubjects: string[];
+        ineligibleSubjects: string[];
         registeredSubjects: string[];
     };
     registerStudent(usn: string, windowId: string, subjectCodes: string[]): VtuRegistration;
@@ -54,4 +57,5 @@ export declare class VtuService {
         processed: number;
         windowId: string;
     };
+    getWindowById(id: string): VtuWindow;
 }

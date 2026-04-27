@@ -50,6 +50,20 @@ let IaController = class IaController {
     uploadResults(body) {
         return this.svc.uploadResults(body.subjectCode, body.sem);
     }
+    submitBySubjectId(subjectId, req) {
+        const teacherId = req.user?.sub ?? 'unknown';
+        return this.svc.submitForReview(subjectId, 5, teacherId);
+    }
+    getMarksBySubject(subjectId) {
+        return this.svc.getMarksBySubject(subjectId);
+    }
+    bulkSaveMarks(body, req) {
+        const _teacherId = req.user?.sub ?? 'unknown';
+        return { jobId: `bulk-${Date.now()}`, status: 'QUEUED', count: body.marks.length };
+    }
+    confirmBulkMarks(body) {
+        return { ok: true, jobId: body.jobId, confirmedAt: new Date().toISOString() };
+    }
 };
 exports.IaController = IaController;
 __decorate([
@@ -103,6 +117,36 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], IaController.prototype, "uploadResults", null);
+__decorate([
+    (0, common_1.Patch)('ia/teacher/marks/:subjectId/submit'),
+    __param(0, (0, common_1.Param)('subjectId')),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], IaController.prototype, "submitBySubjectId", null);
+__decorate([
+    (0, common_1.Get)('academics/marks/subject/:subjectId'),
+    __param(0, (0, common_1.Param)('subjectId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], IaController.prototype, "getMarksBySubject", null);
+__decorate([
+    (0, common_1.Post)('academics/marks/bulk'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], IaController.prototype, "bulkSaveMarks", null);
+__decorate([
+    (0, common_1.Post)('academics/marks/bulk/confirm'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], IaController.prototype, "confirmBulkMarks", null);
 exports.IaController = IaController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)(),

@@ -15,6 +15,7 @@ export declare class VtuController {
     getStudentStatus(windowId: string, req: any): {
         status: string;
         eligibleSubjects: string[];
+        ineligibleSubjects: string[];
         registeredSubjects: string[];
     };
     registerStudent(body: {
@@ -47,6 +48,28 @@ export declare class VtuController {
     getChildVtuStatus(usn: string, windowId: string): {
         status: string;
         eligibleSubjects: string[];
+        ineligibleSubjects: string[];
         registeredSubjects: string[];
+    };
+    getWindow(id: string): import("./vtu.service").VtuWindow;
+    getDeptOverviewByWindow(wId: string): {
+        dept: string;
+        eligible: number;
+        registered: number;
+    }[];
+    getPendingByWindow(wId: string): {
+        usn: string;
+        name: string;
+        dept: string;
+    }[];
+    remindByWindow(wId: string, body: {
+        usnList: string[];
+    }): {
+        reminded: string[];
+        windowId: string;
+    };
+    eligibilityCheck(wId: string): {
+        processed: number;
+        windowId: string;
     };
 }

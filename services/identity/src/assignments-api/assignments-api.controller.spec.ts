@@ -10,6 +10,11 @@ const mockAssignmentsService = {
   publishAssignment: jest.fn(),
   getSubmissions: jest.fn(),
   gradeSubmission: jest.fn(),
+  getAllAssignments: jest.fn(),
+  getAssignmentsByCourse: jest.fn(),
+  getAssignmentById: jest.fn(),
+  submitAssignment: jest.fn(),
+  gradeSubmissionById: jest.fn(),
 };
 
 const mockEventsGateway = {
@@ -114,6 +119,74 @@ describe('AssignmentsApiController', () => {
       expect(mockAssignmentsService.gradeSubmission).toHaveBeenCalledWith('asn-1', 'U1', 18, 'Good');
       expect(mockEventsGateway.emitMarksUpdate).toHaveBeenCalledWith({ subjectCode: 'asn-1', sem: 0 });
       expect(result).toBe(mockSub);
+    });
+  });
+
+  describe('getAllAssignments()', () => {
+    it('delegates to service', () => {
+      mockAssignmentsService.getAllAssignments.mockReturnValue([]);
+      expect(controller.getAllAssignments()).toEqual([]);
+    });
+  });
+
+  describe('getAssignmentsByCourse()', () => {
+    it('delegates with courseId', () => {
+      mockAssignmentsService.getAssignmentsByCourse.mockReturnValue([]);
+      controller.getAssignmentsByCourse('course-1');
+      expect(mockAssignmentsService.getAssignmentsByCourse).toHaveBeenCalledWith('course-1');
+    });
+  });
+
+  describe('getStudentAssignmentsByUsn()', () => {
+    it('delegates with usn param', () => {
+      mockAssignmentsService.getStudentAssignments.mockReturnValue([]);
+      controller.getStudentAssignmentsByUsn('USN001');
+      expect(mockAssignmentsService.getStudentAssignments).toHaveBeenCalledWith('USN001');
+    });
+  });
+
+  describe('getAssignmentDetail()', () => {
+    it('delegates with id param', () => {
+      mockAssignmentsService.getAssignmentById.mockReturnValue({ id: 'asn-1' });
+      const result = controller.getAssignmentDetail('asn-1');
+      expect(mockAssignmentsService.getAssignmentById).toHaveBeenCalledWith('asn-1');
+      expect(result).toMatchObject({ id: 'asn-1' });
+    });
+  });
+
+  describe('getSubmissionsById()', () => {
+    it('delegates with id param', () => {
+      mockAssignmentsService.getSubmissions.mockReturnValue([]);
+      controller.getSubmissionsById('asn-2');
+      expect(mockAssignmentsService.getSubmissions).toHaveBeenCalledWith('asn-2');
+    });
+  });
+
+  describe('submitAssignment()', () => {
+    it('uses sapId from request', () => {
+      mockAssignmentsService.submitAssignment.mockReturnValue({ id: 'sub-1' });
+      controller.submitAssignment('asn-1', { text: 'My answer' }, { user: { sapId: 'SAP001', sub: 'u1' } });
+      expect(mockAssignmentsService.submitAssignment).toHaveBeenCalledWith('asn-1', 'SAP001', { text: 'My answer' });
+    });
+
+    it('falls back to sub when sapId absent', () => {
+      mockAssignmentsService.submitAssignment.mockReturnValue({ id: 'sub-2' });
+      controller.submitAssignment('asn-1', { text: 'ans' }, { user: { sub: 'u2' } });
+      expect(mockAssignmentsService.submitAssignment).toHaveBeenCalledWith('asn-1', 'u2', { text: 'ans' });
+    });
+
+    it('falls back to UNKNOWN when user absent', () => {
+      mockAssignmentsService.submitAssignment.mockReturnValue({ id: 'sub-3' });
+      controller.submitAssignment('asn-1', {}, {});
+      expect(mockAssignmentsService.submitAssignment).toHaveBeenCalledWith('asn-1', 'UNKNOWN', {});
+    });
+  });
+
+  describe('gradeSubmissionById()', () => {
+    it('delegates with submissionId and body', () => {
+      mockAssignmentsService.gradeSubmissionById.mockReturnValue({ ok: true });
+      controller.gradeSubmissionById('sub-1', { marks: 10, feedback: 'OK' });
+      expect(mockAssignmentsService.gradeSubmissionById).toHaveBeenCalledWith('sub-1', 10, 'OK');
     });
   });
 });

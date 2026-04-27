@@ -31,7 +31,10 @@ const student_portal_module_1 = require("./student-portal/student-portal.module"
 const parent_portal_module_1 = require("./parent-portal/parent-portal.module");
 const admin_portal_module_1 = require("./admin-portal/admin-portal.module");
 const comms_module_1 = require("./comms/comms.module");
+const departments_module_1 = require("./departments/departments.module");
 const seed_module_1 = require("./seed/seed.module");
+const promotion_module_1 = require("./promotion/promotion.module");
+const chatbot_module_1 = require("./chatbot/chatbot.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -59,6 +62,9 @@ exports.AppModule = AppModule = __decorate([
             parent_portal_module_1.ParentPortalModule,
             admin_portal_module_1.AdminPortalModule,
             comms_module_1.CommsModule,
+            departments_module_1.DepartmentsModule,
+            promotion_module_1.PromotionModule,
+            chatbot_module_1.ChatbotModule,
             seed_module_1.SeedModule,
         ],
         providers: [

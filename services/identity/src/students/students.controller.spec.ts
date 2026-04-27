@@ -5,6 +5,7 @@ import { StudentsService } from './students.service';
 
 const mockStudentsService = {
   findById: jest.fn(),
+  findContactByUsn: jest.fn(),
 };
 
 describe('StudentsController', () => {
@@ -20,30 +21,48 @@ describe('StudentsController', () => {
     controller = module.get<StudentsController>(StudentsController);
   });
 
-  it('findById delegates to service with id and requesterId header', () => {
-    const mockStudent = { id: 's-1', name: 'Alice' };
-    mockStudentsService.findById.mockReturnValue(mockStudent);
+  describe('findById', () => {
+    it('delegates to service with id and requesterId header', async () => {
+      const mockStudent = { id: 's-1', name: 'Alice' };
+      mockStudentsService.findById.mockResolvedValue(mockStudent);
 
-    const result = controller.findById('s-1', 'u-s-1');
-    expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 'u-s-1');
-    expect(result).toBe(mockStudent);
+      const result = await controller.findById('s-1', 'u-s-1');
+      expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 'u-s-1');
+      expect(result).toBe(mockStudent);
+    });
+
+    it('uses default requesterId s-1 when header absent', async () => {
+      const mockStudent = { id: 's-1', name: 'Alice' };
+      mockStudentsService.findById.mockResolvedValue(mockStudent);
+
+      await (controller.findById as (id: string, r?: string) => Promise<unknown>).call(controller, 's-1');
+      expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 's-1');
+    });
+
+    it('propagates NotFoundException from service', async () => {
+      mockStudentsService.findById.mockRejectedValue(new NotFoundException());
+      await expect(controller.findById('s-99', 'any')).rejects.toThrow(NotFoundException);
+    });
+
+    it('propagates ForbiddenException from service', async () => {
+      mockStudentsService.findById.mockRejectedValue(new ForbiddenException());
+      await expect(controller.findById('s-1', 'random')).rejects.toThrow(ForbiddenException);
+    });
   });
 
-  it('findById uses default requesterId s-1 when header absent', () => {
-    const mockStudent = { id: 's-1', name: 'Alice' };
-    mockStudentsService.findById.mockReturnValue(mockStudent);
+  describe('findContactByUsn', () => {
+    it('delegates to service and returns contact info', async () => {
+      const contact = { parentPhone: '+919876543210', parentName: 'Parent', preferredLanguage: 'kn', consentVoice: false };
+      mockStudentsService.findContactByUsn.mockResolvedValue(contact);
 
-    controller.findById('s-1', 's-1'); // default value
-    expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 's-1');
-  });
+      const result = await controller.findContactByUsn('1RV21CS001');
+      expect(mockStudentsService.findContactByUsn).toHaveBeenCalledWith('1RV21CS001');
+      expect(result).toBe(contact);
+    });
 
-  it('propagates NotFoundException from service', () => {
-    mockStudentsService.findById.mockImplementation(() => { throw new NotFoundException(); });
-    expect(() => controller.findById('s-99', 'any')).toThrow(NotFoundException);
-  });
-
-  it('propagates ForbiddenException from service', () => {
-    mockStudentsService.findById.mockImplementation(() => { throw new ForbiddenException(); });
-    expect(() => controller.findById('s-1', 'random')).toThrow(ForbiddenException);
+    it('propagates NotFoundException for unknown USN', async () => {
+      mockStudentsService.findContactByUsn.mockRejectedValue(new NotFoundException());
+      await expect(controller.findContactByUsn('UNKNOWN')).rejects.toThrow(NotFoundException);
+    });
   });
 });

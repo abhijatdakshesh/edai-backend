@@ -21,6 +21,7 @@ const classes_api_module_1 = require("../classes-api/classes-api.module");
 const student_portal_module_1 = require("../student-portal/student-portal.module");
 const parent_portal_module_1 = require("../parent-portal/parent-portal.module");
 const comms_module_1 = require("../comms/comms.module");
+const admin_portal_module_1 = require("../admin-portal/admin-portal.module");
 let SeedModule = class SeedModule {
 };
 exports.SeedModule = SeedModule;
@@ -39,6 +40,7 @@ exports.SeedModule = SeedModule = __decorate([
             student_portal_module_1.StudentPortalModule,
             parent_portal_module_1.ParentPortalModule,
             comms_module_1.CommsModule,
+            admin_portal_module_1.AdminPortalModule,
         ],
         providers: [seed_service_1.SeedService],
     })

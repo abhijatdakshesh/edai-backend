@@ -4,7 +4,6 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"time"
 )
@@ -19,7 +18,8 @@ type AbsentMarkedEvent struct {
 	Date             string `json:"date"`
 	Period           *int   `json:"period,omitempty"`
 	ParentID         string `json:"parentId"`
-	ParentPhoneToken string `json:"parentPhoneToken"`
+	ParentPhone      string `json:"parentPhone"`      // E.164 phone number (populated by identity service)
+	ParentPhoneToken string `json:"parentPhoneToken"` // legacy encrypted token
 	ParentLanguage   string `json:"parentLanguage"`
 	ConsentVoice     bool   `json:"consentVoice"`
 	ConsentWhatsapp  bool   `json:"consentWhatsapp"`

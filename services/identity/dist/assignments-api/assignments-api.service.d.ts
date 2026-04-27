@@ -37,4 +37,21 @@ export declare class AssignmentsApiService {
     publishAssignment(id: string): Assignment;
     getSubmissions(assignmentId: string): Submission[];
     gradeSubmission(assignmentId: string, usn: string, marks: number, feedback: string): Submission;
+    getAllAssignments(): Assignment[];
+    getAssignmentsByCourse(courseId: string): Assignment[];
+    getAssignmentById(id: string): Assignment;
+    submitAssignment(id: string, usn: string, body: {
+        fileUrl?: string;
+        text?: string;
+    }): {
+        submissionId: string;
+        submittedAt: string;
+        status: 'SUBMITTED';
+    };
+    gradeSubmissionById(subId: string, marks: number, feedback: string): {
+        ok: true;
+        submissionId: string;
+        marks: number;
+        feedback: string;
+    };
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional, OnModuleInit } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
+import { FeeItemEntity } from '../entities/fee-item.entity';
 
 export interface FeeItem {
   id: string;
@@ -20,8 +24,29 @@ export interface FeeSummary {
 }
 
 @Injectable()
-export class FeesApiService {
+export class FeesApiService implements OnModuleInit {
+  /** In-memory fallback — used when DATABASE_URL is not configured */
   feeItems: FeeItem[] = [];
+
+  constructor(
+    @Optional() @InjectRepository(FeeItemEntity)
+    private readonly feeRepo?: Repository<FeeItemEntity>,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (!this.feeRepo) return;
+    const rows = await this.feeRepo.find();
+    this.feeItems = rows.map((r) => ({
+      id: r.id,
+      usn: r.usn,
+      component: r.component,
+      semester: r.semester,
+      amount: Number(r.amount),
+      dueDate: r.dueDate,
+      status: r.status as FeeItem['status'],
+      paidDate: r.paidDate ?? undefined,
+    }));
+  }
 
   getStudentFees(usn: string): FeeSummary {
     const items = this.feeItems.filter((f) => f.usn === usn);
@@ -46,13 +71,21 @@ export class FeesApiService {
     };
   }
 
-  markPaid(feeIds: string[]): void {
+  async markPaid(feeIds: string[]): Promise<void> {
+    const paidDate = new Date().toISOString();
     for (const id of feeIds) {
       const fee = this.feeItems.find((f) => f.id === id);
       if (fee) {
         fee.status = 'PAID';
-        fee.paidDate = new Date().toISOString();
+        fee.paidDate = paidDate;
       }
+    }
+    if (this.feeRepo) {
+      await this.feeRepo.manager.transaction(async (manager) => {
+        for (const id of feeIds) {
+          await manager.update(FeeItemEntity, { id }, { status: 'PAID', paidDate });
+        }
+      });
     }
   }
 
@@ -92,33 +125,73 @@ export class FeesApiService {
     const overdueCount = items.filter((f) => f.status === 'OVERDUE').length;
     const nextDueItem = items.find((f) => f.status === 'PENDING');
     const nextDue = nextDueItem?.dueDate ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    return { totalDue: totalDue || 45000, totalPaid, nextDue, overdueCount };
+    return { totalDue, totalPaid, nextDue, overdueCount };
   }
+
+  /** Maps orderId → feeIds so verifyPayment can gate markPaid to the right IDs */
+  private readonly pendingOrders = new Map<string, { usn: string; feeIds: string[] }>();
 
   initiatePaymentGateway(
     usn: string,
     amount: number,
     feeIds: string[],
   ): { orderId: string; amount: number; currency: 'INR'; key: string; prefill: { name: string; email: string } } {
+    const keyId = process.env['RAZORPAY_KEY_ID'] ?? 'rzp_test_stub_key';
     const orderId = `order_${Date.now()}`;
+    this.pendingOrders.set(orderId, { usn, feeIds });
     return {
       orderId,
       amount,
       currency: 'INR',
-      key: 'rzp_test_stub_key',
+      key: keyId,
       prefill: { name: `Student ${usn}`, email: `${usn.toLowerCase()}@rvce.edu.in` },
     };
   }
 
-  verifyPayment(
+  async verifyPayment(
     orderId: string,
     paymentId: string,
     signature: string,
-  ): { success: true; receiptId: string; paidAt: string } {
-    return {
-      success: true,
-      receiptId: `rcpt_${Date.now()}`,
-      paidAt: new Date().toISOString(),
-    };
+  ): Promise<{ success: boolean; receiptId?: string; paidAt?: string; error?: string }> {
+    if (!signature) throw new BadRequestException('razorpay_signature is required');
+
+    const secret = process.env['RAZORPAY_KEY_SECRET'];
+    if (!secret) {
+      // Dev mode — no secret configured, skip HMAC and return success for testing
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('RAZORPAY_KEY_SECRET env var is required in production');
+      }
+      const pending = this.pendingOrders.get(orderId);
+      if (pending) {
+        await this.markPaid(pending.feeIds);
+        this.pendingOrders.delete(orderId);
+      }
+      return { success: true, receiptId: `rcpt_${Date.now()}`, paidAt: new Date().toISOString() };
+    }
+
+    // Production path — HMAC-SHA256 verification with timing-safe comparison
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const receivedBuf = Buffer.from(signature, 'hex');
+
+    if (
+      expectedBuf.length !== receivedBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, receivedBuf)
+    ) {
+      return { success: false, error: 'invalid_signature' };
+    }
+
+    // Signature valid — mark only the fees that belong to this order
+    const pending = this.pendingOrders.get(orderId);
+    if (pending) {
+      this.markPaid(pending.feeIds);
+      this.pendingOrders.delete(orderId);
+    }
+
+    return { success: true, receiptId: `rcpt_${Date.now()}`, paidAt: new Date().toISOString() };
   }
 }

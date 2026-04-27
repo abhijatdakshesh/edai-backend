@@ -1,14 +1,19 @@
 export interface Student {
   id: string;
   userId: string;
-  sapId: string;
+  sapId?: string;
   usn: string;
   name: string;
-  dob: string;
-  sectionId: string;
+  dob?: string;
+  sectionId?: string;
   photoUrl?: string;
   biometricRef?: string;
   institutionId: string;
+  homeState?: string;
+  parentPhone?: string;
+  parentName?: string;
+  consentVoice?: boolean;
+  parentPreferredLanguage?: string;
   createdAt: string;
 }
 

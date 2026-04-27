@@ -10,4 +10,8 @@ export declare class CoursesController {
         message: string;
     };
     getResults(usn: string): import("./courses.service").AcademicResult;
+    getCourse(id: string): import("./courses.service").Course;
+    enrollStudent(id: string, req: any): {
+        message: string;
+    };
 }

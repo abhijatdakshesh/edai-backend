@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ExpressAdapter } from '@nestjs/platform-express';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import type { INestApplication } from '@nestjs/common';
 import * as express from 'express';
 import { AppModule } from './app.module';
@@ -16,7 +17,8 @@ function parseCorsOrigins(): (string | RegExp)[] {
   return [
     'http://localhost:3000',
     'http://localhost:3001',
-    /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/,
+    // 10.x.x.x wildcard only in non-production (avoids arbitrary RFC-1918 access in prod)
+    ...(process.env.NODE_ENV !== 'production' ? [/^http:\/\/10\.\d+\.\d+\.\d+:\d+$/] : []),
   ];
 }
 
@@ -32,6 +34,7 @@ export async function createNestHttpApp(
     bufferLogs: true,
   });
 
+  app.useWebSocketAdapter(new IoAdapter(app));
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());

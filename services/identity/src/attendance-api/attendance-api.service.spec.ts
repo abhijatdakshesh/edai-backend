@@ -246,6 +246,38 @@ describe('AttendanceApiService', () => {
     });
   });
 
+  // ─── VTU 75% exact boundary ──────────────────────────────────────────────────
+
+  describe('getStudentAttendanceSummary() — VTU 75% exact boundary', () => {
+    it('canMiss=0 and mustAttend=0 at exactly 75% (3P/1A)', () => {
+      ['P', 'P', 'P', 'A'].forEach((s) =>
+        service.records.push(makeRecord({ usn: 'USN_75', subjectCode: 'CS301', subjectName: 'DS', status: s as 'P' | 'A' | 'L' })),
+      );
+      const result = service.getStudentAttendanceSummary('USN_75');
+      expect(result[0].pct).toBe(75);
+      expect(result[0].canMiss).toBe(0);
+      expect(result[0].mustAttend).toBe(0);
+    });
+
+    it('canMiss=8 at 90% attendance (36P/4A = 40 total)', () => {
+      for (let i = 0; i < 36; i++) service.records.push(makeRecord({ usn: 'USN_90', subjectCode: 'CS301', subjectName: 'DS', status: 'P' }));
+      for (let i = 0; i < 4; i++)  service.records.push(makeRecord({ usn: 'USN_90', subjectCode: 'CS301', subjectName: 'DS', status: 'A' }));
+      const result = service.getStudentAttendanceSummary('USN_90');
+      expect(result[0].pct).toBe(90);
+      expect(result[0].canMiss).toBe(8);
+    });
+
+    it('mustAttend > 0 at 66.67% (2P/1A = 3 total) to reach 75%', () => {
+      ['P', 'P', 'A'].forEach((s) =>
+        service.records.push(makeRecord({ usn: 'USN_66', subjectCode: 'CS301', subjectName: 'DS', status: s as 'P' | 'A' | 'L' })),
+      );
+      const result = service.getStudentAttendanceSummary('USN_66');
+      expect(result[0].pct).toBeLessThan(75);
+      expect(result[0].mustAttend).toBeGreaterThan(0);
+      expect(result[0].canMiss).toBe(0);
+    });
+  });
+
   // ─── correctRecord ────────────────────────────────────────────────────────────
 
   describe('correctRecord()', () => {

@@ -23,6 +23,7 @@ let VtuService = class VtuService {
     createWindow(data) {
         const win = {
             id: `vtu-win-${Date.now()}`,
+            subjectCodes: data.subjectCodes ?? [],
             ...data,
             isActive: true,
         };
@@ -31,11 +32,16 @@ let VtuService = class VtuService {
         return win;
     }
     getStudentStatus(usn, windowId) {
+        const win = this.windows.find((w) => w.id === windowId);
         const elig = this.eligibilities.find((e) => e.windowId === windowId && e.usn === usn);
         const reg = this.registrations.find((r) => r.windowId === windowId && r.usn === usn);
+        const allSubjects = win?.subjectCodes ?? [];
+        const eligibleSubjects = elig?.eligibleSubjects ?? [];
+        const ineligibleSubjects = allSubjects.filter((code) => !eligibleSubjects.includes(code));
         return {
             status: reg ? 'REGISTERED' : elig?.isEligible ? 'ELIGIBLE' : 'INELIGIBLE',
-            eligibleSubjects: elig?.eligibleSubjects ?? [],
+            eligibleSubjects,
+            ineligibleSubjects,
             registeredSubjects: reg?.subjectCodes ?? [],
         };
     }
@@ -76,6 +82,12 @@ let VtuService = class VtuService {
     }
     runEligibility(windowId) {
         return { processed: this.eligibilities.filter((e) => e.windowId === windowId).length, windowId };
+    }
+    getWindowById(id) {
+        const win = this.windows.find((w) => w.id === id);
+        if (!win)
+            throw new common_1.NotFoundException('Window not found');
+        return win;
     }
 };
 exports.VtuService = VtuService;

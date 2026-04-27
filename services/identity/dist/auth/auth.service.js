@@ -13,7 +13,6 @@ exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const bcrypt = require("bcryptjs");
-const node_crypto_1 = require("node:crypto");
 const SEED_USERS = (() => {
     const h = (plain) => bcrypt.hashSync(plain, 10);
     return [
@@ -33,10 +32,10 @@ const SEED_USERS = (() => {
             id: 'u-faculty-01',
             email: 'teacher@rvce.edu',
             passwordHash: h('Teacher@123'),
-            name: 'Rajesh Kumar',
+            name: 'Ravi Shankar',
             role: 'FACULTY',
             institutionId: 'rvce',
-            preferredLanguage: 'kn',
+            preferredLanguage: 'en',
             isActive: true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -45,7 +44,7 @@ const SEED_USERS = (() => {
             id: 'u-student-01',
             email: 'student@rvce.edu',
             passwordHash: h('Student@123'),
-            name: 'Priya Sharma',
+            name: 'Arjun Kumar',
             role: 'STUDENT',
             institutionId: 'rvce',
             sapId: '1RV21CS001',
@@ -58,10 +57,10 @@ const SEED_USERS = (() => {
             id: 'u-parent-01',
             email: 'parent@rvce.edu',
             passwordHash: h('Parent@123'),
-            name: 'Suresh Sharma',
+            name: 'Suresh Kumar',
             role: 'PARENT',
             institutionId: 'rvce',
-            preferredLanguage: 'kn',
+            preferredLanguage: 'en',
             isActive: true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -70,7 +69,7 @@ const SEED_USERS = (() => {
             id: 'u-hod-01',
             email: 'hod@rvce.edu',
             passwordHash: h('Hod@123'),
-            name: 'Dr. Anitha Rao',
+            name: 'Dr. Meena Rao',
             role: 'HOD',
             institutionId: 'rvce',
             preferredLanguage: 'en',
@@ -82,7 +81,7 @@ const SEED_USERS = (() => {
             id: 'u-principal-01',
             email: 'principal@rvce.edu',
             passwordHash: h('Principal@123'),
-            name: 'Dr. K. N. Subramanya',
+            name: 'Dr. K. Venkatesh',
             role: 'PRINCIPAL',
             institutionId: 'rvce',
             preferredLanguage: 'en',
@@ -96,7 +95,6 @@ let AuthService = class AuthService {
     constructor(jwtService) {
         this.jwtService = jwtService;
         this.users = SEED_USERS;
-        this.refreshStore = new Map();
     }
     async login(email, password) {
         const user = this.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -112,21 +110,24 @@ let AuthService = class AuthService {
         return { ...tokens, user: safeUser };
     }
     refresh(incomingRefreshToken) {
-        const userId = this.refreshStore.get(incomingRefreshToken);
-        if (!userId) {
+        let payload;
+        try {
+            payload = this.jwtService.verify(incomingRefreshToken, { ignoreExpiration: false });
+        }
+        catch {
             throw new common_1.UnauthorizedException('Invalid or expired refresh token');
         }
-        this.refreshStore.delete(incomingRefreshToken);
-        const user = this.users.find((u) => u.id === userId);
-        if (!user || !user.isActive) {
+        if (payload.type !== 'refresh' || !payload.sub) {
+            throw new common_1.UnauthorizedException('Invalid or expired refresh token');
+        }
+        const user = this.users.find((u) => u.id === payload.sub && u.isActive);
+        if (!user) {
             throw new common_1.UnauthorizedException('User not found or inactive');
         }
-        const { accessToken, refreshToken, expiresIn } = this.issueTokens(user);
-        this.refreshStore.set(refreshToken, userId);
+        const { accessToken, expiresIn } = this.issueTokens(user);
         return { accessToken, expiresIn };
     }
-    logout(refreshToken) {
-        this.refreshStore.delete(refreshToken);
+    logout(_refreshToken) {
         return { ok: true };
     }
     validatePayload(payload) {
@@ -145,8 +146,7 @@ let AuthService = class AuthService {
             preferredLanguage: user.preferredLanguage,
         };
         const accessToken = this.jwtService.sign(payload);
-        const refreshToken = (0, node_crypto_1.randomBytes)(40).toString('hex');
-        this.refreshStore.set(refreshToken, user.id);
+        const refreshToken = this.jwtService.sign({ sub: user.id, type: 'refresh' }, { expiresIn: '7d' });
         return { accessToken, refreshToken, expiresIn: 900 };
     }
 };

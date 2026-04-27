@@ -32,6 +32,33 @@ export interface ClassAttendanceSummary {
 }
 export declare class AttendanceApiService {
     records: AttendanceRecord[];
+    getStudentAttendanceSummary(usn: string): Array<{
+        courseId: string;
+        courseName: string;
+        courseCode: string;
+        totalClasses: number;
+        attended: number;
+        pct: number;
+        canMiss: number;
+        mustAttend: number;
+    }>;
+    getClassAttendanceSummary(classId: string): {
+        classId: string;
+        className: string;
+        date: string;
+        totalStudents: number;
+        present: number;
+        absent: number;
+        late: number;
+        pct: number;
+    };
+    getAtRiskStudents(classId: string): Array<{
+        usn: string;
+        name: string;
+        pct: number;
+        parentPhone: string;
+        lastCallDate?: string;
+    }>;
     getStudentAttendance(usn: string): StudentAttendanceSummary;
     markBulk(classId: string, date: string, entries: Array<{
         usn: string;

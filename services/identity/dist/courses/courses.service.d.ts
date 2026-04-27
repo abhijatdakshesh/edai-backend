@@ -42,4 +42,5 @@ export declare class CoursesService {
         message: string;
     };
     getResults(usn: string): AcademicResult;
+    getCourseById(id: string): Course;
 }

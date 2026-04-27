@@ -35,6 +35,30 @@ let JobsService = class JobsService {
             results = results.filter((p) => p.likelihood === likelihood);
         return results;
     }
+    getJob(id) {
+        const job = this.jobs.find((j) => j.id === id);
+        if (!job)
+            throw new common_1.NotFoundException('Job not found');
+        return job;
+    }
+    getMyApplications(usn) {
+        return this.applications
+            .filter((a) => a.usn === usn)
+            .map((a) => {
+            const job = this.jobs.find((j) => j.id === a.jobId);
+            return {
+                id: `app-${a.jobId}-${usn}`,
+                jobId: a.jobId,
+                companyName: job?.company ?? 'Unknown',
+                role: job?.role ?? 'Unknown',
+                status: 'APPLIED',
+                appliedAt: a.appliedAt,
+            };
+        });
+    }
+    withdraw(applicationId) {
+        return { ok: true };
+    }
 };
 exports.JobsService = JobsService;
 exports.JobsService = JobsService = __decorate([

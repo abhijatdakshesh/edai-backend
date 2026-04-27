@@ -16,4 +16,24 @@ export declare class WellnessController {
         done: boolean;
     }): import("./wellness.service").StudyTask;
     getResources(): import("./wellness.service").WellnessResource[];
+    bookSessionAlias(body: {
+        slotId: string;
+        reason: string;
+    }, req: any): import("./wellness.service").CounselorSession;
+    getMyRiskScore(req: any): import("./wellness.service").RiskScore;
+    completeTask(id: string): import("./wellness.service").StudyTask;
+    getResourcesAlias(): import("./wellness.service").WellnessResource[];
+    stressAssessment(body: {
+        answers: Record<string, number>;
+    }, req: any): {
+        score: number;
+        level: "LOW" | "MEDIUM" | "HIGH";
+        recommendations: string[];
+    };
+    generateStudyPlan(body: {
+        examDate: string;
+        subjects: string[];
+    }, req: any): {
+        tasks: import("./wellness.service").StudyTask[];
+    };
 }

@@ -23,8 +23,18 @@ let JobsController = class JobsController {
     getJobs() {
         return this.svc.getJobs();
     }
+    getMyApplications(req) {
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+        return this.svc.getMyApplications(usn);
+    }
+    withdrawApplication(id) {
+        return this.svc.withdraw(id);
+    }
+    getJob(id) {
+        return this.svc.getJob(id);
+    }
     apply(id, req) {
-        const usn = req.user?.usn ?? req.user?.sub ?? 'UNKNOWN';
+        const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
         return this.svc.apply(id, usn);
     }
     getPredictions(dept, likelihood) {
@@ -38,6 +48,27 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], JobsController.prototype, "getJobs", null);
+__decorate([
+    (0, common_1.Get)('jobs/applications/me'),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], JobsController.prototype, "getMyApplications", null);
+__decorate([
+    (0, common_1.Patch)('jobs/applications/:applicationId/withdraw'),
+    __param(0, (0, common_1.Param)('applicationId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], JobsController.prototype, "withdrawApplication", null);
+__decorate([
+    (0, common_1.Get)('jobs/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], JobsController.prototype, "getJob", null);
 __decorate([
     (0, common_1.Post)('jobs/:id/apply'),
     __param(0, (0, common_1.Param)('id')),

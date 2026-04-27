@@ -20,11 +20,10 @@ export interface LoginResponse extends TokenPair {
 export declare class AuthService {
     private readonly jwtService;
     private readonly users;
-    private readonly refreshStore;
     constructor(jwtService: JwtService);
     login(email: string, password: string): Promise<LoginResponse>;
     refresh(incomingRefreshToken: string): Pick<TokenPair, 'accessToken' | 'expiresIn'>;
-    logout(refreshToken: string): {
+    logout(_refreshToken: string): {
         ok: boolean;
     };
     validatePayload(payload: JwtPayload): Omit<User, 'passwordHash'> | null;
