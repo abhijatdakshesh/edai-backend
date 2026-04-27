@@ -117,21 +117,28 @@ export class EarlyWarningService {
   }
 
   async updateWeights(updates: { factor: RiskFactor; weight: number }[]): Promise<ScoringWeightEntity[]> {
+    for (const u of updates) {
+      if (typeof u.weight !== 'number' || !isFinite(u.weight)) {
+        throw new Error(`Invalid weight for factor ${u.factor}: must be a finite number`);
+      }
+    }
     const total = updates.reduce((s, u) => s + u.weight, 0);
     if (Math.abs(total - 1) > 0.001) {
       throw new Error(`Weights must sum to 1.0 (got ${total.toFixed(3)})`);
     }
-    const results: ScoringWeightEntity[] = [];
-    for (const u of updates) {
-      let entity = await this.weightRepo.findOne({ where: { factor: u.factor } });
-      if (!entity) {
-        entity = this.weightRepo.create({ factor: u.factor, weight: u.weight, active: true });
-      } else {
-        entity.weight = u.weight;
+    return this.weightRepo.manager.transaction(async (em) => {
+      const results: ScoringWeightEntity[] = [];
+      for (const u of updates) {
+        let entity = await em.findOne(ScoringWeightEntity, { where: { factor: u.factor } });
+        if (!entity) {
+          entity = em.create(ScoringWeightEntity, { factor: u.factor, weight: u.weight, active: true });
+        } else {
+          entity.weight = u.weight;
+        }
+        results.push(await em.save(ScoringWeightEntity, entity));
       }
-      results.push(await this.weightRepo.save(entity));
-    }
-    return results;
+      return results;
+    });
   }
 
   private async loadWeights(): Promise<Record<RiskFactor, number>> {

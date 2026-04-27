@@ -35,14 +35,26 @@ function mockRepo<T extends object>() {
   qb['getMany'] = jest.fn().mockResolvedValue([]);
   qb['getCount'] = jest.fn().mockResolvedValue(0);
 
-  return {
+  const repo = {
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn().mockImplementation((e: T) => Promise.resolve({ id: 'saved-id', ...e })),
     create: jest.fn().mockImplementation((e: Partial<T>) => ({ ...e } as T)),
     createQueryBuilder: jest.fn().mockReturnValue(qb),
     _qb: qb,
+    manager: {
+      // Executes callback with a minimal entity manager that delegates back to repo mocks
+      transaction: jest.fn().mockImplementation(async (cb: (em: unknown) => Promise<unknown>) => {
+        const em = {
+          findOne: (_: unknown, opts: unknown) => repo.findOne(opts),
+          save: (_: unknown, e: T) => repo.save(e),
+          create: (_: unknown, e: Partial<T>) => repo.create(e),
+        };
+        return cb(em);
+      }),
+    },
   };
+  return repo;
 }
 
 const mockKafka = {
@@ -359,6 +371,16 @@ describe('EarlyWarningService', () => {
     it('throws when weights do not sum to 1.0', async () => {
       const bad = [{ factor: 'attendance' as const, weight: 0.5 }];
       await expect(service.updateWeights(bad)).rejects.toThrow('Weights must sum to 1.0');
+    });
+
+    it('throws for NaN weight bypassing sum guard', async () => {
+      const bad = [{ factor: 'attendance' as const, weight: NaN }];
+      await expect(service.updateWeights(bad)).rejects.toThrow('Invalid weight');
+    });
+
+    it('throws for Infinity weight', async () => {
+      const bad = [{ factor: 'attendance' as const, weight: Infinity }];
+      await expect(service.updateWeights(bad)).rejects.toThrow('Invalid weight');
     });
 
     it('creates new weight entities when none exist in DB', async () => {
