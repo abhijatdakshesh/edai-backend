@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AlertEventEntity } from './entities/alert-event.entity';
 import { AlertRuleEntity } from './entities/alert-rule.entity';
@@ -8,6 +9,7 @@ import { EarlyWarningController, EwsAdminController } from './early-warning.cont
 import { EarlyWarningService } from './early-warning.service';
 import { EwsRiskEngineService } from './ews-risk-engine.service';
 import { KafkaProducerService } from './kafka-producer.service';
+import { RolesGuard } from './roles.guard';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { KafkaProducerService } from './kafka-producer.service';
   providers: [
     EarlyWarningService,
     EwsRiskEngineService,
+    RolesGuard,
+    Reflector,
     {
       provide: KafkaProducerService,
       // Brokers resolved at factory call time (not module parse time)

@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { EarlyWarningService, type AcknowledgeAlertDto, type ScoreStudentDto } from './early-warning.service';
 import type { RiskFactor } from './entities/scoring-weight.entity';
+import { Roles, RolesGuard } from './roles.guard';
 
 @Controller('ews/v1')
 export class EarlyWarningController {
@@ -47,9 +48,11 @@ export class EarlyWarningController {
 
 /**
  * Admin endpoints for weight management.
- * TODO Phase 2: add @UseGuards(JwtAuthGuard) @Roles('ADMIN', 'PRINCIPAL') once
- * the identity service JWT guard is extracted to a shared package.
+ * Phase 1: role guard reads x-user-role header set by Nginx API gateway.
+ * Phase 2: replace RolesGuard with full JwtAuthGuard from shared-auth package.
  */
+@UseGuards(RolesGuard)
+@Roles('ADMIN', 'PRINCIPAL')
 @Controller('ews/v1/admin')
 export class EwsAdminController {
   constructor(private readonly ews: EarlyWarningService) {}

@@ -3,7 +3,8 @@
  * All EarlyWarningService calls are mocked.
  */
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { EarlyWarningController, EwsAdminController } from './early-warning.controller';
 import { EarlyWarningService } from './early-warning.service';
@@ -11,6 +12,7 @@ import type { RiskSnapshotEntity } from './entities/risk-snapshot.entity';
 import type { AlertEventEntity } from './entities/alert-event.entity';
 import type { ScoringWeightEntity } from './entities/scoring-weight.entity';
 import type { ScoreStudentDto } from './early-warning.service';
+import { RolesGuard } from './roles.guard';
 
 const mockEws = {
   scoreStudent: jest.fn(),
@@ -25,11 +27,16 @@ const mockEws = {
 async function buildControllers() {
   const module = await Test.createTestingModule({
     controllers: [EarlyWarningController, EwsAdminController],
-    providers: [{ provide: EarlyWarningService, useValue: mockEws }],
+    providers: [
+      { provide: EarlyWarningService, useValue: mockEws },
+      RolesGuard,
+      Reflector,
+    ],
   }).compile();
   return {
     ctrl: module.get(EarlyWarningController),
     admin: module.get(EwsAdminController),
+    guard: module.get(RolesGuard),
   };
 }
 
@@ -212,5 +219,60 @@ describe('EwsAdminController', () => {
       const body = [{ factor: 'attendance' as const, weight: 0.5 }];
       await expect(admin.updateWeights(body)).rejects.toThrow('Weights must sum to 1.0');
     });
+  });
+});
+
+// ── RolesGuard ────────────────────────────────────────────────────────────────
+
+describe('RolesGuard', () => {
+  let guard: RolesGuard;
+  let reflector: Reflector;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    ({ guard } = await buildControllers());
+    reflector = new Reflector();
+  });
+
+  function makeCtx(role: string | undefined, requiredRoles: string[]) {
+    const req = { headers: {} as Record<string, string> };
+    if (role !== undefined) req.headers['x-user-role'] = role;
+    return {
+      switchToHttp: () => ({ getRequest: () => req }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      // Provide required roles via reflector spy
+      _roles: requiredRoles,
+    } as unknown as import('@nestjs/common').ExecutionContext;
+  }
+
+  it('allows ADMIN to access admin endpoint', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
+    const guard2 = new RolesGuard(reflector);
+    expect(guard2.canActivate(makeCtx('ADMIN', ['ADMIN', 'PRINCIPAL']))).toBe(true);
+  });
+
+  it('allows PRINCIPAL to access admin endpoint', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
+    const guard2 = new RolesGuard(reflector);
+    expect(guard2.canActivate(makeCtx('PRINCIPAL', ['ADMIN', 'PRINCIPAL']))).toBe(true);
+  });
+
+  it('throws ForbiddenException for STUDENT role', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
+    const guard2 = new RolesGuard(reflector);
+    expect(() => guard2.canActivate(makeCtx('STUDENT', ['ADMIN', 'PRINCIPAL']))).toThrow(ForbiddenException);
+  });
+
+  it('throws UnauthorizedException when x-user-role header is missing', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['ADMIN', 'PRINCIPAL']);
+    const guard2 = new RolesGuard(reflector);
+    expect(() => guard2.canActivate(makeCtx(undefined, ['ADMIN', 'PRINCIPAL']))).toThrow(UnauthorizedException);
+  });
+
+  it('allows any role when no roles are required', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
+    const guard2 = new RolesGuard(reflector);
+    expect(guard2.canActivate(makeCtx('STUDENT', []))).toBe(true);
   });
 });
