@@ -28,6 +28,8 @@ import { SeedModule } from './seed/seed.module';
 import { PromotionModule } from './promotion/promotion.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { AbcCreditsModule } from './abc-credits/abc-credits.module';
+import { NlQueryModule } from './nl-query/nl-query.module';
+import { RiskModule } from './risk/risk.module';
 
 @Module({
   imports: [
@@ -61,6 +63,8 @@ import { AbcCreditsModule } from './abc-credits/abc-credits.module';
     PromotionModule,
     ChatbotModule,
     AbcCreditsModule,
+    NlQueryModule,
+    RiskModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
