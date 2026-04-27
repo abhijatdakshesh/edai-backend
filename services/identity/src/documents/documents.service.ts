@@ -13,7 +13,7 @@ import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import * as jwt from 'jsonwebtoken';
 import Anthropic from '@anthropic-ai/sdk';
-import * as PDFDocument from 'pdfkit';
+import PDFDocument = require('pdfkit');
 import * as QRCode from 'qrcode';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -175,10 +175,14 @@ export class DocumentsService {
     // Set expiry 90 days
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-    await this.db.query(
-      `UPDATE document_requests SET ai_body = $2, signed_token = $3, expires_at = $4 WHERE id = $1`,
+    const updateRows = await this.db.query(
+      `UPDATE document_requests SET ai_body = $2, signed_token = $3, expires_at = $4 WHERE id = $1 RETURNING id`,
       [id, aiBody, token, expiresAt],
     );
+    if (!updateRows.length) {
+      this.logger.error(`[Documents] Failed to persist signed_token for ${id} — second UPDATE matched 0 rows`);
+      throw new InternalServerErrorException('Failed to persist document token');
+    }
 
     const finalDoc = { ...doc, aiBody, signedToken: token, expiresAt };
     this.events.emitDocumentStatusChanged({ docId: id, studentUsn: doc.studentUsn, status: 'APPROVED' });
@@ -291,10 +295,12 @@ export class DocumentsService {
       pdf.font('Helvetica').fontSize(12).text(doc.aiBody ?? '', { align: 'justify', lineGap: 4 });
       pdf.moveDown(2);
 
-      // QR code
+      // QR code — capture y before image() advances the cursor
       const qrBuf = Buffer.from(qrBase64, 'base64');
-      pdf.image(qrBuf, pdf.page.width - 130, pdf.y - 10, { width: 80 });
-      pdf.font('Helvetica').fontSize(8).text('Scan to verify', pdf.page.width - 130, pdf.y + 2, { width: 80, align: 'center' });
+      const qrX = pdf.page.width - 130;
+      const qrY = Math.max(pdf.y, 60);
+      pdf.image(qrBuf, qrX, qrY, { width: 80 });
+      pdf.font('Helvetica').fontSize(8).text('Scan to verify', qrX, qrY + 84, { width: 80, align: 'center' });
       pdf.moveDown(5);
 
       // Footer
