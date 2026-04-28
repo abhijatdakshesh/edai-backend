@@ -26,8 +26,12 @@ export class ParentPortalService {
   /** Returns true if parentId is linked to the given student USN */
   isParentOf(parentId: string, usn: string): boolean {
     const linked = this.parentChildMap.get(parentId);
-    // Fallback: if no explicit mapping exists (stub/dev), allow the default student
-    if (!linked) return usn === '1RV21CS001';
+    if (!linked) {
+      // Dev-only fallback: allow access to the seed student when no mapping exists
+      // In production, no mapping = no access
+      if (process.env['NODE_ENV'] === 'production') return false;
+      return usn === '1RV21CS001';
+    }
     return linked.includes(usn);
   }
 

@@ -587,36 +587,28 @@ describe('GET /api/fees/student/:usn/summary', () => {
   });
 });
 
-describe('POST /api/fees/payment/initiate', () => {
-  it('returns 200 with orderId and amount', async () => {
-    const res = await http
-      .post('/api/fees/payment/initiate')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ usn: FEES_USN, amount: 50000, feeIds: ['f-1'] });
-    expect([200, 201]).toContain(res.status);
-    expect(res.body.orderId).toBeTruthy();
-    expect(typeof res.body.amount).toBe('number');
-  });
+// Payment initiation and verification are INTENTIONALLY removed from fees-api routes.
+// All payment flows now go through parent-portal.controller.ts which enforces
+// parent→child ownership and server-side amount computation.
+// See: POST /api/parent/children/:usn/fees/pay and /fees/verify
 
-  it('response has currency INR', async () => {
+describe('POST /api/fees/payment/initiate (removed — IDOR/amount-bypass fix)', () => {
+  it('returns 404 — endpoint removed, payment flows via parent-portal', async () => {
     const res = await http
       .post('/api/fees/payment/initiate')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ usn: FEES_USN, amount: 50000, feeIds: ['f-1'] });
-    expect([200, 201]).toContain(res.status);
-    expect(res.body.currency).toBe('INR');
+    expect(res.status).toBe(404);
   });
 });
 
-describe('POST /api/fees/payment/verify', () => {
-  it('returns 200 with success:true and receiptId', async () => {
+describe('POST /api/fees/payment/verify (removed — ownership fix)', () => {
+  it('returns 404 — endpoint removed, verify flows via parent-portal', async () => {
     const res = await http
       .post('/api/fees/payment/verify')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ orderId: 'order-123', paymentId: 'pay-456', signature: 'sig-789' });
-    expect([200, 201]).toContain(res.status);
-    expect(res.body.success).toBe(true);
-    expect(res.body.receiptId).toBeTruthy();
+    expect(res.status).toBe(404);
   });
 });
 

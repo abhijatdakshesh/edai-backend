@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Optional, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional, OnModuleInit, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -25,6 +25,8 @@ export interface FeeSummary {
 
 @Injectable()
 export class FeesApiService implements OnModuleInit {
+  private readonly logger = new Logger(FeesApiService.name);
+
   /** In-memory fallback — used when DATABASE_URL is not configured */
   feeItems: FeeItem[] = [];
 
@@ -74,7 +76,7 @@ export class FeesApiService implements OnModuleInit {
   async markPaid(feeIds: string[]): Promise<void> {
     const paidDate = new Date().toISOString();
     for (const id of feeIds) {
-      const fee = this.feeItems.find((f) => f.id === id);
+      const fee = this.feeItems.find((f) => f.id === id && f.status !== 'PAID');
       if (fee) {
         fee.status = 'PAID';
         fee.paidDate = paidDate;
@@ -83,7 +85,7 @@ export class FeesApiService implements OnModuleInit {
     if (this.feeRepo) {
       await this.feeRepo.manager.transaction(async (manager) => {
         for (const id of feeIds) {
-          await manager.update(FeeItemEntity, { id }, { status: 'PAID', paidDate });
+          await manager.update(FeeItemEntity, { id, status: 'PENDING' }, { status: 'PAID', paidDate });
         }
       });
     }
@@ -153,12 +155,13 @@ export class FeesApiService implements OnModuleInit {
       });
       if (!res.ok) {
         const err = await res.text();
-        throw new Error(`Razorpay order creation failed ${res.status}: ${err.slice(0, 200)}`);
+        this.logger.error(`Razorpay order creation failed ${res.status}: ${err.slice(0, 200)}`);
+        throw new ServiceUnavailableException('Payment gateway temporarily unavailable');
       }
       const data = (await res.json()) as { id: string };
       orderId = data.id;
     } else {
-      orderId = `order_${Date.now()}`;
+      orderId = `order_${crypto.randomUUID()}`;
     }
 
     this.pendingOrders.set(orderId, { usn, feeIds });
@@ -180,13 +183,21 @@ export class FeesApiService implements OnModuleInit {
 
     const secret = process.env['RAZORPAY_KEY_SECRET'];
     if (!secret) {
-      // No secret = dev stub mode only — mark paid without HMAC (never runs in prod when secret is set)
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new Error('RAZORPAY_KEY_SECRET must be set in production — payment bypass is disabled');
+      }
+      // Dev stub mode only — mark paid without HMAC
       const pending = this.pendingOrders.get(orderId);
       if (pending) {
         await this.markPaid(pending.feeIds);
         this.pendingOrders.delete(orderId);
       }
       return { success: true, receiptId: `rcpt_${Date.now()}`, paidAt: new Date().toISOString() };
+    }
+
+    // Validate signature is a 64-char hex string (Razorpay HMAC-SHA256 output)
+    if (!/^[0-9a-f]{64}$/i.test(signature)) {
+      return { success: false, error: 'invalid_signature' };
     }
 
     // Production path — HMAC-SHA256 verification with timing-safe comparison
@@ -198,10 +209,7 @@ export class FeesApiService implements OnModuleInit {
     const expectedBuf = Buffer.from(expected, 'hex');
     const receivedBuf = Buffer.from(signature, 'hex');
 
-    if (
-      expectedBuf.length !== receivedBuf.length ||
-      !crypto.timingSafeEqual(expectedBuf, receivedBuf)
-    ) {
+    if (!crypto.timingSafeEqual(expectedBuf, receivedBuf)) {
       return { success: false, error: 'invalid_signature' };
     }
 

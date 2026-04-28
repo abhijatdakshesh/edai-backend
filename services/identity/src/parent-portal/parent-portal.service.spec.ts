@@ -6,7 +6,12 @@ import { FeesApiService } from '../fees-api/fees-api.service';
 import { CoursesService } from '../courses/courses.service';
 
 const mockAttendanceSvc = { getStudentAttendance: jest.fn() };
-const mockFeesSvc = { getStudentFees: jest.fn(), feeItems: [] };
+const mockFeesSvc = {
+  getStudentFees: jest.fn(),
+  initiatePaymentGateway: jest.fn(),
+  verifyPayment: jest.fn(),
+  feeItems: [],
+};
 const mockCoursesSvc = { getResults: jest.fn(), getCourses: jest.fn() };
 
 describe('ParentPortalService', () => {
@@ -163,6 +168,133 @@ describe('ParentPortalService', () => {
       expect(result.dept).toBe('Computer Science');
       expect(result.semester).toBe(5);
       expect(result.cgpa).toBe(7.5);
+    });
+  });
+
+  // ─── isParentOf ─────────────────────────────────────────────────────────────
+
+  describe('isParentOf()', () => {
+    it('returns true for the dev seed USN when no mapping exists and NODE_ENV != production', () => {
+      delete process.env['NODE_ENV'];
+      const result = service.isParentOf('unknown-parent', '1RV21CS001');
+      expect(result).toBe(true);
+    });
+
+    it('returns false for non-seed USN when no mapping exists', () => {
+      delete process.env['NODE_ENV'];
+      const result = service.isParentOf('unknown-parent', '1RV21CS099');
+      expect(result).toBe(false);
+    });
+
+    it('returns false for any USN when no mapping exists and NODE_ENV = production', () => {
+      process.env['NODE_ENV'] = 'production';
+      const result = service.isParentOf('unknown-parent', '1RV21CS001');
+      expect(result).toBe(false);
+      delete process.env['NODE_ENV'];
+    });
+
+    it('returns true when explicit mapping contains the USN', () => {
+      service.parentChildMap.set('parent-explicit', ['USN100', 'USN101']);
+      expect(service.isParentOf('parent-explicit', 'USN100')).toBe(true);
+    });
+
+    it('returns false when explicit mapping does NOT contain the USN', () => {
+      service.parentChildMap.set('parent-explicit', ['USN100']);
+      expect(service.isParentOf('parent-explicit', 'USN999')).toBe(false);
+    });
+  });
+
+  // ─── payFees ────────────────────────────────────────────────────────────────
+
+  describe('payFees()', () => {
+    it('throws NotFoundException when all provided feeIds are already PAID', async () => {
+      mockFeesSvc.getStudentFees.mockReturnValue({
+        totalDue: 50000,
+        totalOutstanding: 0,
+        items: [
+          { id: 'f-1', amount: 25000, status: 'PAID' },
+          { id: 'f-2', amount: 25000, status: 'PAID' },
+        ],
+      });
+      await expect(service.payFees('USN001', ['f-1', 'f-2'])).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when feeIds do not match any item', async () => {
+      mockFeesSvc.getStudentFees.mockReturnValue({
+        totalDue: 50000,
+        totalOutstanding: 50000,
+        items: [{ id: 'f-99', amount: 50000, status: 'PENDING' }],
+      });
+      await expect(service.payFees('USN001', ['f-WRONG'])).rejects.toThrow(NotFoundException);
+    });
+
+    it('excludes PAID items and computes amount server-side from remaining unpaid fees', async () => {
+      mockFeesSvc.getStudentFees.mockReturnValue({
+        totalDue: 75000,
+        totalOutstanding: 50000,
+        items: [
+          { id: 'f-1', amount: 25000, status: 'PAID' },
+          { id: 'f-2', amount: 50000, status: 'PENDING' },
+        ],
+      });
+      mockFeesSvc.initiatePaymentGateway.mockResolvedValue({ orderId: 'order_abc', amount: 50000 });
+      await service.payFees('USN001', ['f-1', 'f-2']);
+      expect(mockFeesSvc.initiatePaymentGateway).toHaveBeenCalledWith('USN001', 50000, ['f-2']);
+    });
+
+    it('computes correct total when multiple unpaid fees selected', async () => {
+      mockFeesSvc.getStudentFees.mockReturnValue({
+        totalDue: 90000,
+        totalOutstanding: 90000,
+        items: [
+          { id: 'f-tuition', amount: 60000, status: 'PENDING' },
+          { id: 'f-lab', amount: 30000, status: 'PENDING' },
+        ],
+      });
+      mockFeesSvc.initiatePaymentGateway.mockResolvedValue({ orderId: 'order_xyz', amount: 90000 });
+      await service.payFees('USN001', ['f-tuition', 'f-lab']);
+      expect(mockFeesSvc.initiatePaymentGateway).toHaveBeenCalledWith('USN001', 90000, ['f-tuition', 'f-lab']);
+    });
+  });
+
+  // ─── verifyFeePayment ───────────────────────────────────────────────────────
+
+  describe('verifyFeePayment()', () => {
+    it('delegates to feesSvc and returns the result on success', async () => {
+      mockFeesSvc.verifyPayment.mockResolvedValue({ success: true, receiptId: 'rcpt_001' });
+      const result = await service.verifyFeePayment('order_123', 'pay_abc', 'valid_sig');
+      expect(result).toEqual({ success: true, receiptId: 'rcpt_001' });
+      expect(mockFeesSvc.verifyPayment).toHaveBeenCalledWith('order_123', 'pay_abc', 'valid_sig');
+    });
+
+    it('propagates rejection when signature verification fails', async () => {
+      mockFeesSvc.verifyPayment.mockRejectedValue(new Error('invalid_signature'));
+      await expect(service.verifyFeePayment('order_123', 'pay_abc', 'TAMPERED')).rejects.toThrow('invalid_signature');
+    });
+  });
+
+  // ─── checkScholarship ───────────────────────────────────────────────────────
+
+  describe('checkScholarship()', () => {
+    it('returns eligible true with all three scheme entries', () => {
+      const result = service.checkScholarship('USN001');
+      expect(result.eligible).toBe(true);
+      expect(result.schemes).toHaveLength(3);
+      expect(result.schemes.map((s) => s.name)).toEqual([
+        'SC/ST Scholarship',
+        'Merit Scholarship',
+        'National Scholarship Portal',
+      ]);
+    });
+
+    it('returns correct scholarship amounts for Karnataka SC/ST and NSP criteria', () => {
+      const result = service.checkScholarship('1RV21CS001');
+      const scst = result.schemes.find((s) => s.name === 'SC/ST Scholarship');
+      const merit = result.schemes.find((s) => s.name === 'Merit Scholarship');
+      const nsp = result.schemes.find((s) => s.name === 'National Scholarship Portal');
+      expect(scst?.amount).toBe(25000);
+      expect(merit?.amount).toBe(15000);
+      expect(nsp?.amount).toBe(20000);
     });
   });
 });
