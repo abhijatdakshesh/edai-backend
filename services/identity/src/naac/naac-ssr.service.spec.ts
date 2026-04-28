@@ -2,14 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NaacSsrService } from './naac-ssr.service';
 import { NaacService, CriterionResult, NaacDashboard } from './naac.service';
 
-// ─── Mock Anthropic SDK ──────────────────────────────────────────────────────
+// ─── Mock Gemini SDK ─────────────────────────────────────────────────────────
 
-const mockCreate = jest.fn();
-jest.mock('@anthropic-ai/sdk', () => {
+const mockGenerateContent = jest.fn();
+jest.mock('@google/generative-ai', () => {
   return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      messages: { create: mockCreate },
+    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: mockGenerateContent,
+      }),
     })),
   };
 });
@@ -63,6 +64,9 @@ const makeDashboard = (criteria: CriterionResult[] = []): NaacDashboard => ({
   summary: { totalWeightage: 100, autoMetrics: 2, manualMetrics: 0, errorMetrics: 0 },
 });
 
+const mockGeminiResponse = (text: string) =>
+  ({ response: { text: () => text } });
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('NaacSsrService', () => {
@@ -90,9 +94,7 @@ describe('NaacSsrService', () => {
     it('returns paragraph with criterionId, criterionName, and generatedAt on success', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'This is the SSR paragraph for C2.' }],
-      });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('This is the SSR paragraph for C2.'));
 
       const result = await service.generateCriterionParagraph('C2');
 
@@ -112,10 +114,10 @@ describe('NaacSsrService', () => {
       expect(result.paragraph).toContain('No data found for criterion C99');
     });
 
-    it('returns fallback paragraph when Claude API throws', async () => {
+    it('returns fallback paragraph when Gemini API throws', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockRejectedValue(new Error('Anthropic API unavailable'));
+      mockGenerateContent.mockRejectedValue(new Error('Gemini API unavailable'));
 
       const result = await service.generateCriterionParagraph('C2');
 
@@ -123,10 +125,10 @@ describe('NaacSsrService', () => {
       expect(result.paragraph).toContain('32');
     });
 
-    it('returns fallback paragraph when Claude returns empty content array', async () => {
+    it('returns fallback paragraph when Gemini returns empty text', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse(''));
 
       const result = await service.generateCriterionParagraph('C2');
 
@@ -134,32 +136,20 @@ describe('NaacSsrService', () => {
       expect(result.paragraph.length).toBeGreaterThan(0);
     });
 
-    it('returns fallback paragraph when Claude returns non-text content type', async () => {
+    it('trims whitespace from Gemini response', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'image', source: {} }] });
-
-      const result = await service.generateCriterionParagraph('C2');
-
-      expect(result.paragraph).toBeTruthy();
-    });
-
-    it('trims whitespace from Claude response', async () => {
-      const criterion = makeCriterion('C2');
-      mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({
-        content: [{ type: 'text', text: '  \n  Paragraph text here.  \n  ' }],
-      });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('  \n  Paragraph text here.  \n  '));
 
       const result = await service.generateCriterionParagraph('C2');
 
       expect(result.paragraph).toBe('Paragraph text here.');
     });
 
-    it('returns fallback when Claude throws a non-Error value (string throw)', async () => {
+    it('returns fallback when Gemini throws a non-Error value (string throw)', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockRejectedValue('rate_limit_exceeded');
+      mockGenerateContent.mockRejectedValue('rate_limit_exceeded');
 
       const result = await service.generateCriterionParagraph('C2');
 
@@ -173,7 +163,7 @@ describe('NaacSsrService', () => {
     it('returns one section per criterion in the dashboard', async () => {
       const criteria = ['C1', 'C2', 'C3'].map(id => makeCriterion(id));
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard(criteria));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'SSR text.' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('SSR text.'));
 
       const result = await service.generateFullSsr();
 
@@ -184,7 +174,7 @@ describe('NaacSsrService', () => {
     it('includes institution name, CGPA, and grade from dashboard in response', async () => {
       const criteria = [makeCriterion('C1')];
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard(criteria));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'SSR text.' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('SSR text.'));
 
       const result = await service.generateFullSsr();
 
@@ -202,12 +192,11 @@ describe('NaacSsrService', () => {
       expect(result.sections).toHaveLength(0);
     });
 
-    it('uses fallback paragraph for a criterion when Claude fails mid-loop', async () => {
+    it('uses fallback paragraph for a criterion when Gemini fails mid-loop', async () => {
       const criteria = ['C1', 'C2'].map(id => makeCriterion(id));
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard(criteria));
-      // C1 succeeds, C2 fails
-      mockCreate
-        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'C1 paragraph.' }] })
+      mockGenerateContent
+        .mockResolvedValueOnce(mockGeminiResponse('C1 paragraph.'))
         .mockRejectedValueOnce(new Error('rate limit'));
 
       const result = await service.generateFullSsr();
@@ -216,28 +205,28 @@ describe('NaacSsrService', () => {
       expect(result.sections[1].paragraph).toContain('Criterion C2');
     });
 
-    it('generates paragraphs sequentially (one Claude call per criterion)', async () => {
+    it('generates paragraphs sequentially (one Gemini call per criterion)', async () => {
       const criteria = ['C1', 'C2', 'C3'].map(id => makeCriterion(id));
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard(criteria));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'text.' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('text.'));
 
       await service.generateFullSsr();
 
-      expect(mockCreate).toHaveBeenCalledTimes(3);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(3);
     });
   });
 
   // ── buildPrompt ────────────────────────────────────────────────────────────
 
-  describe('buildPrompt() — via callClaude', () => {
-    it('includes criterion name and institution in the prompt sent to Claude', async () => {
+  describe('buildPrompt() — via callGemini', () => {
+    it('includes criterion name and institution in the prompt sent to Gemini', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
       await service.generateCriterionParagraph('C2');
 
-      const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
+      const promptSent: string = mockGenerateContent.mock.calls[0][0];
       expect(promptSent).toContain('RV Institute of Technology');
       expect(promptSent).toContain('VTU');
       expect(promptSent).toContain('C2');
@@ -249,11 +238,11 @@ describe('NaacSsrService', () => {
         metrics: [makeMetric('2.1.1', { liveData: { enrolled: 412, pct: 85.8 } })],
       });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
       await service.generateCriterionParagraph('C2');
 
-      const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
+      const promptSent: string = mockGenerateContent.mock.calls[0][0];
       expect(promptSent).toContain('412');
     });
 
@@ -262,11 +251,11 @@ describe('NaacSsrService', () => {
         metrics: [makeMetric('2.4.1', { liveData: null, dataSource: 'manual', status: 'MANUAL' })],
       });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
       await service.generateCriterionParagraph('C2');
 
-      const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
+      const promptSent: string = mockGenerateContent.mock.calls[0][0];
       expect(promptSent).not.toContain('Live Data:');
     });
 
@@ -275,11 +264,11 @@ describe('NaacSsrService', () => {
         metrics: [makeMetric('6.2.2', { edaiNote: 'EdAI counts as e-governance evidence' })],
       });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
       await service.generateCriterionParagraph('C6');
 
-      const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
+      const promptSent: string = mockGenerateContent.mock.calls[0][0];
       expect(promptSent).toContain('EdAI counts as e-governance evidence');
     });
 
@@ -288,12 +277,11 @@ describe('NaacSsrService', () => {
         jest.clearAllMocks();
         const criterion = makeCriterion(cId);
         mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-        mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+        mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
         await service.generateCriterionParagraph(cId);
 
-        const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
-        // All known criteria have a non-empty context string
+        const promptSent: string = mockGenerateContent.mock.calls[0][0];
         expect(promptSent.length).toBeGreaterThan(200);
       }
     });
@@ -301,9 +289,8 @@ describe('NaacSsrService', () => {
     it('gracefully handles unknown criterion ID with empty context string', async () => {
       const criterion = makeCriterion('C99');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
-      // Should not throw
       await expect(service.generateCriterionParagraph('C99')).resolves.toBeDefined();
     });
 
@@ -312,11 +299,11 @@ describe('NaacSsrService', () => {
         metrics: [makeMetric('2.1.1', { earnedScore: null as unknown as number })],
       });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
       await service.generateCriterionParagraph('C2');
 
-      const promptSent: string = mockCreate.mock.calls[0][0].messages[0].content;
+      const promptSent: string = mockGenerateContent.mock.calls[0][0];
       expect(promptSent).toContain('pending manual entry');
     });
   });
@@ -327,7 +314,7 @@ describe('NaacSsrService', () => {
     it('includes criterion name in fallback text', async () => {
       const criterion = makeCriterion('C5');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockRejectedValue(new Error('API down'));
+      mockGenerateContent.mockRejectedValue(new Error('API down'));
 
       const result = await service.generateCriterionParagraph('C5');
 
@@ -337,7 +324,7 @@ describe('NaacSsrService', () => {
     it('includes earnedScore and maxScore in fallback text', async () => {
       const criterion = makeCriterion('C5', { earnedScore: 28, maxScore: 40 });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockRejectedValue(new Error('API down'));
+      mockGenerateContent.mockRejectedValue(new Error('API down'));
 
       const result = await service.generateCriterionParagraph('C5');
 
@@ -348,7 +335,7 @@ describe('NaacSsrService', () => {
     it('fallback mentions NAAC quality indicators', async () => {
       const criterion = makeCriterion('C1');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockRejectedValue(new Error('API down'));
+      mockGenerateContent.mockRejectedValue(new Error('API down'));
 
       const result = await service.generateCriterionParagraph('C1');
 
@@ -356,27 +343,31 @@ describe('NaacSsrService', () => {
     });
   });
 
-  // ── Claude model and token configuration ───────────────────────────────────
+  // ── Gemini model configuration ─────────────────────────────────────────────
 
-  describe('Claude API configuration', () => {
-    it('uses claude-sonnet-4-6 model', async () => {
+  describe('Gemini model configuration', () => {
+    it('uses gemini-2.0-flash model', async () => {
+      const { GoogleGenerativeAI } = jest.requireMock('@google/generative-ai');
+      const mockGetModel = jest.fn().mockReturnValue({ generateContent: mockGenerateContent });
+      GoogleGenerativeAI.mockImplementation(() => ({ getGenerativeModel: mockGetModel }));
+
+      // rebuild module so new mock takes effect
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          NaacSsrService,
+          { provide: NaacService, useValue: mockNaacService },
+          { provide: 'DataSource', useValue: null },
+        ],
+      }).compile();
+      const svc = module.get<NaacSsrService>(NaacSsrService);
+
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+      mockGenerateContent.mockResolvedValue(mockGeminiResponse('ok'));
 
-      await service.generateCriterionParagraph('C2');
+      await svc.generateCriterionParagraph('C2');
 
-      expect(mockCreate.mock.calls[0][0].model).toBe('claude-sonnet-4-6');
-    });
-
-    it('sets max_tokens to 600', async () => {
-      const criterion = makeCriterion('C2');
-      mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
-
-      await service.generateCriterionParagraph('C2');
-
-      expect(mockCreate.mock.calls[0][0].max_tokens).toBe(600);
+      expect(mockGetModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash' });
     });
   });
 });
