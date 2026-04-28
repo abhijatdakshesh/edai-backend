@@ -214,7 +214,7 @@ describe('DocumentsService', () => {
     it('updates ai_body and signed_token on success', async () => {
       mockQuery
         .mockResolvedValueOnce([makeDocRow({ status: 'APPROVED', reviewed_at: new Date().toISOString() })])
-        .mockResolvedValueOnce([]); // second UPDATE for ai_body/token
+        .mockResolvedValueOnce([{ id: 'doc-uuid-1' }]); // second UPDATE returns row on success
 
       jest.spyOn(service, 'generateAiBody').mockResolvedValueOnce('AI body text');
 
@@ -226,7 +226,7 @@ describe('DocumentsService', () => {
     it('emits document:status-changed on success', async () => {
       mockQuery
         .mockResolvedValueOnce([makeDocRow({ status: 'APPROVED', reviewed_at: new Date().toISOString() })])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([{ id: 'doc-uuid-1' }]); // second UPDATE returns row on success
 
       jest.spyOn(service, 'generateAiBody').mockResolvedValueOnce('AI body text');
 
