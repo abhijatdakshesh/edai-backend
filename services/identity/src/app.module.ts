@@ -33,6 +33,7 @@ import { RiskModule } from './risk/risk.module';
 import { DocumentsModule } from './documents/documents.module';
 import { FeeRemindersModule } from './fee-reminders/fee-reminders.module';
 import { NaacModule } from './naac/naac.module';
+import { TimetableModule } from './timetable/timetable.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { NaacModule } from './naac/naac.module';
     DocumentsModule,
     FeeRemindersModule,
     NaacModule,
+    TimetableModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
