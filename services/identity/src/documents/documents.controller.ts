@@ -89,7 +89,8 @@ export class DocumentsController {
   @Post('admin/approve/:id')
   @HttpCode(HttpStatus.OK)
   approveRequest(@Param('id') id: string, @Req() req: AuthRequest) {
-    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id ?? 'UNKNOWN';
+    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id;
+    if (!adminUsn) throw new UnauthorizedException('Cannot identify admin from token');
     return this.documentsService.approveRequest(id, adminUsn);
   }
 
@@ -102,7 +103,8 @@ export class DocumentsController {
     @Body('reason') reason: string,
     @Req() req: AuthRequest,
   ) {
-    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id ?? 'UNKNOWN';
+    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id;
+    if (!adminUsn) throw new UnauthorizedException('Cannot identify admin from token');
     return this.documentsService.rejectRequest(id, adminUsn, reason);
   }
 
@@ -111,7 +113,8 @@ export class DocumentsController {
   @Post('admin/revoke/:id')
   @HttpCode(HttpStatus.OK)
   revokeDocument(@Param('id') id: string, @Req() req: AuthRequest) {
-    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id ?? 'UNKNOWN';
+    const adminUsn = req.user.sapId ?? req.user.sub ?? req.user.id;
+    if (!adminUsn) throw new UnauthorizedException('Cannot identify admin from token');
     return this.documentsService.revokeDocument(id, adminUsn);
   }
 }

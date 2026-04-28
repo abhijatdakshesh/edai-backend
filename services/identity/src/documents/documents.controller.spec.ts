@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService, DocumentRequest, DocType, DocStatus } from './documents.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -41,11 +41,15 @@ const mockService = {
 const mockEvents = { emitDocumentStatusChanged: jest.fn() };
 
 function makeAuthReq(usn = '1RV21CS001') {
-  return { user: { userId: usn, usn } };
+  return { user: { sapId: usn } };
 }
 
-function makeAuthReqNoUsn(userId = 'user-id-1') {
-  return { user: { userId } };
+function makeAuthReqNoUsn(id = 'user-id-1') {
+  return { user: { id } };
+}
+
+function makeAuthReqEmpty() {
+  return { user: {} };
 }
 
 describe('DocumentsController', () => {
@@ -108,42 +112,69 @@ describe('DocumentsController', () => {
     });
   });
 
-  describe('usn fallback to userId', () => {
-    it('requestDocument uses userId when usn is missing', async () => {
+  describe('id fallback chain (sapId → sub → id)', () => {
+    it('requestDocument uses id when sapId is missing', async () => {
       mockService.requestDocument.mockResolvedValueOnce(makeDoc());
       const dto = { docType: 'BONAFIDE' as DocType, purpose: 'Bank loan', studentName: 'Arjun', consentGiven: true };
       await controller.requestDocument(makeAuthReqNoUsn('user-id-1') as never, dto);
       expect(mockService.requestDocument).toHaveBeenCalledWith('user-id-1', dto);
     });
 
-    it('getMyRequests uses userId when usn is missing', async () => {
+    it('getMyRequests uses id when sapId is missing', async () => {
       mockService.getMyRequests.mockResolvedValueOnce([]);
       await controller.getMyRequests(makeAuthReqNoUsn('user-id-1') as never);
       expect(mockService.getMyRequests).toHaveBeenCalledWith('user-id-1');
     });
 
-    it('getRequest uses userId when usn is missing', async () => {
+    it('getRequest uses id when sapId is missing', async () => {
       mockService.getRequest.mockResolvedValueOnce(makeDoc());
       await controller.getRequest('doc-uuid-1', makeAuthReqNoUsn('user-id-1') as never);
       expect(mockService.getRequest).toHaveBeenCalledWith('doc-uuid-1', 'user-id-1');
     });
 
-    it('approveRequest uses userId when usn is missing', async () => {
+    it('approveRequest uses id when sapId is missing', async () => {
       mockService.approveRequest.mockResolvedValueOnce(makeDoc({ status: 'APPROVED' }));
       await controller.approveRequest('doc-uuid-1', makeAuthReqNoUsn('user-id-1') as never);
       expect(mockService.approveRequest).toHaveBeenCalledWith('doc-uuid-1', 'user-id-1');
     });
 
-    it('rejectRequest uses userId when usn is missing', async () => {
+    it('rejectRequest uses id when sapId is missing', async () => {
       mockService.rejectRequest.mockResolvedValueOnce(makeDoc({ status: 'REJECTED' }));
       await controller.rejectRequest('doc-uuid-1', 'reason', makeAuthReqNoUsn('user-id-1') as never);
       expect(mockService.rejectRequest).toHaveBeenCalledWith('doc-uuid-1', 'user-id-1', 'reason');
     });
 
-    it('revokeDocument uses userId when usn is missing', async () => {
+    it('revokeDocument uses id when sapId is missing', async () => {
       mockService.revokeDocument.mockResolvedValueOnce(makeDoc({ status: 'REVOKED' }));
       await controller.revokeDocument('doc-uuid-1', makeAuthReqNoUsn('user-id-1') as never);
       expect(mockService.revokeDocument).toHaveBeenCalledWith('doc-uuid-1', 'user-id-1');
+    });
+  });
+
+  describe('missing identity throws UnauthorizedException', () => {
+    it('requestDocument throws when no user identifier', () => {
+      const dto = { docType: 'BONAFIDE' as DocType, purpose: 'Bank loan', studentName: 'Arjun', consentGiven: true };
+      expect(() => controller.requestDocument(makeAuthReqEmpty() as never, dto)).toThrow(UnauthorizedException);
+    });
+
+    it('getMyRequests throws when no user identifier', () => {
+      expect(() => controller.getMyRequests(makeAuthReqEmpty() as never)).toThrow(UnauthorizedException);
+    });
+
+    it('getRequest throws when no user identifier', () => {
+      expect(() => controller.getRequest('doc-uuid-1', makeAuthReqEmpty() as never)).toThrow(UnauthorizedException);
+    });
+
+    it('approveRequest throws when no admin identifier', () => {
+      expect(() => controller.approveRequest('doc-uuid-1', makeAuthReqEmpty() as never)).toThrow(UnauthorizedException);
+    });
+
+    it('rejectRequest throws when no admin identifier', () => {
+      expect(() => controller.rejectRequest('doc-uuid-1', 'reason', makeAuthReqEmpty() as never)).toThrow(UnauthorizedException);
+    });
+
+    it('revokeDocument throws when no admin identifier', () => {
+      expect(() => controller.revokeDocument('doc-uuid-1', makeAuthReqEmpty() as never)).toThrow(UnauthorizedException);
     });
   });
 
