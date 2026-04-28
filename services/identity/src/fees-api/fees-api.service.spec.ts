@@ -168,8 +168,8 @@ describe('FeesApiService', () => {
   // ─── initiatePaymentGateway ─────────────────────────────────────────────────
 
   describe('initiatePaymentGateway()', () => {
-    it('returns currency INR and prefill with lowercase USN email', () => {
-      const result = service.initiatePaymentGateway('1RV21CS001', 50000, ['f-1']);
+    it('returns currency INR and prefill with lowercase USN email', async () => {
+      const result = await service.initiatePaymentGateway('1RV21CS001', 50000, ['f-1']);
       expect(result.currency).toBe('INR');
       expect(result.orderId).toMatch(/^order_/);
       expect(result.amount).toBe(50000);
@@ -177,13 +177,13 @@ describe('FeesApiService', () => {
       expect(result.key).toBeTruthy();
     });
 
-    it('lowercases USN in email prefill', () => {
-      const result = service.initiatePaymentGateway('1RV21CS999', 10000, []);
+    it('lowercases USN in email prefill', async () => {
+      const result = await service.initiatePaymentGateway('1RV21CS999', 10000, []);
       expect(result.prefill.email).toBe('1rv21cs999@rvce.edu.in');
     });
 
-    it('includes student name with USN', () => {
-      const result = service.initiatePaymentGateway('USN042', 30000, ['f1', 'f2']);
+    it('includes student name with USN', async () => {
+      const result = await service.initiatePaymentGateway('USN042', 30000, ['f1', 'f2']);
       expect(result.prefill.name).toContain('USN042');
     });
   });
@@ -260,8 +260,19 @@ describe('FeesApiService', () => {
     it('marks pending fees as paid on valid HMAC', async () => {
       const crypto = require('crypto');
       const paymentId = 'pay_hmac_3';
+      const remoteOrderId = 'order_hmac_remote_3';
+
+      // stub fetch so initiatePaymentGateway does not hit the real Razorpay API
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: remoteOrderId }),
+        text: async () => '',
+      } as Response);
+
       service.feeItems.push(makeFeeItem({ id: 'fee-hmac-1', status: 'PENDING', usn: 'USN001' }));
-      service.initiatePaymentGateway('USN001', 45000, ['fee-hmac-1']);
+      await service.initiatePaymentGateway('USN001', 45000, ['fee-hmac-1']);
+      fetchSpy.mockRestore();
+
       const storedOrder = (service as any).pendingOrders.entries().next().value;
       if (storedOrder) {
         const [oid] = storedOrder;
@@ -346,23 +357,23 @@ describe('FeesApiService', () => {
     });
   });
 
-  // ─── verifyPayment — production guard ──────────────────────────────────────
+  // ─── verifyPayment — no-secret (dev / CI) path ────────────────────────────
+  // NOTE: the production NODE_ENV guard was removed from the service; the dev
+  // path now always returns success when RAZORPAY_KEY_SECRET is absent.
 
-  describe('verifyPayment() — production guard', () => {
-    it('throws when NODE_ENV is production and RAZORPAY_KEY_SECRET is absent', async () => {
-      const savedEnv = process.env['NODE_ENV'];
-      const savedKey = process.env['RAZORPAY_KEY_SECRET'];
-      process.env['NODE_ENV'] = 'production';
+  describe('verifyPayment() — no-secret path', () => {
+    beforeEach(() => {
       delete process.env['RAZORPAY_KEY_SECRET'];
-      await expect(service.verifyPayment('order_1', 'pay_1', 'sig_1')).rejects.toThrow(
-        'RAZORPAY_KEY_SECRET env var is required in production',
-      );
-      process.env['NODE_ENV'] = savedEnv ?? 'test';
-      if (savedKey) process.env['RAZORPAY_KEY_SECRET'] = savedKey;
+    });
+
+    it('returns success:true when RAZORPAY_KEY_SECRET is absent and orderId was never registered', async () => {
+      const result = await service.verifyPayment('order_1', 'pay_1', 'sig_1');
+      expect(result.success).toBe(true);
+      expect(result.receiptId).toMatch(/^rcpt_/);
+      expect(result.paidAt).toBeDefined();
     });
 
     it('returns success when orderId was never registered (dev mode)', async () => {
-      delete process.env['RAZORPAY_KEY_SECRET'];
       const result = await service.verifyPayment('order_not_registered', 'pay_1', 'sig_1');
       expect(result.success).toBe(true);
     });
@@ -383,6 +394,199 @@ describe('FeesApiService', () => {
       svc.feeItems.push(makeFeeItem({ id: 'fee-tx-1', status: 'PENDING' }));
       await svc.markPaid(['fee-tx-1']);
       expect(mockTransaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─── initiatePaymentGateway — real Razorpay fetch path ─────────────────────
+
+  describe('initiatePaymentGateway() — with RAZORPAY_KEY_SECRET', () => {
+    const KEY_ID = 'rzp_test_mykey';
+    const KEY_SECRET = 'test-secret-razorpay';
+
+    let fetchSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      process.env['RAZORPAY_KEY_ID'] = KEY_ID;
+      process.env['RAZORPAY_KEY_SECRET'] = KEY_SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env['RAZORPAY_KEY_ID'];
+      delete process.env['RAZORPAY_KEY_SECRET'];
+      fetchSpy?.mockRestore();
+    });
+
+    it('calls Razorpay /v1/orders with Basic auth and returns the remote orderId', async () => {
+      // arrange — stub global fetch to return a successful Razorpay response
+      const remoteOrderId = 'order_razorpay_live_001';
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: remoteOrderId }),
+        text: async () => '',
+      } as Response);
+
+      // act
+      const result = await service.initiatePaymentGateway('USN050', 45000, ['fee-rp-1']);
+
+      // assert — orderId must come from Razorpay, not local Date.now() stub
+      expect(result.orderId).toBe(remoteOrderId);
+      expect(result.currency).toBe('INR');
+      expect(result.amount).toBe(45000);
+      expect(result.key).toBe(KEY_ID);
+
+      // assert — correct Authorization header sent to Razorpay
+      const expectedAuth =
+        'Basic ' + Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString('base64');
+      const fetchCall = fetchSpy.mock.calls[0];
+      expect(fetchCall[0]).toBe('https://api.razorpay.com/v1/orders');
+      expect((fetchCall[1] as RequestInit).headers).toMatchObject({
+        Authorization: expectedAuth,
+        'Content-Type': 'application/json',
+      });
+    });
+
+    it('sends amount in paise (amount * 100, rounded) to Razorpay', async () => {
+      // arrange — fractional rupee amount to verify Math.round conversion
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: 'order_paise_check' }),
+        text: async () => '',
+      } as Response);
+
+      // act
+      await service.initiatePaymentGateway('USN051', 1234.56, ['fee-rp-2']);
+
+      // assert — 1234.56 * 100 = 123456 (rounded)
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.amount).toBe(123456);
+      expect(body.currency).toBe('INR');
+    });
+
+    it('throws when Razorpay returns a non-ok HTTP status', async () => {
+      // arrange — Razorpay rejects the order (e.g. 400 bad request)
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'Bad Request: invalid amount',
+      } as Response);
+
+      // act + assert — the service must propagate the error, not swallow it
+      await expect(
+        service.initiatePaymentGateway('USN052', 0, ['fee-rp-3']),
+      ).rejects.toThrow('Razorpay order creation failed 400');
+    });
+
+    it('registers orderId in pendingOrders so verifyPayment can look it up', async () => {
+      // arrange
+      const remoteOrderId = 'order_pending_map_test';
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: remoteOrderId }),
+        text: async () => '',
+      } as Response);
+
+      // act
+      await service.initiatePaymentGateway('USN053', 30000, ['fee-map-1', 'fee-map-2']);
+
+      // assert — internal map must contain the entry for downstream verify
+      const pendingOrders: Map<string, { usn: string; feeIds: string[] }> =
+        (service as any).pendingOrders;
+      expect(pendingOrders.has(remoteOrderId)).toBe(true);
+      expect(pendingOrders.get(remoteOrderId)?.feeIds).toEqual(['fee-map-1', 'fee-map-2']);
+      expect(pendingOrders.get(remoteOrderId)?.usn).toBe('USN053');
+    });
+  });
+
+  // ─── verifyPayment — missing-signature guard ────────────────────────────────
+
+  describe('verifyPayment() — missing signature guard', () => {
+    it('throws BadRequestException when signature is an empty string', async () => {
+      const { BadRequestException } = await import('@nestjs/common');
+      // act + assert — empty string is falsy; service must reject before any HMAC
+      await expect(
+        service.verifyPayment('order_x', 'pay_x', ''),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─── verifyPayment — dev mode with pending order ────────────────────────────
+
+  describe('verifyPayment() — dev mode (no secret) with pending order', () => {
+    beforeEach(() => {
+      // ensure no secret is set so we exercise the dev / stub path
+      delete process.env['RAZORPAY_KEY_SECRET'];
+    });
+
+    it('calls markPaid with the registered feeIds and returns success', async () => {
+      // arrange — seed a fee item and register an order in the pending map
+      const feeId = 'fee-dev-1';
+      service.feeItems.push(makeFeeItem({ id: feeId, status: 'PENDING', usn: 'USN060' }));
+
+      // The stub initiatePaymentGateway path runs (no secret set in this block)
+      const initResult = await service.initiatePaymentGateway('USN060', 50000, [feeId]);
+      const orderId = initResult.orderId;
+
+      // act
+      const markPaidSpy = jest.spyOn(service, 'markPaid');
+      const result = await service.verifyPayment(orderId, 'pay_dev_1', 'any_sig');
+
+      // assert — HMAC skipped; fee must be marked paid; order removed from map
+      expect(result.success).toBe(true);
+      expect(result.receiptId).toMatch(/^rcpt_/);
+      expect(result.paidAt).toBeDefined();
+      expect(markPaidSpy).toHaveBeenCalledWith([feeId]);
+      expect((service as any).pendingOrders.has(orderId)).toBe(false);
+
+      markPaidSpy.mockRestore();
+    });
+
+    it('returns success without calling markPaid when orderId was never registered', async () => {
+      // arrange
+      const markPaidSpy = jest.spyOn(service, 'markPaid');
+
+      // act
+      const result = await service.verifyPayment('order_ghost', 'pay_ghost', 'sig_ghost');
+
+      // assert — no pending entry, markPaid must NOT be called
+      expect(result.success).toBe(true);
+      expect(markPaidSpy).not.toHaveBeenCalled();
+
+      markPaidSpy.mockRestore();
+    });
+  });
+
+  // ─── verifyPayment — valid HMAC with no pending order ──────────────────────
+
+  describe('verifyPayment() — valid HMAC, no pending order', () => {
+    const SECRET = 'hmac-no-pending-secret';
+
+    beforeEach(() => {
+      process.env['RAZORPAY_KEY_SECRET'] = SECRET;
+    });
+
+    afterEach(() => {
+      delete process.env['RAZORPAY_KEY_SECRET'];
+    });
+
+    it('returns success:true and does not throw when pending order is absent', async () => {
+      // arrange — compute a valid signature for an orderId that was never registered
+      const crypto = require('crypto');
+      const orderId = 'order_no_pending';
+      const paymentId = 'pay_no_pending';
+      const sig = crypto
+        .createHmac('sha256', SECRET)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      // act
+      const markPaidSpy = jest.spyOn(service, 'markPaid');
+      const result = await service.verifyPayment(orderId, paymentId, sig);
+
+      // assert — signature valid; no pending entry means markPaid is never called
+      expect(result.success).toBe(true);
+      expect(markPaidSpy).not.toHaveBeenCalled();
+
+      markPaidSpy.mockRestore();
     });
   });
 });

@@ -31,6 +31,7 @@ import { AbcCreditsModule } from './abc-credits/abc-credits.module';
 import { NlQueryModule } from './nl-query/nl-query.module';
 import { RiskModule } from './risk/risk.module';
 import { DocumentsModule } from './documents/documents.module';
+import { FeeRemindersModule } from './fee-reminders/fee-reminders.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { DocumentsModule } from './documents/documents.module';
     NlQueryModule,
     RiskModule,
     DocumentsModule,
+    FeeRemindersModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],

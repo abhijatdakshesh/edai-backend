@@ -23,6 +23,14 @@ export class ParentPortalService {
   parentChildMap: Map<string, string[]> = new Map();
   childProfiles: Map<string, ChildInfo> = new Map();
 
+  /** Returns true if parentId is linked to the given student USN */
+  isParentOf(parentId: string, usn: string): boolean {
+    const linked = this.parentChildMap.get(parentId);
+    // Fallback: if no explicit mapping exists (stub/dev), allow the default student
+    if (!linked) return usn === '1RV21CS001';
+    return linked.includes(usn);
+  }
+
   constructor(
     private readonly attendanceSvc: AttendanceApiService,
     private readonly feesSvc: FeesApiService,
@@ -104,16 +112,19 @@ export class ParentPortalService {
     };
   }
 
-  payFees(
-    usn: string,
-    amount: number,
-    feeIds: string[],
-  ): { receiptId: string; paidAt: string; amount: number } {
-    return {
-      receiptId: `rcpt-${Date.now()}`,
-      paidAt: new Date().toISOString(),
-      amount,
-    };
+  async payFees(usn: string, feeIds: string[]) {
+    // Server-side amount computation — never trust client-supplied amount
+    const feeSummary = this.feesSvc.getStudentFees(usn);
+    const selectedFees = feeSummary.items.filter(
+      (f) => feeIds.includes(f.id) && f.status !== 'PAID',
+    );
+    if (selectedFees.length === 0) throw new Error('No valid unpaid fees selected');
+    const amount = selectedFees.reduce((sum, f) => sum + f.amount, 0);
+    return this.feesSvc.initiatePaymentGateway(usn, amount, selectedFees.map((f) => f.id));
+  }
+
+  async verifyFeePayment(orderId: string, paymentId: string, signature: string) {
+    return this.feesSvc.verifyPayment(orderId, paymentId, signature);
   }
 
   checkScholarship(
