@@ -4,7 +4,8 @@ import { FeesApiService } from './fees-api.service';
 
 const mockSvc = {
   getStudentFees: jest.fn(),
-  initiatePayment: jest.fn(),
+  getFeeHistory: jest.fn(),
+  getFeeSummary: jest.fn(),
 };
 
 describe('FeesApiController', () => {
@@ -17,6 +18,8 @@ describe('FeesApiController', () => {
       providers: [{ provide: FeesApiService, useValue: mockSvc }],
     })
       .overrideGuard(require('../auth/jwt-auth.guard').JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(require('../roles/roles.guard').RolesGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -31,13 +34,19 @@ describe('FeesApiController', () => {
     expect(result).toBe(summary);
   });
 
-  it('initiatePayment delegates to service with body fields', () => {
-    const payment = { paymentUrl: 'https://razorpay.com/pay/stub_123', orderId: 'order_123' };
-    mockSvc.initiatePayment.mockReturnValue(payment);
+  it('getFeeHistory delegates to service with usn param', () => {
+    const history = [{ id: 'h-1', date: '2024-01-01', amount: 45000, status: 'PAID', description: 'Tuition Fee - Semester 5' }];
+    mockSvc.getFeeHistory.mockReturnValue(history);
+    const result = controller.getFeeHistory('USN001');
+    expect(mockSvc.getFeeHistory).toHaveBeenCalledWith('USN001');
+    expect(result).toBe(history);
+  });
 
-    const body = { usn: 'USN001', amount: 50000, feeIds: ['fee-1', 'fee-2'] };
-    const result = controller.initiatePayment(body);
-    expect(mockSvc.initiatePayment).toHaveBeenCalledWith('USN001', 50000, ['fee-1', 'fee-2']);
-    expect(result).toBe(payment);
+  it('getFeeSummary delegates to service with usn param', () => {
+    const summary = { totalDue: 50000, totalPaid: 30000, nextDue: '2024-06-01', overdueCount: 0 };
+    mockSvc.getFeeSummary.mockReturnValue(summary);
+    const result = controller.getFeeSummary('USN001');
+    expect(mockSvc.getFeeSummary).toHaveBeenCalledWith('USN001');
+    expect(result).toBe(summary);
   });
 });

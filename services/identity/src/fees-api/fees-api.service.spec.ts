@@ -470,10 +470,10 @@ describe('FeesApiService', () => {
         text: async () => 'Bad Request: invalid amount',
       } as Response);
 
-      // act + assert — the service must propagate the error, not swallow it
+      // act + assert — error is sanitized (Razorpay body not leaked to client)
       await expect(
         service.initiatePaymentGateway('USN052', 0, ['fee-rp-3']),
-      ).rejects.toThrow('Razorpay order creation failed 400');
+      ).rejects.toThrow('Payment gateway temporarily unavailable');
     });
 
     it('registers orderId in pendingOrders so verifyPayment can look it up', async () => {

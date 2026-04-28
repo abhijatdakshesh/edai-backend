@@ -1,0 +1,241 @@
+{
+  "institution": {
+    "name": "RV Institute of Technology and Management",
+    "shortName": "RVITM",
+    "affiliation": "Visvesvaraya Technological University (VTU)",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "type": "Engineering College",
+    "naacGradeThresholds": {
+      "A++": 3.51,
+      "A+":  3.26,
+      "A":   3.01,
+      "B++": 2.76,
+      "B+":  2.51,
+      "B":   2.01,
+      "C":   1.51
+    }
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "name": "Curricular Aspects",
+      "weightage": 100,
+      "metrics": [
+        {
+          "id": "1.1.1",
+          "name": "Effective implementation of Curriculum",
+          "description": "The institution ensures effective curriculum delivery through structured teaching plans",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        },
+        {
+          "id": "1.2.1",
+          "name": "Number of Certificate/Value Added courses",
+          "description": "Percentage of students enrolled in Certificate/Value added courses",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "name": "Teaching-Learning and Evaluation",
+      "weightage": 350,
+      "metrics": [
+        {
+          "id": "2.1.1",
+          "name": "Student Enrolment Rate",
+          "description": "Percentage of students enrolled against sanctioned intake",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT COUNT(*) AS enrolled, 480 AS sanctioned_intake, ROUND(COUNT(*) * 100.0 / 480, 1) AS enrollment_pct FROM students",
+          "scoreFormula": "pct >= 90 ? 20 : pct >= 80 ? 16 : pct >= 70 ? 12 : 8",
+          "evidenceColumns": ["Programme", "Sanctioned Intake", "Students Enrolled", "Enrolment %"],
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "2.2.1",
+          "name": "Student-Full time Teacher Ratio",
+          "description": "Student-Full time teacher ratio",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT (SELECT COUNT(*) FROM students) AS students, (SELECT COUNT(*) FROM users WHERE role = 'FACULTY') AS faculty, ROUND((SELECT COUNT(*) FROM students)::numeric / NULLIF((SELECT COUNT(*) FROM users WHERE role = 'FACULTY'), 0), 1) AS ratio",
+          "scoreFormula": "ratio <= 20 ? 20 : ratio <= 25 ? 16 : ratio <= 30 ? 12 : 8",
+          "evidenceColumns": ["Year", "Total Students", "Full-time Faculty", "Student-Teacher Ratio"],
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "2.4.1",
+          "name": "Full-time teachers with PhD",
+          "description": "Percentage of full-time teachers with PhD/D.Sc./D.Litt.",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "2.5.1",
+          "name": "Internal Assessment Mechanism",
+          "description": "Mechanism of internal assessment is transparent and robust",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT COUNT(DISTINCT student_usn) AS students_assessed, COUNT(DISTINCT subject_code) AS subjects_assessed, ROUND(AVG(marks_obtained * 100.0 / NULLIF(max_marks, 0)), 1) AS avg_score_pct, COUNT(*) AS total_assessments FROM internal_marks WHERE test_type IN ('IA1','IA2','IA3')",
+          "evidenceColumns": ["Test Type", "Subjects", "Students Assessed", "Avg Score %"],
+          "evidenceType": "mixed"
+        },
+        {
+          "id": "2.6.3",
+          "name": "Pass Percentage of Students",
+          "description": "Pass percentage of students in final year University Examination",
+          "maxScore": 40,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "name": "Research, Innovations and Extension",
+      "weightage": 120,
+      "metrics": [
+        {
+          "id": "3.1.1",
+          "name": "Research Grants Received",
+          "description": "Grants received from government and non-government bodies for research",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "3.3.1",
+          "name": "Number of PhD students registered",
+          "description": "Number of PhD scholars registered per eligible teacher",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "name": "Infrastructure and Learning Resources",
+      "weightage": 100,
+      "metrics": [
+        {
+          "id": "4.1.1",
+          "name": "Physical Infrastructure",
+          "description": "Availability and utilisation of physical, academic and support facilities",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "name": "Student Support and Progression",
+      "weightage": 130,
+      "metrics": [
+        {
+          "id": "5.1.1",
+          "name": "Students Benefited by Scholarships",
+          "description": "Percentage of students benefited by scholarships and freeships",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT COUNT(DISTINCT usn) AS scholarship_students, (SELECT COUNT(*) FROM students) AS total_students, ROUND(COUNT(DISTINCT usn) * 100.0 / NULLIF((SELECT COUNT(*) FROM students), 0), 1) AS pct FROM fee_items WHERE component ILIKE '%scholarship%'",
+          "scoreFormula": "pct >= 30 ? 20 : pct >= 20 ? 16 : pct >= 10 ? 12 : 8",
+          "evidenceColumns": ["Year", "Total Students", "Students with Scholarship", "% Benefited"],
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "5.1.3",
+          "name": "Student-Parent Engagement",
+          "description": "Percentage of students whose parents were engaged via institutional outreach",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT COUNT(DISTINCT student_usn) AS students_contacted, (SELECT COUNT(*) FROM students) AS total, ROUND(COUNT(DISTINCT student_usn) * 100.0 / NULLIF((SELECT COUNT(*) FROM students), 0), 1) AS engagement_pct, COUNT(*) AS total_calls, COUNT(*) FILTER (WHERE outcome IN ('COMPLETED','ANSWERED')) AS answered_calls FROM ai_call_logs WHERE called_at >= NOW() - INTERVAL '365 days'",
+          "evidenceColumns": ["Year", "Total Students", "Students Contacted", "Calls Made", "Calls Answered", "Engagement %"],
+          "evidenceType": "mixed",
+          "edaiNote": "Voice calls to parents serve as documented parent-engagement evidence for this metric"
+        },
+        {
+          "id": "5.2.1",
+          "name": "Student Placement Rate",
+          "description": "Percentage of placement of outgoing students",
+          "maxScore": 40,
+          "dataSource": "manual",
+          "evidenceType": "quantitative"
+        },
+        {
+          "id": "5.4.1",
+          "name": "Alumni Engagement",
+          "description": "There is a registered Alumni Association contributing to institutional development",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "name": "Governance, Leadership and Management",
+      "weightage": 100,
+      "metrics": [
+        {
+          "id": "6.2.2",
+          "name": "E-Governance Implementation",
+          "description": "Implementation of e-governance in areas of operation",
+          "maxScore": 40,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT (SELECT COUNT(*) FROM document_requests WHERE status = 'APPROVED' AND requested_at >= NOW() - INTERVAL '365 days') AS digital_docs_issued, (SELECT COUNT(*) FROM ai_call_logs WHERE called_at >= NOW() - INTERVAL '365 days') AS automated_calls, (SELECT COUNT(*) FROM fee_items WHERE status = 'PAID') AS digital_payments",
+          "evidenceColumns": ["Module", "Description", "Status", "Records Count"],
+          "evidenceType": "mixed",
+          "edaiNote": "EdAI itself is the e-governance evidence — document generation, voice calls, fee tracking, and attendance system all count toward this metric"
+        },
+        {
+          "id": "6.3.1",
+          "name": "Effective Welfare Measures",
+          "description": "The institution has effective welfare measures for teaching and non-teaching staff",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        },
+        {
+          "id": "6.4.1",
+          "name": "Internal and External Financial Audits",
+          "description": "Strategies for mobilisation and optimal utilisation of resources and financial management",
+          "maxScore": 20,
+          "dataSource": "auto",
+          "sqlQuery": "SELECT SUM(amount) AS total_fees_billed, SUM(amount) FILTER (WHERE status = 'PAID') AS total_fees_collected, ROUND(SUM(amount) FILTER (WHERE status = 'PAID') * 100.0 / NULLIF(SUM(amount), 0), 1) AS collection_rate FROM fee_items WHERE EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)",
+          "evidenceColumns": ["Year", "Total Billed", "Total Collected", "Collection Rate %"],
+          "evidenceType": "quantitative"
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "name": "Institutional Values and Best Practices",
+      "weightage": 50,
+      "metrics": [
+        {
+          "id": "7.1.1",
+          "name": "Measures for gender equity",
+          "description": "Measures initiated by the institution for the promotion of gender equity",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        },
+        {
+          "id": "7.3.1",
+          "name": "Institutional Distinctiveness",
+          "description": "Portray the performance of the institution in one area distinctive to its vision, priority and thrust",
+          "maxScore": 20,
+          "dataSource": "manual",
+          "evidenceType": "qualitative"
+        }
+      ]
+    }
+  ]
+}
