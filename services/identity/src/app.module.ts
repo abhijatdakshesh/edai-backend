@@ -32,6 +32,7 @@ import { NlQueryModule } from './nl-query/nl-query.module';
 import { RiskModule } from './risk/risk.module';
 import { DocumentsModule } from './documents/documents.module';
 import { FeeRemindersModule } from './fee-reminders/fee-reminders.module';
+import { NaacModule } from './naac/naac.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { FeeRemindersModule } from './fee-reminders/fee-reminders.module';
     RiskModule,
     DocumentsModule,
     FeeRemindersModule,
+    NaacModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
