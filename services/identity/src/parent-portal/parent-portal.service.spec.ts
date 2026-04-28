@@ -138,4 +138,31 @@ describe('ParentPortalService', () => {
       expect(result).toEqual({ totalDue: 0, totalPaid: 0, totalOutstanding: 0, status: 'PENDING', items: [] });
     });
   });
+
+  // ─── getChild — profile exists vs default ───────────────────────────────────
+
+  describe('getChild() — profile exists vs default', () => {
+    it('returns real profile data when childProfiles has an entry for the USN', () => {
+      (service as unknown as { childProfiles: Map<string, unknown> }).childProfiles.set('1RV21CS001', {
+        name: 'Priya Kumar',
+        dept: 'ECE',
+        semester: 6,
+        cgpa: 8.5,
+        attendance: 92,
+      });
+      const result = service.getChild('1RV21CS001');
+      expect(result.name).toBe('Priya Kumar');
+      expect(result.dept).toBe('ECE');
+      expect(result.cgpa).toBe(8.5);
+      expect(result.attendancePct).toBe(92);
+    });
+
+    it('returns default values when no profile exists for USN', () => {
+      const result = service.getChild('UNKNOWN_USN');
+      expect(result.name).toBe('Student UNKNOWN_USN');
+      expect(result.dept).toBe('Computer Science');
+      expect(result.semester).toBe(5);
+      expect(result.cgpa).toBe(7.5);
+    });
+  });
 });

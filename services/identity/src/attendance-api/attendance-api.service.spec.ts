@@ -293,4 +293,44 @@ describe('AttendanceApiService', () => {
       expect(() => service.correctRecord('no-such-id', 'P', 'admin')).toThrow(NotFoundException);
     });
   });
+
+  // ─── 75% attendance boundary (VTU eligibility threshold) ─────────────────────
+
+  describe('getStudentAttendanceSummary() — VTU 75% boundary', () => {
+    it('returns pct=75 and mustAttend=0 when student has exactly 3P/4H (75%)', () => {
+      service.records.push(
+        makeRecord({ usn: 'USN_75', subjectCode: 'CS399', subjectName: 'Boundary', status: 'P' }),
+        makeRecord({ usn: 'USN_75', subjectCode: 'CS399', subjectName: 'Boundary', status: 'P' }),
+        makeRecord({ usn: 'USN_75', subjectCode: 'CS399', subjectName: 'Boundary', status: 'P' }),
+        makeRecord({ usn: 'USN_75', subjectCode: 'CS399', subjectName: 'Boundary', status: 'A' }),
+      );
+      const result = service.getStudentAttendanceSummary('USN_75');
+      expect(result).toHaveLength(1);
+      expect(result[0].pct).toBe(75);
+      expect(result[0].mustAttend).toBe(0);
+      expect(result[0].canMiss).toBe(0);
+    });
+
+    it('returns mustAttend > 0 when student is at 66% (2P/3H) — below threshold', () => {
+      service.records.push(
+        makeRecord({ usn: 'USN_66', subjectCode: 'CS400', subjectName: 'Below', status: 'P' }),
+        makeRecord({ usn: 'USN_66', subjectCode: 'CS400', subjectName: 'Below', status: 'P' }),
+        makeRecord({ usn: 'USN_66', subjectCode: 'CS400', subjectName: 'Below', status: 'A' }),
+      );
+      const result = service.getStudentAttendanceSummary('USN_66');
+      expect(result[0].pct).toBe(67);
+      expect(result[0].mustAttend).toBeGreaterThan(0);
+      expect(result[0].canMiss).toBe(0);
+    });
+
+    it('returns pct=100 and canMiss > 0 when all classes attended', () => {
+      for (let i = 0; i < 8; i++) {
+        service.records.push(makeRecord({ usn: 'USN_100', subjectCode: 'CS401', subjectName: 'Perfect', status: 'P' }));
+      }
+      const result = service.getStudentAttendanceSummary('USN_100');
+      expect(result[0].pct).toBe(100);
+      expect(result[0].canMiss).toBeGreaterThan(0);
+      expect(result[0].mustAttend).toBe(0);
+    });
+  });
 });

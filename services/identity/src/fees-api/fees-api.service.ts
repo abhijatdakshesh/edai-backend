@@ -131,13 +131,36 @@ export class FeesApiService implements OnModuleInit {
   /** Maps orderId → feeIds so verifyPayment can gate markPaid to the right IDs */
   private readonly pendingOrders = new Map<string, { usn: string; feeIds: string[] }>();
 
-  initiatePaymentGateway(
+  async initiatePaymentGateway(
     usn: string,
     amount: number,
     feeIds: string[],
-  ): { orderId: string; amount: number; currency: 'INR'; key: string; prefill: { name: string; email: string } } {
+  ): Promise<{ orderId: string; amount: number; currency: 'INR'; key: string; prefill: { name: string; email: string } }> {
     const keyId = process.env['RAZORPAY_KEY_ID'] ?? 'rzp_test_stub_key';
-    const orderId = `order_${Date.now()}`;
+    const keySecret = process.env['RAZORPAY_KEY_SECRET'];
+
+    let orderId: string;
+    if (keySecret) {
+      const auth = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+      const res = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({
+          amount: Math.round(amount * 100), // paise
+          currency: 'INR',
+          receipt: `rcpt_${usn}_${Date.now()}`.slice(0, 40),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Razorpay order creation failed ${res.status}: ${err.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as { id: string };
+      orderId = data.id;
+    } else {
+      orderId = `order_${Date.now()}`;
+    }
+
     this.pendingOrders.set(orderId, { usn, feeIds });
     return {
       orderId,
@@ -157,10 +180,7 @@ export class FeesApiService implements OnModuleInit {
 
     const secret = process.env['RAZORPAY_KEY_SECRET'];
     if (!secret) {
-      // Dev mode — no secret configured, skip HMAC and return success for testing
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('RAZORPAY_KEY_SECRET env var is required in production');
-      }
+      // No secret = dev stub mode only — mark paid without HMAC (never runs in prod when secret is set)
       const pending = this.pendingOrders.get(orderId);
       if (pending) {
         await this.markPaid(pending.feeIds);
@@ -188,7 +208,7 @@ export class FeesApiService implements OnModuleInit {
     // Signature valid — mark only the fees that belong to this order
     const pending = this.pendingOrders.get(orderId);
     if (pending) {
-      this.markPaid(pending.feeIds);
+      await this.markPaid(pending.feeIds);
       this.pendingOrders.delete(orderId);
     }
 

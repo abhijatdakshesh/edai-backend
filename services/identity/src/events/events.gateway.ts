@@ -13,7 +13,7 @@ const CORS_ORIGINS = process.env['CORS_ORIGINS']
   : ['http://localhost:3000', 'http://localhost:3001'];
 
 @Injectable()
-@WebSocketGateway(3002, {
+@WebSocketGateway({
   cors: { origin: CORS_ORIGINS, credentials: true },
   transports: ['websocket', 'polling'],
 })
@@ -77,5 +77,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitIaSubmissionUpdated(payload: { submissionId: string; status: string; institutionId?: string }): void {
     this.emitToInstitution(payload.institutionId ?? 'default', 'ia:submission-updated', payload);
+  }
+
+  emitDocumentStatusChanged(payload: { docId: string; studentUsn: string; status: string; institutionId?: string }): void {
+    this.emitToInstitution(payload.institutionId ?? 'default', 'document:status-changed', payload);
   }
 }

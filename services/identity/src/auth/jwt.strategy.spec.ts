@@ -107,4 +107,17 @@ describe('JwtStrategy', () => {
       expect(result).toBe(safeUser);
     });
   });
+
+  // ─── constructor — missing JWT_SECRET ────────────────────────────────────────
+
+  describe('JwtStrategy constructor — missing JWT_SECRET', () => {
+    it('throws when JWT_SECRET env var is not set', () => {
+      const saved = process.env['JWT_SECRET'];
+      delete process.env['JWT_SECRET'];
+      expect(() => new JwtStrategy(mockAuthService as unknown as AuthService)).toThrow(
+        'JWT_SECRET env var is required',
+      );
+      if (saved) process.env['JWT_SECRET'] = saved;
+    });
+  });
 });
