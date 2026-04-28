@@ -134,11 +134,11 @@ describe('NaacController', () => {
 
     it('propagates a service rejection to the caller', async () => {
       mockSsrService.generateCriterionParagraph.mockRejectedValue(
-        new Error('Anthropic API rate limit exceeded'),
+        new Error('Gemini API rate limit exceeded'),
       );
 
       await expect(controller.generateSsrParagraph('C1')).rejects.toThrow(
-        'Anthropic API rate limit exceeded',
+        'Gemini API rate limit exceeded',
       );
     });
   });
@@ -183,11 +183,11 @@ describe('NaacController', () => {
 
     it('propagates a service rejection to the caller', async () => {
       mockSsrService.generateFullSsr.mockRejectedValue(
-        new Error('Anthropic API key not configured'),
+        new Error('Gemini API key not configured'),
       );
 
       await expect(controller.generateFullSsr()).rejects.toThrow(
-        'Anthropic API key not configured',
+        'Gemini API key not configured',
       );
     });
   });

@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NaacService, CriterionResult } from './naac.service';
 
 // ─── NAAC Criterion context for prompt grounding ─────────────────────────────
@@ -27,7 +27,7 @@ const CRITERION_NAAC_DESCRIPTIONS: Record<string, string> = {
 @Injectable()
 export class NaacSsrService {
   private readonly logger = new Logger(NaacSsrService.name);
-  private readonly anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] ?? '' });
+  private readonly genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -55,7 +55,7 @@ export class NaacSsrService {
       };
     }
 
-    const paragraph = await this.callClaude(
+    const paragraph = await this.callGemini(
       criterion,
       dashboard.institution.name,
       dashboard.institution.affiliation,
@@ -85,7 +85,7 @@ export class NaacSsrService {
     // Generate paragraphs sequentially to avoid rate limits
     const sections: Array<{ criterionId: string; criterionName: string; paragraph: string }> = [];
     for (const criterion of dashboard.criteria) {
-      const paragraph = await this.callClaude(
+      const paragraph = await this.callGemini(
         criterion,
         dashboard.institution.name,
         dashboard.institution.affiliation,
@@ -158,7 +158,7 @@ Requirements:
 Return ONLY the paragraph text. No preamble, no labels.`;
   }
 
-  private async callClaude(
+  private async callGemini(
     criterion: CriterionResult,
     institutionName: string,
     affiliation: string,
@@ -166,22 +166,13 @@ Return ONLY the paragraph text. No preamble, no labels.`;
     const prompt = this.buildPrompt(criterion, institutionName, affiliation);
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 600,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
-
-      const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text().trim();
       return text || this.fallbackParagraph(criterion);
     } catch (err) {
       this.logger.warn(
-        `[NAAC-SSR] Claude call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
+        `[NAAC-SSR] Gemini call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return this.fallbackParagraph(criterion);
     }
