@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AttendanceApiService } from '../attendance-api/attendance-api.service';
 import { FeesApiService } from '../fees-api/fees-api.service';
 import { CoursesService } from '../courses/courses.service';
@@ -118,7 +118,7 @@ export class ParentPortalService {
     const selectedFees = feeSummary.items.filter(
       (f) => feeIds.includes(f.id) && f.status !== 'PAID',
     );
-    if (selectedFees.length === 0) throw new Error('No valid unpaid fees selected');
+    if (selectedFees.length === 0) throw new NotFoundException('No valid unpaid fees found for provided feeIds');
     const amount = selectedFees.reduce((sum, f) => sum + f.amount, 0);
     return this.feesSvc.initiatePaymentGateway(usn, amount, selectedFees.map((f) => f.id));
   }

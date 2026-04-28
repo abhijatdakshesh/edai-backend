@@ -8,7 +8,7 @@ export class ParentPortalController {
   constructor(private readonly svc: ParentPortalService) {}
 
   private parentId(req: any): string {
-    const id = req.user?.sub;
+    const id = req.user?.sub ?? req.user?.id;
     if (!id) throw new UnauthorizedException('Cannot identify parent from token');
     return id;
   }
