@@ -319,7 +319,7 @@ export class DocumentsService {
     purpose: string,
     purposeDetail: string | null,
   ): Promise<string> {
-    const template = DOC_TEMPLATES[docType];
+    const template = DOC_TEMPLATES[docType] ?? `This is to certify that {name} (USN: {usn}) is a student of this institution for the academic year {year}. This certificate is issued for the purpose of {purpose}.`;
     const year = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
     const base = template
       .replace('{name}', name)
