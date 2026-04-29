@@ -1,9 +1,9 @@
-// DPDP_DATA_RESIDENCY_WARNING: Anthropic API processes data on US-hosted servers.
-// Pending India-region availability (Azure OpenAI India Central / Sarvam AI).
+// DPDP_DATA_RESIDENCY_WARNING: Google Gemini API processes data on Google-hosted servers.
+// India region available via Vertex AI. Pending migration from AI Studio to Vertex AI India.
 // All calls include a DPDP consent check; minimal PII is included in prompts.
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph } from './knowledge-graph.service';
@@ -18,8 +18,7 @@ const SIMPLE_PATTERNS = ['schedule', 'today', 'fee', 'balance', 'paid', 'attenda
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  private readonly anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] ?? '' });
+  private readonly genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -28,14 +27,12 @@ export class ChatbotService {
   selectModel(message: string): string {
     const lower = message.toLowerCase();
     return SIMPLE_PATTERNS.some(p => lower.includes(p))
-      ? 'claude-haiku-4-5-20251001'
-      : 'claude-sonnet-4-6';
+      ? 'gemini-1.5-flash'
+      : 'gemini-1.5-pro';
   }
 
   private getLang(graph: KnowledgeGraph): string {
-    const lang = graph.role === 'STUDENT' ? graph.preferredLanguage
-      : graph.role === 'PARENT' ? graph.preferredLanguage
-      : graph.preferredLanguage;
+    const lang = graph.preferredLanguage;
     return LANGUAGE_NAMES[lang] ?? 'English';
   }
 
@@ -91,33 +88,37 @@ ${JSON.stringify(graph, null, 2)}`;
       [conversationId, userMessage],
     );
 
-    const messages = [
-      ...history.map(h => ({ role: h.role === 'USER' ? 'user' : 'assistant', content: h.content } as const)),
-      { role: 'user' as const, content: userMessage },
-    ];
-
-    const model = this.selectModel(userMessage);
+    const modelName = this.selectModel(userMessage);
     let fullText = '';
     let tokensUsed = 0;
 
     try {
-      const stream = this.anthropic.messages.stream({
-        model,
-        max_tokens: 512,
-        system: this.buildSystemPrompt(graph),
-        messages,
+      const model = this.genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: this.buildSystemPrompt(graph),
       });
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          fullText += event.delta.text;
-          onChunk(event.delta.text);
+      // Build Gemini chat history (excludes current message)
+      const chatHistory = history.map(h => ({
+        role: h.role === 'USER' ? 'user' : 'model',
+        parts: [{ text: h.content }],
+      }));
+
+      const chat = model.startChat({ history: chatHistory });
+      const result = await chat.sendMessageStream(userMessage);
+
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          fullText += text;
+          onChunk(text);
         }
       }
-      const finalMsg = await stream.finalMessage();
-      tokensUsed = finalMsg.usage.input_tokens + finalMsg.usage.output_tokens;
+
+      const finalResponse = await result.response;
+      tokensUsed = finalResponse.usageMetadata?.totalTokenCount ?? 0;
     } catch (err) {
-      this.logger.error('Claude API error', err);
+      this.logger.error('Gemini API error', err);
       fullText = "I'm having trouble right now. Please try again in a moment.";
       onChunk(fullText);
     }
@@ -126,7 +127,7 @@ ${JSON.stringify(graph, null, 2)}`;
     await this.db.query(
       `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
        VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
-      [conversationId, fullText, tokensUsed, model],
+      [conversationId, fullText, tokensUsed, modelName],
     );
 
     await this.db.query(
