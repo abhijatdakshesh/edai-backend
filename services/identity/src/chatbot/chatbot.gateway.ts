@@ -80,6 +80,8 @@ export class ChatbotGateway implements OnGatewayConnection, OnGatewayDisconnect 
         graph = await this.knowledgeGraphService.buildTeacherGraph(identifier);
       } else if (role === 'PARENT') {
         graph = await this.knowledgeGraphService.buildParentGraph(identifier);
+      } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
+        graph = await this.knowledgeGraphService.buildTeacherGraph(identifier);
       } else {
         client.emit('chat:error', { message: 'Chatbot not available for your role.' });
         return;

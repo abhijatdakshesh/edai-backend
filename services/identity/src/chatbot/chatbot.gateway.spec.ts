@@ -98,10 +98,21 @@ describe('ChatbotGateway', () => {
     });
 
     it('emits chat:error for unsupported role', async () => {
-      const socket = makeSocket({ sub: 'ADMIN1', role: 'ADMIN' });
+      const socket = makeSocket({ sub: 'GUEST1', role: 'GUEST' });
       await gateway.handleMessage({ message: 'Hi' }, socket);
 
       expect(socket.emit).toHaveBeenCalledWith('chat:error', expect.objectContaining({ message: expect.stringContaining('role') }));
+    });
+
+    it('routes ADMIN role to buildTeacherGraph', async () => {
+      const adminGraph = { role: 'TEACHER', preferredLanguage: 'en' };
+      mockKgSvc.buildTeacherGraph.mockResolvedValue(adminGraph);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-admin');
+      mockChatbotSvc.chatStream.mockResolvedValue('Here is the data...');
+      const socket = makeSocket({ sub: 'ADMIN1', role: 'ADMIN' });
+      await gateway.handleMessage({ message: 'Show at-risk students' }, socket);
+      expect(mockKgSvc.buildTeacherGraph).toHaveBeenCalledWith('ADMIN1');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
     });
 
     it('emits chat:error when unauthenticated', async () => {
