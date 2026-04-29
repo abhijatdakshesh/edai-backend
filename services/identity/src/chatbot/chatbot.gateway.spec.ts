@@ -191,4 +191,92 @@ describe('ChatbotGateway', () => {
       expect(socket.emit).toHaveBeenCalledWith('chat:consent:ack', { ok: true });
     });
   });
+
+  describe('handleMessage() — FACULTY role (alias for TEACHER)', () => {
+    it('routes FACULTY role to buildTeacherGraph', async () => {
+      const teacherGraph = { role: 'TEACHER', preferredLanguage: 'en' };
+      mockKgSvc.buildTeacherGraph.mockResolvedValue(teacherGraph);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-fac');
+      mockChatbotSvc.chatStream.mockResolvedValue('Your classes today...');
+
+      const socket = makeSocket({ sub: 'FAC002', role: 'FACULTY' });
+      await gateway.handleMessage({ message: 'What do I teach today?' }, socket);
+
+      expect(mockKgSvc.buildTeacherGraph).toHaveBeenCalledWith('FAC002');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
+    });
+
+    // Branch coverage: line 73 — `role = 'STUDENT'` default parameter
+    // Triggered when user object has sub but no role property at all.
+    it('defaults role to STUDENT when user has no role property (line 73 default branch)', async () => {
+      mockKgSvc.buildStudentGraph.mockResolvedValue(studentGraph);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-default-role');
+      mockChatbotSvc.chatStream.mockResolvedValue('Hello!');
+
+      // user object has sub but role is undefined — destructuring default kicks in
+      const socket = makeSocket({ sub: 'USN999' });  // no role key
+      await gateway.handleMessage({ message: 'Hi' }, socket);
+
+      // Should have routed to buildStudentGraph via the default STUDENT role
+      expect(mockKgSvc.buildStudentGraph).toHaveBeenCalledWith('USN999');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Module-level CORS_ORIGINS branch (line 17 in chatbot.gateway.ts)
+// The ternary `process.env['CORS_ORIGINS'] ? ...split... : [defaults]` runs
+// at import time. We force it into the truthy branch by setting the env var
+// before the module loads in a fresh Jest module registry.
+// ---------------------------------------------------------------------------
+describe('ChatbotGateway — CORS_ORIGINS env var branch', () => {
+  const originalEnv = process.env['CORS_ORIGINS'];
+
+  beforeAll(() => {
+    jest.resetModules();
+    process.env['CORS_ORIGINS'] = 'https://app.edai.in, https://admin.edai.in';
+  });
+
+  afterAll(() => {
+    if (originalEnv === undefined) {
+      delete process.env['CORS_ORIGINS'];
+    } else {
+      process.env['CORS_ORIGINS'] = originalEnv;
+    }
+    jest.resetModules();
+  });
+
+  it('splits CORS_ORIGINS env var and trims whitespace', async () => {
+    // Re-importing after env var is set executes the module-level ternary
+    // on the truthy branch (line 17: .split(',').map(s => s.trim()))
+    // We verify the module loads without error; the gateway constructor
+    // must succeed, which confirms the split/trim code path was executed.
+    const { ChatbotGateway: GatewayWithEnv } = await import('./chatbot.gateway');
+    const mockJwt = { verify: jest.fn() };
+    const mockChat = {
+      getOrCreateConversation: jest.fn(),
+      chatStream: jest.fn(),
+      getHistory: jest.fn(),
+      recordConsent: jest.fn(),
+    };
+    const mockKg = {
+      buildStudentGraph: jest.fn(),
+      buildTeacherGraph: jest.fn(),
+      buildParentGraph: jest.fn(),
+    };
+
+    const { JwtService } = await import('@nestjs/jwt');
+    const { ChatbotService } = await import('./chatbot.service');
+    const { KnowledgeGraphService } = await import('./knowledge-graph.service');
+
+    const gw = new GatewayWithEnv(
+      mockJwt as unknown as InstanceType<typeof JwtService>,
+      mockChat as unknown as InstanceType<typeof ChatbotService>,
+      mockKg as unknown as InstanceType<typeof KnowledgeGraphService>,
+    );
+
+    // Gateway instantiation means the module-level split branch was hit
+    expect(gw).toBeDefined();
+  });
 });

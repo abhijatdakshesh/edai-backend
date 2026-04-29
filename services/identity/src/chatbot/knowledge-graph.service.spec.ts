@@ -134,6 +134,57 @@ describe('KnowledgeGraphService', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // withTimeout() — the setTimeout callback fires when the DB query hangs
+  // longer than GRAPH_TIMEOUT_MS (5000ms). Fake timers let us simulate this.
+  // ---------------------------------------------------------------------------
+  describe('withTimeout() — timeout fires and returns fallback (line 68 setTimeout callback)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('returns fallback student graph when DB query exceeds 5-second timeout', async () => {
+      // DB query hangs indefinitely — never resolves
+      mockQuery.mockReturnValue(new Promise(() => {}));
+
+      const graphPromise = svc.buildStudentGraph('1RV21CS001');
+
+      // Advance fake timers past GRAPH_TIMEOUT_MS (5000ms) so the setTimeout
+      // callback fires, resolving the timeout promise with the fallback.
+      jest.advanceTimersByTime(5001);
+
+      const graph = await graphPromise;
+      // Fallback emptyStudentGraph is returned
+      expect(graph.name).toBe('Unknown');
+      expect(graph.role).toBe('STUDENT');
+    });
+
+    it('returns fallback teacher graph when DB query exceeds 5-second timeout', async () => {
+      mockQuery.mockReturnValue(new Promise(() => {}));
+
+      const graphPromise = svc.buildTeacherGraph('FAC001');
+      jest.advanceTimersByTime(5001);
+
+      const graph = await graphPromise;
+      expect(graph.name).toBe('Unknown');
+      expect(graph.role).toBe('TEACHER');
+    });
+
+    it('returns fallback parent graph when DB query exceeds 5-second timeout', async () => {
+      mockQuery.mockReturnValue(new Promise(() => {}));
+
+      const graphPromise = svc.buildParentGraph('+919845012345');
+      jest.advanceTimersByTime(5001);
+
+      const graph = await graphPromise;
+      expect(graph.role).toBe('PARENT');
+      expect(graph.child.name).toBe('Unknown');
+    });
+  });
+
   describe('buildTeacherGraph()', () => {
     it('returns teacher graph with schedule and at-risk students', async () => {
       mockQuery
@@ -183,6 +234,192 @@ describe('KnowledgeGraphService', () => {
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.totalStudents).toBe(62);
+    });
+
+    // -------------------------------------------------------------------------
+    // Branch coverage: lines 272-288 — null room, null sections, zero avg_att
+    // -------------------------------------------------------------------------
+    it('falls back to TBD when teacher slot has no room_number (line 272)', async () => {
+      const slotNoRoom = { ...teacherSlot, room_number: null };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([slotNoRoom])
+        .mockResolvedValueOnce([subjectRow])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(graph.todaySchedule[0].room).toBe('TBD');
+    });
+
+    it('handles null sections string gracefully (line 277 — String(null|undefined))', async () => {
+      // sections field is null — String(null || '') → '' → split → filter → []
+      const subjectNullSections = { subject_name: 'DBMS', sections: null, total_students: 40, avg_att: 72 };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([subjectNullSections])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(graph.subjects[0].sections).toEqual([]);
+    });
+
+    it('falls back to zero avgAttendance when avg_att is falsy (line 279)', async () => {
+      // avg_att = 0 — +0 || 0 stays 0; also covers the || 0 branch
+      const subjectZeroAtt = { subject_name: 'DBMS', sections: 'A', total_students: 30, avg_att: 0 };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([subjectZeroAtt])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(graph.subjects[0].avgAttendance).toBe(0);
+    });
+
+    // Branch coverage: line 288 — `+s.total_students || 0` in totalStudents reduce
+    // When total_students is null/undefined the +null is 0, then || 0 fires
+    it('counts null total_students as 0 in totalStudents reduce (line 288 || 0 branch)', async () => {
+      const subjectNullStudents = {
+        subject_name: 'DBMS', sections: 'A', total_students: null, avg_att: 75,
+      };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([subjectNullStudents])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      // null total_students → +null = 0, 0 || 0 = 0 → totalStudents = 0
+      expect(graph.totalStudents).toBe(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Branch coverage: buildStudentGraph — lines 134, 152-163
+  // ---------------------------------------------------------------------------
+  describe('buildStudentGraph() — null/falsy branch paths', () => {
+    it('falls back to 0 percentage when pct is null (line 134: +null || 0)', async () => {
+      // pct = null represents a subject with zero classes — no valid percentage
+      const attNullPct = { subject_name: 'Maths', present: 0, total: 0, pct: null, needed: 0 };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attNullPct])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ cnt: 0 }]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.attendanceSummary[0].percentage).toBe(0);
+    });
+
+    it('falls back to TBD when timetable slot has no room_number (line 152)', async () => {
+      const slotNoRoom = { ...slotRow, room_number: null };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([slotNoRoom])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([absenceRow]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.todaySchedule[0].room).toBe('TBD');
+    });
+
+    it('maps isLab to true when is_lab is truthy (line 154)', async () => {
+      const labSlot = { ...slotRow, is_lab: true };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([labSlot])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([absenceRow]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.todaySchedule[0].isLab).toBe(true);
+    });
+
+    it('maps ia1 and ia2 to null when marks fields are null (lines 161-162)', async () => {
+      // VTU edge case: student has not yet appeared for IA1/IA2
+      const marksNullIa = { subject_name: 'Maths', ia1: null, ia2: null, max_marks: 20 };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksNullIa])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([absenceRow]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.marksSummary[0].ia1).toBeNull();
+      expect(graph.marksSummary[0].ia2).toBeNull();
+    });
+
+    it('falls back to maxMarks 20 when max_marks is null (line 163)', async () => {
+      // Edge case: marks row present but max_marks column is NULL in DB
+      const marksNullMax = { subject_name: 'Maths', ia1: 15, ia2: 16, max_marks: null };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksNullMax])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([absenceRow]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.marksSummary[0].maxMarks).toBe(20);
+    });
+
+    it('computes overallAttendancePct as 0 when attendanceSummary is empty (line 139 false branch)', async () => {
+      // No attendance rows → ternary takes the : 0 branch
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])   // empty attendance
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ cnt: 0 }]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.overallAttendancePct).toBe(0);
+    });
+
+    it('reports zero riskScore and LOW riskLevel when risk row absent (lines 173-174)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])    // no risk row
+        .mockResolvedValueOnce([{ cnt: 0 }]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.riskScore).toBe(0);
+      expect(graph.riskLevel).toBe('LOW');
+    });
+
+    it('falls back to 0 for recentAbsenceCount when absence row has no cnt (line 174)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{}]);  // absences row exists but cnt is undefined
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.recentAbsenceCount).toBe(0);
     });
   });
 });

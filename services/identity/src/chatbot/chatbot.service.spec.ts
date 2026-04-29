@@ -290,4 +290,41 @@ describe('ChatbotService', () => {
       expect(await svcNoDb.getSessions()).toEqual([]);
     });
   });
+
+  // --- Branch coverage: getLang() fallback (line 39 — unknown language code hits ?? 'English') ---
+  describe('buildSystemPrompt() — unknown language fallback', () => {
+    it('falls back to English for unrecognised language code', () => {
+      const graphWithUnknownLang: StudentKnowledgeGraph = {
+        ...studentGraph,
+        preferredLanguage: 'fr',  // not in LANGUAGE_NAMES map → ?? 'English' branch
+      };
+      const prompt = svc.buildSystemPrompt(graphWithUnknownLang);
+      // The prompt must declare English as the response language
+      expect(prompt).toContain('English');
+    });
+
+    it('resolves Kannada for kn language code', () => {
+      const graphKn: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'kn' };
+      const prompt = svc.buildSystemPrompt(graphKn);
+      expect(prompt).toContain('Kannada');
+    });
+
+    it('resolves Tamil for ta language code', () => {
+      const graphTa: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'ta' };
+      const prompt = svc.buildSystemPrompt(graphTa);
+      expect(prompt).toContain('Tamil');
+    });
+
+    it('resolves Telugu for te language code', () => {
+      const graphTe: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'te' };
+      const prompt = svc.buildSystemPrompt(graphTe);
+      expect(prompt).toContain('Telugu');
+    });
+
+    it('resolves Hindi for hi language code', () => {
+      const graphHi: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'hi' };
+      const prompt = svc.buildSystemPrompt(graphHi);
+      expect(prompt).toContain('Hindi');
+    });
+  });
 });
