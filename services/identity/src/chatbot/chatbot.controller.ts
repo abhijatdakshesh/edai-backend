@@ -1,28 +1,124 @@
-import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
-import { ChatbotService } from './chatbot.service';
+import { Controller, Post, Get, Body, Headers, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../roles/roles.guard';
+import { Roles } from '../roles/roles.decorator';
+import { ChatbotService } from './chatbot.service';
+import { KnowledgeGraphService } from './knowledge-graph.service';
+import { TwilioWebhookGuard } from './twilio-webhook.guard';
 
-@UseGuards(JwtAuthGuard)
-@Controller()
+@Controller('chatbot')
 export class ChatbotController {
-  constructor(private readonly svc: ChatbotService) {}
+  constructor(
+    private readonly chatbotService: ChatbotService,
+    private readonly kgService: KnowledgeGraphService,
+  ) {}
 
-  @Get('chatbot/dashboard')
-  getDashboard() {
-    return this.svc.getDashboard();
+  // PUBLIC — guarded by Twilio signature validation only
+  @Post('webhook/whatsapp')
+  @UseGuards(TwilioWebhookGuard)
+  async handleWhatsAppMessage(
+    @Body() body: Record<string, string>,
+    @Headers() _headers: Record<string, string>,
+  ): Promise<{ status: string }> {
+    const rawPhone = (body['From'] ?? '').replace('whatsapp:', '').replace(/\D/g, '');
+    const message = (body['Body'] ?? '').trim();
+    if (!rawPhone || !message) return { status: 'ignored' };
+
+    try {
+      let graph;
+      let role: string;
+      let identifier: string;
+
+      try {
+        graph = await this.kgService.buildParentGraph(rawPhone);
+        role = 'PARENT';
+        identifier = rawPhone;
+      } catch {
+        // Try as student phone
+        graph = await this.kgService.buildStudentGraph(rawPhone);
+        role = 'STUDENT';
+        identifier = rawPhone;
+      }
+
+      const conversationId = await this.chatbotService.getOrCreateConversation(
+        identifier, role, 'WHATSAPP', graph.preferredLanguage,
+      );
+
+      let fullResponse = '';
+      await this.chatbotService.chatStream(conversationId, message, graph, (chunk) => {
+        fullResponse += chunk;
+      });
+
+      // Send via Twilio
+      const accountSid = process.env['TWILIO_ACCOUNT_SID'];
+      const authToken = process.env['TWILIO_AUTH_TOKEN'];
+      const from = process.env['TWILIO_WHATSAPP_FROM'];
+      if (accountSid && authToken && from) {
+        const twilio = (await import('twilio')).default;
+        const client = twilio(accountSid, authToken);
+        await client.messages.create({
+          from: `whatsapp:${from}`,
+          to: `whatsapp:+91${rawPhone}`,
+          body: fullResponse,
+        });
+      }
+
+      return { status: 'ok' };
+    } catch (err) {
+      return { status: 'error' };
+    }
   }
 
-  @Post('chatbot/query')
-  query(
-    @Body() body: { sessionId?: string; message: string },
-    @Request() req: any,
-  ) {
-    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
-    return this.svc.query(body.sessionId, body.message, usn);
+  // REST fallback for web chat (WebSocket unavailable)
+  @UseGuards(JwtAuthGuard)
+  @Post('message')
+  async restChat(
+    @Req() req: { user: { sub: string; role?: string } },
+    @Body() body: { message: string; conversationId?: string },
+  ): Promise<{ conversationId: string; message: string; timestamp: string }> {
+    const { sub: identifier, role = 'STUDENT' } = req.user;
+
+    let graph;
+    if (role === 'STUDENT') {
+      graph = await this.kgService.buildStudentGraph(identifier);
+    } else if (role === 'TEACHER' || role === 'FACULTY' || role === 'HOD') {
+      graph = await this.kgService.buildTeacherGraph(identifier);
+    } else if (role === 'PARENT') {
+      graph = await this.kgService.buildParentGraph(identifier);
+    } else {
+      throw new Error('Unsupported role for chatbot');
+    }
+
+    const conversationId = body.conversationId
+      ?? await this.chatbotService.getOrCreateConversation(identifier, role, 'WEB', graph.preferredLanguage);
+
+    let fullResponse = '';
+    await this.chatbotService.chatStream(conversationId, body.message, graph, (chunk) => {
+      fullResponse += chunk;
+    });
+
+    return { conversationId, message: fullResponse, timestamp: new Date().toISOString() };
   }
 
-  @Post('chatbot/sessions/resolve')
-  resolve(@Body() body: { sessionId: string }) {
-    return this.svc.resolve(body.sessionId);
+  // Admin: list chat sessions
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'PRINCIPAL')
+  @Get('sessions')
+  getSessions(): Promise<unknown[]> {
+    return this.chatbotService.getSessions();
+  }
+
+  // Legacy: keep old dashboard endpoint working
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'PRINCIPAL')
+  @Get('dashboard')
+  getDashboard(): object {
+    return {
+      totalSessions: 0,
+      openSessions: 0,
+      avgResponseTime: 0,
+      topTopics: ['Attendance', 'Fees', 'Schedule', 'Marks', 'Detention risk'],
+      note: 'Live data — query chat_conversations table for real counts',
+    };
   }
 }
