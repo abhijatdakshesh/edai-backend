@@ -59,25 +59,14 @@ describe('AdminPortalController', () => {
     expect(response).toBe(result);
   });
 
-  it('downloadExport returns 501 for non-CSV formats', () => {
-    const mockRes = { status: jest.fn().mockReturnThis(), setHeader: jest.fn() };
-    const result = controller.downloadExport(
-      { type: 'attendance', format: 'XLSX' },
-      mockRes as any,
-    );
-    expect(mockRes.status).toHaveBeenCalledWith(501);
-    expect((result as any).error).toContain('XLSX');
-  });
-
-  it('downloadExport returns CSV for CSV format', () => {
-    mockSvc.exportAnalytics.mockReturnValue({ type: 'attendance', count: 100 });
-    const mockRes = { status: jest.fn(), setHeader: jest.fn() };
-    const result = controller.downloadExport(
-      { type: 'attendance', format: 'CSV' },
-      mockRes as any,
-    );
-    expect(typeof result).toBe('string');
-    expect(result as string).toContain('type');
+  it('downloadExport returns CSV with correct headers and content', async () => {
+    mockSvc.getExportRows.mockReturnValue([{ usn: '1RV21CS001', name: 'Alice' }]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ type: 'attendance', format: 'CSV' }, mockRes as any);
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv; charset=utf-8');
+    const csv = mockRes.end.mock.calls[0][0] as string;
+    expect(csv).toContain('"usn"');
+    expect(csv).toContain('"Alice"');
   });
 
   it('getAttendanceTrend delegates to service', () => {
@@ -151,18 +140,43 @@ describe('AdminPortalController', () => {
     expect(csvOut).toContain('"data"');
   });
 
-  it('downloadExport uses default type and format when body omits them', () => {
-    mockSvc.exportAnalytics.mockReturnValue([{ a: 1 }]);
-    const mockRes = { status: jest.fn(), setHeader: jest.fn() };
-    const result = controller.downloadExport({ type: undefined as any, format: undefined as any }, mockRes as any);
-    expect(typeof result).toBe('string');
+  it('downloadExport uses default type and format when body omits them', async () => {
+    mockSvc.getExportRows.mockReturnValue([{ a: 1 }]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ type: undefined as any, format: undefined as any }, mockRes as any);
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv; charset=utf-8');
+    expect(mockRes.end).toHaveBeenCalled();
   });
 
-  it('downloadExport handles empty array from exportAnalytics', () => {
-    mockSvc.exportAnalytics.mockReturnValue([]);
-    const mockRes = { status: jest.fn(), setHeader: jest.fn() };
-    const result = controller.downloadExport({ type: 'test', format: 'CSV' }, mockRes as any);
-    expect(result as string).toBe('[]');
+  it('downloadExport handles empty rows gracefully', async () => {
+    mockSvc.getExportRows.mockReturnValue([]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ type: 'test', format: 'CSV' }, mockRes as any);
+    const csvOut = mockRes.end.mock.calls[0][0] as string;
+    expect(csvOut).toContain('"data"');
+  });
+
+  it('downloadExport returns XLSX', async () => {
+    mockSvc.getExportRows.mockReturnValue([{ usn: '1RV21CS001', name: 'Alice' }]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ type: 'STUDENT_MASTER', format: 'XLSX' }, mockRes as any);
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
+
+  it('downloadExport returns VTU pipe-delimited txt', async () => {
+    mockSvc.getExportRows.mockReturnValue([{ usn: '1RV21CS001', name: 'Alice', dept: 'CSE' }]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ type: 'VTU_ELIGIBILITY', format: 'VTU' }, mockRes as any);
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/plain; charset=utf-8');
+    const body = mockRes.end.mock.calls[0][0] as string;
+    expect(body).toContain('|');
+  });
+
+  it('downloadExport accepts reportType field (frontend sends reportType)', async () => {
+    mockSvc.getExportRows.mockReturnValue([{ x: 1 }]);
+    const mockRes = { setHeader: jest.fn(), end: jest.fn() };
+    await controller.downloadExport({ reportType: 'ATTENDANCE', format: 'CSV' } as any, mockRes as any);
+    expect(mockRes.end).toHaveBeenCalled();
   });
 
   it('getClassPerformance delegates with classId', () => {

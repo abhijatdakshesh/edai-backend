@@ -126,25 +126,64 @@ export class AdminPortalController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'HOD', 'PRINCIPAL', 'DEAN', 'TRUSTEE')
   @Post('exports/download')
-  downloadExport(
-    @Body() body: { type: string; format: string; filters?: Record<string, unknown>; requestedBy?: string },
-    @Res({ passthrough: true }) res: Response,
+  async downloadExport(
+    @Body() body: { type?: string; reportType?: string; format?: string; filters?: Record<string, unknown>; requestedBy?: string },
+    @Res() res: Response,
   ) {
-    const ALLOWED_EXTS: Record<string, string> = { CSV: 'csv', XLSX: 'xlsx', PDF: 'pdf', VTU: 'txt' };
-    const CONTENT_TYPES: Record<string, string> = {
-      csv: 'text/csv', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      pdf: 'application/pdf', txt: 'text/plain',
-    };
-    const safeType = (body.type ?? 'export').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeExt = ALLOWED_EXTS[(body.format ?? 'CSV').toUpperCase()] ?? 'csv';
-    if (safeExt !== 'csv') {
-      res.status(501);
-      return { error: `Format ${safeExt.toUpperCase()} is not yet implemented. Use CSV.` };
+    const rawType = body.reportType ?? body.type ?? 'export';
+    const safeType = rawType.replace(/[^a-zA-Z0-9_\- ]/g, '_');
+    const fmt = (body.format ?? 'CSV').toUpperCase();
+    const filename = `${safeType.replace(/ /g, '_')}_export`;
+    const rows = this.svc.getExportRows(safeType);
+    const csvCell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+
+    if (fmt === 'XLSX') {
+      const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ data: 'No records found' }]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+      return res.end(buffer);
     }
-    const data = this.svc.exportAnalytics(safeType);
-    res.setHeader('Content-Type', CONTENT_TYPES[safeExt] ?? 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="export_${safeType}.${safeExt}"`);
-    return JSON.stringify(data);
+
+    if (fmt === 'PDF') {
+      const doc = new PDFDocument({ margin: 40 });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
+      doc.pipe(res);
+      doc.fontSize(16).text(`EdAI Report: ${safeType}`, { underline: true }).moveDown();
+      doc.fontSize(10).fillColor('grey').text(`Generated: ${new Date().toLocaleString('en-IN')}`).fillColor('black').moveDown();
+      if (rows.length > 0) {
+        const headers = Object.keys(rows[0]!);
+        doc.fontSize(11).font('Helvetica-Bold').text(headers.join('   |   ')).moveDown(0.5);
+        doc.font('Helvetica').fontSize(10);
+        for (const row of rows) {
+          doc.text(Object.values(row).map(String).join('   |   ')).moveDown(0.2);
+        }
+      } else {
+        doc.fontSize(11).text('No records found for the selected filters.');
+      }
+      doc.end();
+      return;
+    }
+
+    if (fmt === 'VTU') {
+      const vtuLines = rows.map(r => Object.values(r).map(v => String(v ?? '')).join('|'));
+      const header = rows.length > 0 ? Object.keys(rows[0]!).join('|') : 'DATA';
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}_vtu.txt"`);
+      return res.end([header, ...vtuLines].join('\n'));
+    }
+
+    // Default: CSV
+    const headers = rows.length > 0
+      ? Object.keys(rows[0]!).map(csvCell).join(',')
+      : '"data"';
+    const csvBody = rows.map(r => Object.values(r).map(csvCell).join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
+    return res.end(`${headers}\n${csvBody}`);
   }
 
   @Get('analytics/performance')
