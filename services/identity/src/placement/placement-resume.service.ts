@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import * as PDFDocument from 'pdfkit';
@@ -15,7 +15,7 @@ const COMPANY_TYPE_CONTEXT: Record<string, string> = {
 @Injectable()
 export class PlacementResumeService {
   private readonly logger = new Logger(PlacementResumeService.name);
-  private anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+  private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @InjectDataSource() private dataSource: DataSource,
@@ -47,14 +47,11 @@ Format as clean plain text, section headers in CAPS, no markdown, no asterisks. 
 
     let resumeText = '';
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: claudePrompt }],
-      });
-      resumeText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent(claudePrompt);
+      resumeText = result.response.text();
     } catch (err) {
-      this.logger.error('Claude resume error', err);
+      this.logger.error('Gemini resume error', err);
       resumeText = `OBJECTIVE\nSeeking a ${companyType.toLowerCase()} role.\n\nEDUCATION\nBE in ${profile.department}, RVITM Bengaluru — CGPA: ${profile.cgpa}/10`;
     }
 

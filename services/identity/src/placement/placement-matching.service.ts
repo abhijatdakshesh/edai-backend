@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -18,7 +18,7 @@ function sanitizeForPrompt(value: unknown): string {
 @Injectable()
 export class PlacementMatchingService {
   private readonly logger = new Logger(PlacementMatchingService.name);
-  private anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+  private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
@@ -69,13 +69,11 @@ Score fit (0-100): CGPA 40%, attendance 20%, readiness 30%, profile 10%. Output 
     let matches: MatchResult[] = [];
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      const text = response.content[0].type === 'text' ? response.content[0].text : '[]';
-      const parsed: unknown = JSON.parse(text.trim());
+      const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const json = text.replace(/```json\n?|\n?```/g, '').trim();
+      const parsed: unknown = JSON.parse(json);
 
       // Guard: Claude must return an array of objects with the correct shape
       if (!Array.isArray(parsed)) throw new Error('Claude returned non-array');
