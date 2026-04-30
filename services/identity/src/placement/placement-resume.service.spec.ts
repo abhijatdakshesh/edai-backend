@@ -229,6 +229,26 @@ describe('PlacementResumeService', () => {
       expect(callArgs.messages[0].content).toContain('IA3=N/A');
     });
 
+    it('shows N/A for ia1 and ia2 when they are null (covers ?? N/A branches for all three marks)', async () => {
+      // Profile with a subject where ia1 and ia2 are also null — covers the ?? 'N/A' branch
+      // for ia1 and ia2 on line 31 of placement-resume.service.ts
+      const profileWithNullMarks = {
+        ...MOCK_PROFILE,
+        subjects: [{ name: 'Mathematics', ia1: null, ia2: null, ia3: null, max: 20 }],
+      };
+      scoreService.getStudentProfile.mockResolvedValue(profileWithNullMarks);
+      mockDbQuery = jest.fn().mockResolvedValue([]);
+      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      await buildModule(mockDbQuery);
+
+      await service.generateResume('1RV21CS001', 'SERVICE');
+
+      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
+      expect(callArgs.messages[0].content).toContain('IA1=N/A');
+      expect(callArgs.messages[0].content).toContain('IA2=N/A');
+      expect(callArgs.messages[0].content).toContain('IA3=N/A');
+    });
+
     it('inserts resume text to DB after generation', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       const query = jest
