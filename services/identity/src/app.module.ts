@@ -34,6 +34,8 @@ import { DocumentsModule } from './documents/documents.module';
 import { FeeRemindersModule } from './fee-reminders/fee-reminders.module';
 import { NaacModule } from './naac/naac.module';
 import { TimetableModule } from './timetable/timetable.module';
+import { ReportGeneratorModule } from './report-generator/report-generator.module';
+import { PlacementModule } from './placement/placement.module';
 
 @Module({
   imports: [
@@ -73,6 +75,8 @@ import { TimetableModule } from './timetable/timetable.module';
     FeeRemindersModule,
     NaacModule,
     TimetableModule,
+    ReportGeneratorModule,
+    PlacementModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
