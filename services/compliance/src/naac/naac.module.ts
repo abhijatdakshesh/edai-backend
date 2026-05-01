@@ -17,6 +17,7 @@ import { NaacService } from './naac.service';
   ],
   controllers: [NaacController],
   providers: [NaacService, NaacCriterionCalculatorService, NaacReportProcessor, JwtAuthGuard],
+  // NaacReportProcessor injects NaacReportEntity + NaacCriterionSnapshotEntity repos (both registered above)
   exports: [NaacService],
 })
 export class NaacModule {}
