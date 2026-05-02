@@ -6,14 +6,47 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph } from './knowledge-graph.service';
+import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph, AdminKnowledgeGraph } from './knowledge-graph.service';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   kn: 'Kannada', ta: 'Tamil', te: 'Telugu', hi: 'Hindi', en: 'English',
 };
 
 // Keyword-based model routing — no extra API call (Sujit: unit economics)
-const SIMPLE_PATTERNS = ['schedule', 'today', 'fee', 'balance', 'paid', 'attendance', 'percentage', 'class', 'timetable', 'room'];
+const SIMPLE_PATTERNS = ['schedule', 'today', 'tomorrow', 'fee', 'balance', 'paid', 'attendance', 'percentage', 'class', 'timetable', 'room', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'vtu', 'exam', 'eligible'];
+
+/**
+ * Ordered fallback chains per tier.
+ * gemini-2.0-flash is GA and the most stable fast model as of mid-2025.
+ * gemini-1.5-flash is the final backstop — broadly available, never deprecated mid-cycle.
+ * gemini-2.5-flash-lite / gemini-2.5-flash are tried first; on 404/503/429 we walk down.
+ */
+const MODEL_CHAIN_FAST = [
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
+const MODEL_CHAIN_COMPLEX = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
+
+// HTTP status codes / error message patterns that warrant a model fallback
+function isRetryableModelError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  // 404 = model deprecated/not-found; 429 = rate limit; 503 = overloaded
+  return (
+    msg.includes('404') ||
+    msg.includes('not found') ||
+    msg.includes('deprecated') ||
+    msg.includes('429') ||
+    msg.includes('quota') ||
+    msg.includes('503') ||
+    msg.includes('overloaded')
+  );
+}
 
 @Injectable()
 export class ChatbotService {
@@ -27,8 +60,13 @@ export class ChatbotService {
   selectModel(message: string): string {
     const lower = message.toLowerCase();
     return SIMPLE_PATTERNS.some(p => lower.includes(p))
-      ? 'gemini-1.5-flash'
-      : 'gemini-1.5-pro';
+      ? 'gemini-2.5-flash-lite'
+      : 'gemini-2.5-flash';
+  }
+
+  /** Returns the fallback chain for the initially-selected model name. */
+  private modelChain(primaryModel: string): string[] {
+    return primaryModel === 'gemini-2.5-flash-lite' ? MODEL_CHAIN_FAST : MODEL_CHAIN_COMPLEX;
   }
 
   private getLang(graph: KnowledgeGraph): string {
@@ -41,10 +79,12 @@ export class ChatbotService {
     const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const roleIntro = graph.role === 'STUDENT'
-      ? `You are EdAI, a friendly academic assistant. You are talking to ${(graph as StudentKnowledgeGraph).name} (USN: ${(graph as StudentKnowledgeGraph).usn}), Semester ${(graph as StudentKnowledgeGraph).semester}, Section ${(graph as StudentKnowledgeGraph).section}.`
+      ? `You are EdAI, a friendly academic assistant at ${(graph as StudentKnowledgeGraph).collegeName}. You are talking to ${(graph as StudentKnowledgeGraph).name} (USN: ${(graph as StudentKnowledgeGraph).usn}), Semester ${(graph as StudentKnowledgeGraph).semester}, Section ${(graph as StudentKnowledgeGraph).section}, ${(graph as StudentKnowledgeGraph).department}.`
       : graph.role === 'PARENT'
-      ? `You are EdAI, a trusted academic companion for parents. You are talking to the parent of ${(graph as ParentKnowledgeGraph).child.name} (USN: ${(graph as ParentKnowledgeGraph).child.usn}).`
-      : `You are EdAI, a professional assistant for faculty. You are talking to ${(graph as TeacherKnowledgeGraph).name} from the ${(graph as TeacherKnowledgeGraph).department} department.`;
+      ? `You are EdAI, a trusted academic companion for parents at RV College of Engineering, Bengaluru. You are talking to the parent of ${(graph as ParentKnowledgeGraph).child.name} (USN: ${(graph as ParentKnowledgeGraph).child.usn}).`
+      : graph.role === 'ADMIN'
+      ? `You are EdAI, an institutional intelligence assistant at ${(graph as AdminKnowledgeGraph).collegeName}. You are talking to ${(graph as AdminKnowledgeGraph).name}, an administrator. You have full visibility into student performance, risk scores, fee collection, placements, and announcements.`
+      : `You are EdAI, a professional assistant for faculty at RV College of Engineering, Bengaluru. You are talking to ${(graph as TeacherKnowledgeGraph).name} from the ${(graph as TeacherKnowledgeGraph).department} department.`;
 
     return `${roleIntro}
 
@@ -56,6 +96,11 @@ RULES:
 5. For attendance: clearly state whether safe (≥75%) or at risk (<75%).
 6. Never mention "knowledge graph" or "context" — just answer naturally.
 7. Today is ${today}.
+8. weekSchedule keys are MON/TUE/WED/THU/FRI/SAT — use these to answer "tomorrow" or day-specific questions.
+9. For VTU: vtuEligibility shows exam eligibility and registration status per subject.
+10. feeBreakdown shows individual fee components (tuition, hostel, lab etc.) with amounts and due dates.
+11. alumniStats shows average and max placement packages by department — use for placement context.
+12. upcomingPlacements includes eligibleDepts — check if student's department is eligible before confirming eligibility.
 
 KNOWLEDGE GRAPH:
 ${JSON.stringify(graph, null, 2)}`;
@@ -88,37 +133,55 @@ ${JSON.stringify(graph, null, 2)}`;
       [conversationId, userMessage],
     );
 
-    const modelName = this.selectModel(userMessage);
+    const primaryModel = this.selectModel(userMessage);
+    const chain = this.modelChain(primaryModel);
     let fullText = '';
     let tokensUsed = 0;
+    let usedModel = primaryModel;
 
-    try {
-      const model = this.genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: this.buildSystemPrompt(graph),
-      });
+    // Build Gemini chat history (excludes current message)
+    const chatHistory = history.map(h => ({
+      role: h.role === 'USER' ? 'user' : 'model',
+      parts: [{ text: h.content }],
+    }));
 
-      // Build Gemini chat history (excludes current message)
-      const chatHistory = history.map(h => ({
-        role: h.role === 'USER' ? 'user' : 'model',
-        parts: [{ text: h.content }],
-      }));
+    const systemInstruction = this.buildSystemPrompt(graph);
 
-      const chat = model.startChat({ history: chatHistory });
-      const result = await chat.sendMessageStream(userMessage);
+    let geminiSucceeded = false;
+    for (const modelName of chain) {
+      try {
+        const model = this.genAI.getGenerativeModel({ model: modelName, systemInstruction });
+        const chat = model.startChat({ history: chatHistory });
+        const result = await chat.sendMessageStream(userMessage);
 
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        if (text) {
-          fullText += text;
-          onChunk(text);
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          if (text) {
+            fullText += text;
+            onChunk(text);
+          }
         }
-      }
 
-      const finalResponse = await result.response;
-      tokensUsed = finalResponse.usageMetadata?.totalTokenCount ?? 0;
-    } catch (err) {
-      this.logger.error('Gemini API error', err);
+        const finalResponse = await result.response;
+        tokensUsed = finalResponse.usageMetadata?.totalTokenCount ?? 0;
+        usedModel = modelName;
+        if (modelName !== primaryModel) {
+          this.logger.warn(`Gemini fallback: ${primaryModel} → ${modelName}`);
+        }
+        geminiSucceeded = true;
+        break;
+      } catch (err) {
+        if (isRetryableModelError(err)) {
+          this.logger.warn(`Gemini model ${modelName} unavailable, trying next in chain`, (err as Error).message);
+          continue;
+        }
+        // Non-retryable error (auth, bad request, etc.) — bail immediately
+        this.logger.error(`Gemini non-retryable error on ${modelName}`, err);
+        break;
+      }
+    }
+
+    if (!geminiSucceeded) {
       fullText = "I'm having trouble right now. Please try again in a moment.";
       onChunk(fullText);
     }
@@ -127,7 +190,7 @@ ${JSON.stringify(graph, null, 2)}`;
     await this.db.query(
       `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
        VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
-      [conversationId, fullText, tokensUsed, modelName],
+      [conversationId, fullText, tokensUsed, usedModel],
     );
 
     await this.db.query(
@@ -181,13 +244,16 @@ ${JSON.stringify(graph, null, 2)}`;
     );
   }
 
-  async getHistory(conversationId: string): Promise<Array<{ role: string; content: string; createdAt: string }>> {
+  async getHistory(conversationId: string, userId: string): Promise<Array<{ role: string; content: string; createdAt: string }>> {
     if (!this.db) return [];
     return this.db.query(
-      `SELECT role, content, created_at AS "createdAt" FROM chat_messages
-       WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')
-       ORDER BY created_at ASC LIMIT 50`,
-      [conversationId],
+      `SELECT cm.role, cm.content, cm.created_at AS "createdAt"
+       FROM chat_messages cm
+       JOIN chat_conversations cc ON cc.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cc.user_identifier = $2
+         AND cm.role IN ('USER','ASSISTANT')
+       ORDER BY cm.created_at ASC LIMIT 50`,
+      [conversationId, userId],
     ) as Promise<Array<{ role: string; content: string; createdAt: string }>>;
   }
 

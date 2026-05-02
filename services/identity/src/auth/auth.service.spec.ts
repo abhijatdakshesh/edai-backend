@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AuthService, type JwtPayload, type LoginResponse, type TokenPair } from './auth.service';
+import { TokenBlocklistService } from './token-blocklist.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,15 @@ describe('AuthService', () => {
    */
   const JWT_SECRET = 'test-secret-do-not-use-in-production';
 
+  const mockBlocklist = {
+    block: jest.fn().mockResolvedValue(undefined),
+    isBlocked: jest.fn().mockResolvedValue(false),
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockBlocklist.isBlocked.mockResolvedValue(false);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -40,6 +49,7 @@ describe('AuthService', () => {
               },
             }),
         },
+        { provide: TokenBlocklistService, useValue: mockBlocklist },
       ],
     }).compile();
 
@@ -190,101 +200,103 @@ describe('AuthService', () => {
       jwtService = new JwtService({ secret: JWT_SECRET });
     });
 
-    it('returns a new accessToken and expiresIn=900 for a valid refresh token', () => {
-      const result = service.refresh(validRefreshToken);
+    it('returns a new accessToken and expiresIn=900 for a valid refresh token', async () => {
+      const result = await service.refresh(validRefreshToken);
       expect(result.accessToken).toBeTruthy();
       expect(result.expiresIn).toBe(900);
     });
 
-    it('new accessToken contains correct user claims', () => {
-      const { accessToken } = service.refresh(validRefreshToken);
+    it('new accessToken contains correct user claims', async () => {
+      const { accessToken } = await service.refresh(validRefreshToken);
       const payload = decodePayload(accessToken);
       expect(payload['sub']).toBe('u-admin-01');
       expect(payload['role']).toBe('ADMIN');
     });
 
-    it('does NOT return a refreshToken (not rotating in Phase 1)', () => {
-      const result = service.refresh(validRefreshToken);
+    it('does NOT return a refreshToken (not rotating in Phase 1)', async () => {
+      const result = await service.refresh(validRefreshToken);
       expect((result as Record<string, unknown>)['refreshToken']).toBeUndefined();
     });
 
-    it('throws UnauthorizedException for a completely invalid token string', () => {
-      expect(() => service.refresh('not.a.jwt')).toThrow(UnauthorizedException);
+    it('throws UnauthorizedException for a completely invalid token string', async () => {
+      await expect(service.refresh('not.a.jwt')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException with message "Invalid or expired refresh token" for bad token', () => {
-      let error!: UnauthorizedException;
-      try {
-        service.refresh('garbage.token.here');
-      } catch (e) {
-        error = e as UnauthorizedException;
-      }
-      expect(error.message).toBe('Invalid or expired refresh token');
+    it('throws UnauthorizedException with message "Invalid or expired refresh token" for bad token', async () => {
+      await expect(service.refresh('garbage.token.here')).rejects.toThrow('Invalid or expired refresh token');
     });
 
-    it('throws UnauthorizedException for a tampered token (signature mismatch)', () => {
-      // Tamper the payload section
+    it('throws UnauthorizedException for a tampered token (signature mismatch)', async () => {
       const parts = validRefreshToken.split('.');
       const fakePayload = Buffer.from(JSON.stringify({ sub: 'u-admin-01', type: 'refresh' })).toString('base64url');
       const tamperedToken = `${parts[0]}.${fakePayload}.${parts[2]}`;
-      expect(() => service.refresh(tamperedToken)).toThrow(UnauthorizedException);
+      await expect(service.refresh(tamperedToken)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException when token type is not "refresh"', () => {
-      // Sign a token without type=refresh (simulates an access token being used as refresh)
+    it('throws UnauthorizedException when token type is not "refresh"', async () => {
       const accessLikeToken = jwtService.sign(
         { sub: 'u-admin-01', role: 'ADMIN' },
         { secret: JWT_SECRET, expiresIn: '15m' },
       );
-      expect(() => service.refresh(accessLikeToken)).toThrow(UnauthorizedException);
+      await expect(service.refresh(accessLikeToken)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException when sub is missing from refresh token', () => {
+    it('throws UnauthorizedException when sub is missing from refresh token', async () => {
       const noSubToken = jwtService.sign(
         { type: 'refresh' },
         { secret: JWT_SECRET, expiresIn: '7d' },
       );
-      expect(() => service.refresh(noSubToken)).toThrow(UnauthorizedException);
+      await expect(service.refresh(noSubToken)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException for an expired refresh token', () => {
-      // Sign a token that expired 1 second ago
+    it('throws UnauthorizedException for an expired refresh token', async () => {
       const expiredToken = jwtService.sign(
         { sub: 'u-admin-01', type: 'refresh' },
         { secret: JWT_SECRET, expiresIn: '-1s' },
       );
-      expect(() => service.refresh(expiredToken)).toThrow(UnauthorizedException);
+      await expect(service.refresh(expiredToken)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws "User not found or inactive" for a refresh token belonging to an unknown user id', () => {
+    it('throws "User not found or inactive" for a refresh token belonging to an unknown user id', async () => {
       const unknownUserToken = jwtService.sign(
         { sub: 'u-nonexistent-99', type: 'refresh' },
         { secret: JWT_SECRET, expiresIn: '7d' },
       );
-      let error!: UnauthorizedException;
-      try {
-        service.refresh(unknownUserToken);
-      } catch (e) {
-        error = e as UnauthorizedException;
-      }
-      expect(error.message).toBe('User not found or inactive');
+      await expect(service.refresh(unknownUserToken)).rejects.toThrow('User not found or inactive');
+    });
+
+    it('throws UnauthorizedException for a blocklisted (revoked) token', async () => {
+      mockBlocklist.isBlocked.mockResolvedValue(true);
+      await expect(service.refresh(validRefreshToken)).rejects.toThrow('Token has been revoked');
+    });
+
+    it('calls blocklist.isBlocked with the refresh token', async () => {
+      await service.refresh(validRefreshToken);
+      expect(mockBlocklist.isBlocked).toHaveBeenCalledWith(validRefreshToken);
     });
   });
 
   // ─── logout ───────────────────────────────────────────────────────────────
 
   describe('logout()', () => {
-    it('always returns { ok: true } for a valid refresh token string', async () => {
+    it('returns { ok: true } after blocklisting the refresh token', async () => {
       const { refreshToken } = await service.login('admin@rvce.edu', 'Admin@123');
-      expect(service.logout(refreshToken)).toEqual({ ok: true });
+      const result = await service.logout(refreshToken);
+      expect(result).toEqual({ ok: true });
+      expect(mockBlocklist.block).toHaveBeenCalledWith(refreshToken);
     });
 
-    it('returns { ok: true } for an empty string (stateless — no validation)', () => {
-      expect(service.logout('')).toEqual({ ok: true });
+    it('blocks token so subsequent refresh throws "Token has been revoked"', async () => {
+      const { refreshToken } = await service.login('admin@rvce.edu', 'Admin@123');
+      await service.logout(refreshToken);
+      mockBlocklist.isBlocked.mockResolvedValue(true);
+      await expect(service.refresh(refreshToken)).rejects.toThrow('Token has been revoked');
     });
 
-    it('returns { ok: true } for any arbitrary string', () => {
-      expect(service.logout('whatever-token-here')).toEqual({ ok: true });
+    it('returns { ok: true } even for an arbitrary string (blocklist, not validate)', async () => {
+      const result = await service.logout('whatever-token-here');
+      expect(result).toEqual({ ok: true });
+      expect(mockBlocklist.block).toHaveBeenCalledWith('whatever-token-here');
     });
   });
 
@@ -373,7 +385,7 @@ describe('AuthService', () => {
 
     it('refresh token issued by login resolves back to a new access token', async () => {
       const { refreshToken } = await service.login('hod@rvce.edu', 'Hod@123');
-      const { accessToken, expiresIn } = service.refresh(refreshToken);
+      const { accessToken, expiresIn } = await service.refresh(refreshToken);
       expect(accessToken).toBeTruthy();
       expect(expiresIn).toBe(900);
       const payload = decodePayload(accessToken);

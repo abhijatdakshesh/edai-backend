@@ -30,6 +30,18 @@ export class StudentEntity {
   @Column({ name: 'section_id', type: 'varchar', length: 20, nullable: true })
   sectionId!: string | null;
 
+  @Column({ type: 'integer', nullable: true, default: 5 })
+  semester!: number | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  section!: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  department!: string | null;
+
+  @Column({ name: 'preferred_language', type: 'varchar', length: 10, nullable: true, default: 'en' })
+  preferredLanguage!: string | null;
+
   @Column({ name: 'photo_url', type: 'text', nullable: true })
   photoUrl!: string | null;
 

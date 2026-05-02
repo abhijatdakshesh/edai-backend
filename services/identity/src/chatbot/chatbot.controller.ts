@@ -86,7 +86,7 @@ export class ChatbotController {
     } else if (role === 'PARENT') {
       graph = await this.kgService.buildParentGraph(identifier);
     } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
-      graph = await this.kgService.buildTeacherGraph(identifier);
+      graph = await this.kgService.buildAdminGraph(identifier);
     } else {
       throw new Error('Unsupported role for chatbot');
     }

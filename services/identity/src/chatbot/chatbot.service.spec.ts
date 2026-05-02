@@ -56,23 +56,23 @@ describe('ChatbotService', () => {
 
   describe('selectModel()', () => {
     it('routes attendance query to Gemini Flash', () => {
-      expect(svc.selectModel('What is my attendance?')).toBe('gemini-1.5-flash');
+      expect(svc.selectModel('What is my attendance?')).toBe('gemini-2.5-flash-lite');
     });
 
     it('routes schedule query to Gemini Flash', () => {
-      expect(svc.selectModel('Show my schedule today')).toBe('gemini-1.5-flash');
+      expect(svc.selectModel('Show my schedule today')).toBe('gemini-2.5-flash-lite');
     });
 
     it('routes fee query to Gemini Flash', () => {
-      expect(svc.selectModel('Is my fee paid?')).toBe('gemini-1.5-flash');
+      expect(svc.selectModel('Is my fee paid?')).toBe('gemini-2.5-flash-lite');
     });
 
     it('routes complex query to Gemini Pro', () => {
-      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('gemini-1.5-pro');
+      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('gemini-2.5-flash');
     });
 
     it('routes general query to Gemini Pro', () => {
-      expect(svc.selectModel('What should I do to improve my grades?')).toBe('gemini-1.5-pro');
+      expect(svc.selectModel('What should I do to improve my grades?')).toBe('gemini-2.5-flash');
     });
   });
 
@@ -207,7 +207,7 @@ describe('ChatbotService', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("'ASSISTANT'"),
-        expect.arrayContaining(['gemini-1.5-flash']),
+        expect.arrayContaining(['gemini-2.5-flash-lite']),
       );
     });
 
@@ -253,6 +253,42 @@ describe('ChatbotService', () => {
         expect.stringContaining("'ASSISTANT'"),
         expect.arrayContaining([0]),
       );
+    });
+    it('falls back to next model on retryable 429 error and logs warn (line 162 + 168)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      // First call (primary) → 429 retryable; second call (fallback) → success
+      mockSendMessageStream
+        .mockRejectedValueOnce(new Error('[429 Too Many Requests] quota exceeded'))
+        .mockResolvedValueOnce(makeStreamResult(['Fallback response']));
+
+      const chunks: string[] = [];
+      const result = await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, (c) => chunks.push(c));
+
+      // Used the fallback model — line 162 warn branch hit
+      expect(result).toBe('Fallback response');
+      expect(chunks).toEqual(['Fallback response']);
+    });
+
+    it('falls back through full chain and returns error message when all models fail', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      // All models in chain fail with retryable errors — line 168 warn + continue hit
+      mockSendMessageStream.mockRejectedValue(new Error('[503 Service Unavailable] overloaded'));
+
+      const chunks: string[] = [];
+      const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
+
+      expect(result).toContain('trouble');
+      expect(chunks[0]).toContain('trouble');
     });
   });
 

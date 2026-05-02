@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -23,7 +23,6 @@ export interface StudentPlacementProfile {
   };
 }
 
-// Points per tier — named constants to avoid magic numbers drifting from business rules
 const CGPA_PTS = { tier9: 35, tier8: 28, tier7: 20, tier6: 12, low: 5 };
 const ATT_PTS = { tier90: 25, tier80: 18, tier75: 10, low: 3 };
 const BACKLOG_PENALTY = 8;
@@ -34,16 +33,22 @@ const FINAL_YEAR_THRESHOLD = 7;
 
 @Injectable()
 export class PlacementScoreService {
-  constructor(@Optional() @InjectDataSource() private dataSource: DataSource) {}
+  constructor(@Optional() @InjectDataSource() private dataSource: DataSource | null) {}
+
+  private requireDb(): DataSource {
+    if (!this.dataSource) throw new ServiceUnavailableException('Database not available');
+    return this.dataSource;
+  }
 
   async getStudentProfile(usn: string): Promise<StudentPlacementProfile> {
+    const db = this.requireDb();
     const [score, subjects] = await Promise.all([
-      this.dataSource.query(
+      db.query(
         `SELECT usn, name, department, semester, section, cgpa, attendance_pct, backlogs, readiness_score, placement_status
          FROM placement_readiness_scores WHERE usn = $1`,
         [usn]
       ),
-      this.dataSource.query(`
+      db.query(`
         SELECT im.ia_number, im.marks, im.max_marks, sub.name AS subject_name
         FROM ia_marks im
         JOIN students s ON s.id = im.student_id
@@ -67,7 +72,6 @@ export class PlacementScoreService {
     const trendPts = TREND_PTS_NEUTRAL;
     const semesterPts = semester >= FINAL_YEAR_THRESHOLD ? FINAL_YEAR_BONUS : 0;
 
-    // Group subjects by name → ia1/ia2/ia3 marks
     const subjectMap = new Map<string, { ia1: number | null; ia2: number | null; ia3: number | null; max: number }>();
     for (const row of subjects as Record<string, unknown>[]) {
       const name = String(row['subject_name'] ?? 'Unknown');
@@ -98,6 +102,7 @@ export class PlacementScoreService {
   }
 
   async getDepartmentSummary(department?: string, semester?: number) {
+    if (!this.dataSource) return [];
     const params: (string | number)[] = [];
     let where = '';
     if (department) { params.push(department); where += `WHERE department = $${params.length}`; }
@@ -120,6 +125,7 @@ export class PlacementScoreService {
   }
 
   async getTopStudents(department: string, semester: number, limit = 20) {
+    if (!this.dataSource) return [];
     return this.dataSource.query(`
       SELECT usn, name, department, semester, cgpa, attendance_pct, backlogs,
              readiness_score, placement_status
@@ -131,6 +137,7 @@ export class PlacementScoreService {
   }
 
   async getAllReadyStudents(minScore = 60) {
+    if (!this.dataSource) return [];
     return this.dataSource.query(`
       SELECT usn, name, department, semester, cgpa, attendance_pct,
              readiness_score, placement_status

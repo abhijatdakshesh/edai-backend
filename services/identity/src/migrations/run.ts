@@ -24,7 +24,7 @@ const ds = new DataSource({
     AnnouncementEntity,
   ],
   synchronize: false,
-  migrations: [__dirname + '/*.migration.ts'],
+  migrations: [__dirname + '/0[0-9][0-9]_*.ts'],
 });
 
 ds.initialize()
