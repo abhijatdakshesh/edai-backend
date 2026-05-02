@@ -22,8 +22,13 @@ export interface ConsentRecord {
 @Injectable()
 export class ConsentService {
   private readonly logger = new Logger(ConsentService.name);
-  /** key = `${principalId}::${institutionId}` */
+  /** key = `${principalId}::${institutionId}` — stores active and recently revoked records */
   private cache: Map<string, ConsentRecord> = new Map();
+
+  /** Exposes all cached records (active + revoked) for testing and audit. */
+  get records(): ConsentRecord[] {
+    return Array.from(this.cache.values());
+  }
 
   constructor(@Optional() @InjectDataSource() private readonly ds: DataSource | null) {
     if (this.ds) {
@@ -87,7 +92,6 @@ export class ConsentService {
     if (record.channels.length === 0) {
       record.active = false;
       record.revokedAt = new Date().toISOString();
-      this.cache.delete(k);
       this.ds?.query(
         `UPDATE consent_records SET active = false, revoked_at = NOW() WHERE principal_id = $1 AND institution_id = $2 AND active = true`,
         [principalId, institutionId],
@@ -107,7 +111,6 @@ export class ConsentService {
     record.active = false;
     record.channels = [];
     record.revokedAt = new Date().toISOString();
-    this.cache.delete(k);
     this.ds?.query(
       `UPDATE consent_records SET active = false, channels = '{}', revoked_at = NOW()
        WHERE principal_id = $1 AND institution_id = $2 AND active = true`,
@@ -117,7 +120,7 @@ export class ConsentService {
 
   assertConsent(principalId: string, channel: ConsentChannel, institutionId = 'default'): void {
     const record = this.cache.get(this.key(principalId, institutionId));
-    if (!record || !record.channels.includes(channel)) {
+    if (!record || !record.active || !record.channels.includes(channel)) {
       throw new ForbiddenException(
         `DPDP consent not granted: principal ${principalId} has not consented to ${channel} communications`,
       );
@@ -126,10 +129,11 @@ export class ConsentService {
 
   hasConsent(principalId: string, channel: ConsentChannel, institutionId = 'default'): boolean {
     const record = this.cache.get(this.key(principalId, institutionId));
-    return !!record && record.channels.includes(channel);
+    return !!record && record.active && record.channels.includes(channel);
   }
 
   getConsent(principalId: string, institutionId = 'default'): ConsentRecord | null {
-    return this.cache.get(this.key(principalId, institutionId)) ?? null;
+    const record = this.cache.get(this.key(principalId, institutionId));
+    return record?.active ? record : null;
   }
 }

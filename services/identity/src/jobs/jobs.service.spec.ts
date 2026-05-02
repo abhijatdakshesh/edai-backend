@@ -302,20 +302,16 @@ describe('JobsService', () => {
       expect(svc.alumni).toEqual([]);
     });
 
-    it('hydrates drives from DB, maps decimal minCgpa to number', async () => {
-      const mockRow = { id: 'drive-db-1', company: 'Google', scheduledDate: '2026-06-01', venue: 'RVCE', rounds: ['Coding', 'HR'], eligibleDepts: ['CSE'], minCgpa: '7.5', status: 'SCHEDULED', offersExtended: 0 };
-      const mockDriveRepo = { find: jest.fn().mockResolvedValue([mockRow]) };
-      const svc = new JobsService(mockDriveRepo as any, undefined);
+    it('drives remain empty on init (no DB repo — drives are in-memory only)', async () => {
+      const svc = new JobsService();
       await svc.onModuleInit();
-      expect(svc.drives).toHaveLength(1);
-      expect(svc.drives[0].minCgpa).toBe(7.5);
-      expect(typeof svc.drives[0].minCgpa).toBe('number');
+      expect(svc.drives).toEqual([]);
     });
 
     it('hydrates alumni from DB, maps decimal packageLpa to number', async () => {
       const mockRow = { usn: '1RV19CS001', name: 'Priya M', graduationYear: 2023, company: 'Amazon', role: 'SDE', packageLpa: '18.5', dept: 'CSE', location: 'Bengaluru' };
       const mockAlumniRepo = { find: jest.fn().mockResolvedValue([mockRow]) };
-      const svc = new JobsService(undefined, mockAlumniRepo as any);
+      const svc = new JobsService(mockAlumniRepo as any);
       await svc.onModuleInit();
       expect(svc.alumni).toHaveLength(1);
       expect(svc.alumni[0].packageLpa).toBe(18.5);

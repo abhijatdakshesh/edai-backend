@@ -138,6 +138,7 @@ const STUDENT_ENTITY: StudentEntity = {
   biometricRef: null, institutionId: 'rvce', homeState: null, parentPhone: '+919876543210',
   parentName: 'DB Parent', consentVoice: true, parentPreferredLanguage: 'kn',
   createdAt: new Date(),
+  semester: null, section: null, department: null, preferredLanguage: null,
 };
 
 describe('StudentsService — DB mode', () => {

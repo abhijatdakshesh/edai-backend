@@ -22,16 +22,25 @@ const studentGraph: StudentKnowledgeGraph = {
   semester: 5,
   section: 'A',
   department: 'CSE',
+  parentName: 'Alice Parent',
   preferredLanguage: 'en',
   todaySchedule: [],
+  weekSchedule: {},
   attendanceSummary: [{ subject: 'DBMS', present: 40, total: 50, percentage: 80, classesNeededFor75: 0 }],
   overallAttendancePct: 80,
   detentionRisk: false,
   marksSummary: [],
   feeStatus: { totalFee: 85000, paid: 60000, balance: 25000, status: 'PARTIAL', dueDate: null },
+  feeBreakdown: [],
   riskScore: 0.3,
   riskLevel: 'LOW',
   recentAbsenceCount: 1,
+  announcements: [],
+  upcomingPlacements: [],
+  vtuWindow: null,
+  vtuEligibility: null,
+  collegeName: 'RVCE',
+  academicYear: '2024-25',
 };
 
 function makeStreamResult(chunks: string[], totalTokens = 120) {
@@ -102,6 +111,7 @@ describe('ChatbotService', () => {
         phone: '+91',
         preferredLanguage: 'kn',
         child: { ...studentGraph, role: undefined as any },
+        announcements: [],
       };
       const prompt = svc.buildSystemPrompt(parentGraph);
       expect(prompt).toContain('Alice');
@@ -116,9 +126,12 @@ describe('ChatbotService', () => {
         department: 'CSE',
         preferredLanguage: 'en',
         todaySchedule: [],
+        weekSchedule: {},
         subjects: [],
         atRiskStudents: [],
         totalStudents: 0,
+        announcements: [],
+        collegeName: 'RVCE',
       };
       const prompt = svc.buildSystemPrompt(teacherGraph);
       expect(prompt).toContain('Dr. Kumar');
@@ -336,14 +349,14 @@ describe('ChatbotService', () => {
         { role: 'USER', content: 'hello', createdAt: '2026-04-29' },
         { role: 'ASSISTANT', content: 'hi!', createdAt: '2026-04-29' },
       ]);
-      const hist = await svc.getHistory('conv-1');
+      const hist = await svc.getHistory('conv-1', 'user-1');
       expect(hist).toHaveLength(2);
       expect(hist[0].role).toBe('USER');
     });
 
     it('returns empty array when db is null', async () => {
       const svcNoDb = new ChatbotService(null);
-      expect(await svcNoDb.getHistory('conv-1')).toEqual([]);
+      expect(await svcNoDb.getHistory('conv-1', 'user-1')).toEqual([]);
     });
   });
 
