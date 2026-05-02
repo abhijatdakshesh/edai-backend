@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SnakeNamingStrategy } from './snake-naming.strategy';
 import { FeeItemEntity } from '../entities/fee-item.entity';
 import { PromotionBatchEntity, PromotionAuditEntity } from '../entities/promotion-batch.entity';
 import { VtuWindowEntity, VtuEligibilityEntity, VtuRegistrationEntity } from '../entities/vtu.entity';
 import { AiCallLogEntity, ConsentRecordEntity, AnnouncementEntity } from '../entities/comms.entity';
 import { StudentEntity, ParentStudentLinkEntity } from '../entities/student-orm.entity';
-import { PlacementDriveEntity, AlumniOutcomeEntity } from '../entities/placement.entity';
+import { AlumniOutcomeEntity } from '../entities/placement.entity';
 
 const ALL_ENTITIES = [
   StudentEntity,
@@ -19,7 +20,6 @@ const ALL_ENTITIES = [
   AiCallLogEntity,
   ConsentRecordEntity,
   AnnouncementEntity,
-  PlacementDriveEntity,
   AlumniOutcomeEntity,
 ];
 
@@ -40,6 +40,7 @@ const ALL_ENTITIES = [
           // are handled by migration 006_students_chatbot_columns so synchronize:true
           // won't wipe manually-populated data; it only runs ALTER TABLE ADD COLUMN IF NOT EXISTS.
           synchronize: false,
+          namingStrategy: new SnakeNamingStrategy(),
           ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
           logging: false,
           // Pool sizing: knowledge-graph fires 4–7 parallel queries per request;

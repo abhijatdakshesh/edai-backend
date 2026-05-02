@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Optional, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PlacementDriveEntity, AlumniOutcomeEntity } from '../entities/placement.entity';
+import { AlumniOutcomeEntity } from '../entities/placement.entity';
 
 export interface Job {
   id: string;
@@ -76,21 +76,11 @@ export interface SkillGapReport {
 @Injectable()
 export class JobsService implements OnModuleInit {
   constructor(
-    @Optional() @InjectRepository(PlacementDriveEntity)
-    private readonly driveRepo?: Repository<PlacementDriveEntity>,
     @Optional() @InjectRepository(AlumniOutcomeEntity)
     private readonly alumniRepo?: Repository<AlumniOutcomeEntity>,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    if (this.driveRepo) {
-      const rows = await this.driveRepo.find();
-      this.drives = rows.map((r) => ({
-        id: r.id, company: r.company, scheduledDate: r.scheduledDate, venue: r.venue,
-        rounds: r.rounds, eligibleDepts: r.eligibleDepts, minCgpa: Number(r.minCgpa),
-        status: r.status as PlacementDrive['status'], offersExtended: r.offersExtended,
-      }));
-    }
     if (this.alumniRepo) {
       const rows = await this.alumniRepo.find();
       this.alumni = rows.map((r) => ({
@@ -178,8 +168,6 @@ export class JobsService implements OnModuleInit {
       offersExtended: 0,
     };
     this.drives.push(drive);
-    this.driveRepo?.save(drive as unknown as PlacementDriveEntity)
-      .catch((e) => console.error('DB persist error (createDrive)', e));
     return drive;
   }
 
@@ -187,8 +175,6 @@ export class JobsService implements OnModuleInit {
     const drive = this.getDrive(id);
     drive.status = 'COMPLETED';
     drive.offersExtended = offersExtended;
-    this.driveRepo?.save(drive as unknown as PlacementDriveEntity)
-      .catch((e) => console.error('DB persist error (completeDrive)', e));
     return drive;
   }
 
