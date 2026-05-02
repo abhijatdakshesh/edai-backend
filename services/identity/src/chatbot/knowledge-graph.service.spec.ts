@@ -29,13 +29,20 @@ describe('KnowledgeGraphService', () => {
   describe('buildStudentGraph()', () => {
     it('returns student graph with live data', async () => {
       mockQuery
-        .mockResolvedValueOnce([studentRow])   // profile
-        .mockResolvedValueOnce([slotRow])       // timetable
-        .mockResolvedValueOnce([attRow])        // attendance
-        .mockResolvedValueOnce([marksRow])      // marks
-        .mockResolvedValueOnce([feeRow])        // fees
-        .mockResolvedValueOnce([riskRow])       // risk
-        .mockResolvedValueOnce([absenceRow]);   // absences
+        .mockResolvedValueOnce([studentRow])   // 1. students (profile)
+        .mockResolvedValueOnce([slotRow])       // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
 
@@ -53,13 +60,20 @@ describe('KnowledgeGraphService', () => {
 
     it('returns empty graph when student not found', async () => {
       mockQuery
-        .mockResolvedValueOnce([])  // profile — empty
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([])              // 1. students — empty
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([])              // 4. attendance
+        .mockResolvedValueOnce([])              // 5. marks
+        .mockResolvedValueOnce([])              // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('UNKNOWN');
       expect(graph.name).toBe('Unknown');
@@ -76,13 +90,20 @@ describe('KnowledgeGraphService', () => {
     it('sets detentionRisk when any subject below 75%', async () => {
       const lowAtt = { ...attRow, pct: 60.0, needed: 8 };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([lowAtt])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([lowAtt])        // 4. attendance
+        .mockResolvedValueOnce([])              // 5. marks
+        .mockResolvedValueOnce([])              // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.detentionRisk).toBe(true);
@@ -90,13 +111,20 @@ describe('KnowledgeGraphService', () => {
 
     it('handles missing fee record gracefully', async () => {
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])  // no fee row
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([])              // 4. attendance
+        .mockResolvedValueOnce([])              // 5. marks
+        .mockResolvedValueOnce([])              // 6. fees — no fee row
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.feeStatus.status).toBe('UNKNOWN');
@@ -106,14 +134,25 @@ describe('KnowledgeGraphService', () => {
   describe('buildParentGraph()', () => {
     it('returns parent graph wrapping child student graph', async () => {
       mockQuery
-        .mockResolvedValueOnce([{ usn: '1RV21CS001', lang: 'kn' }])  // parent lookup
-        .mockResolvedValueOnce([studentRow])   // student profile
-        .mockResolvedValueOnce([slotRow])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksRow])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([absenceRow]);
+        .mockResolvedValueOnce([{ student_id: '1RV21CS001', lang: 'kn' }])  // 0. parent lookup
+        // buildStudentGraph runs first (await Promise.all → both start, but parent lookup has student_id field)
+        // Promise.all in buildParentGraph fires buildStudentGraph + parentAnnouncements concurrently
+        // buildStudentGraph queries 1-14 + parentAnnouncements query
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([slotRow])       // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([])              // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. parentAnnouncements
 
       const graph = await svc.buildParentGraph('+919845012345');
       expect(graph.role).toBe('PARENT');
@@ -188,10 +227,12 @@ describe('KnowledgeGraphService', () => {
   describe('buildTeacherGraph()', () => {
     it('returns teacher graph with schedule and at-risk students', async () => {
       mockQuery
-        .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([teacherSlot])
-        .mockResolvedValueOnce([subjectRow])
-        .mockResolvedValueOnce([atRiskRow]);
+        .mockResolvedValueOnce([teacherRow])     // teachers
+        .mockResolvedValueOnce([teacherSlot])    // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
+        .mockResolvedValueOnce([subjectRow])     // subjects
+        .mockResolvedValueOnce([atRiskRow])      // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.role).toBe('TEACHER');
@@ -206,6 +247,8 @@ describe('KnowledgeGraphService', () => {
     it('returns empty teacher graph when teacher not found', async () => {
       mockQuery
         .mockResolvedValueOnce([])  // no teacher
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
@@ -225,12 +268,14 @@ describe('KnowledgeGraphService', () => {
     it('computes totalStudents from subjects', async () => {
       mockQuery
         .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])               // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
         .mockResolvedValueOnce([
           { subject_name: 'DBMS', sections: 'A', total_students: 30, avg_att: 78 },
           { subject_name: 'OS', sections: 'B', total_students: 32, avg_att: 75 },
         ])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])               // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.totalStudents).toBe(62);
@@ -243,9 +288,11 @@ describe('KnowledgeGraphService', () => {
       const slotNoRoom = { ...teacherSlot, room_number: null };
       mockQuery
         .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([slotNoRoom])
-        .mockResolvedValueOnce([subjectRow])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([slotNoRoom])     // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
+        .mockResolvedValueOnce([subjectRow])     // subjects
+        .mockResolvedValueOnce([])               // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.todaySchedule[0].room).toBe('TBD');
@@ -256,9 +303,11 @@ describe('KnowledgeGraphService', () => {
       const subjectNullSections = { subject_name: 'DBMS', sections: null, total_students: 40, avg_att: 72 };
       mockQuery
         .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])               // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
         .mockResolvedValueOnce([subjectNullSections])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])               // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.subjects[0].sections).toEqual([]);
@@ -269,9 +318,11 @@ describe('KnowledgeGraphService', () => {
       const subjectZeroAtt = { subject_name: 'DBMS', sections: 'A', total_students: 30, avg_att: 0 };
       mockQuery
         .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])               // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
         .mockResolvedValueOnce([subjectZeroAtt])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])               // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       expect(graph.subjects[0].avgAttendance).toBe(0);
@@ -285,9 +336,11 @@ describe('KnowledgeGraphService', () => {
       };
       mockQuery
         .mockResolvedValueOnce([teacherRow])
-        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])               // todaySlots
+        .mockResolvedValueOnce([])               // weekSlots
         .mockResolvedValueOnce([subjectNullStudents])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])               // atRisk
+        .mockResolvedValueOnce([]);              // announcements
 
       const graph = await svc.buildTeacherGraph('FAC001');
       // null total_students → +null = 0, 0 || 0 = 0 → totalStudents = 0
@@ -303,13 +356,20 @@ describe('KnowledgeGraphService', () => {
       // pct = null represents a subject with zero classes — no valid percentage
       const attNullPct = { subject_name: 'Maths', present: 0, total: 0, pct: null, needed: 0 };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([attNullPct])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attNullPct])    // 4. attendance
+        .mockResolvedValueOnce([])              // 5. marks
+        .mockResolvedValueOnce([])              // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.attendanceSummary[0].percentage).toBe(0);
@@ -318,13 +378,20 @@ describe('KnowledgeGraphService', () => {
     it('falls back to TBD when timetable slot has no room_number (line 152)', async () => {
       const slotNoRoom = { ...slotRow, room_number: null };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([slotNoRoom])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksRow])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([absenceRow]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([slotNoRoom])    // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.todaySchedule[0].room).toBe('TBD');
@@ -333,13 +400,20 @@ describe('KnowledgeGraphService', () => {
     it('maps isLab to true when is_lab is truthy (line 154)', async () => {
       const labSlot = { ...slotRow, is_lab: true };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([labSlot])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksRow])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([absenceRow]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([labSlot])       // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.todaySchedule[0].isLab).toBe(true);
@@ -349,13 +423,20 @@ describe('KnowledgeGraphService', () => {
       // VTU edge case: student has not yet appeared for IA1/IA2
       const marksNullIa = { subject_name: 'Maths', ia1: null, ia2: null, max_marks: 20 };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksNullIa])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([absenceRow]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksNullIa])   // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.marksSummary[0].ia1).toBeNull();
@@ -366,13 +447,20 @@ describe('KnowledgeGraphService', () => {
       // Edge case: marks row present but max_marks column is NULL in DB
       const marksNullMax = { subject_name: 'Maths', ia1: 15, ia2: 16, max_marks: null };
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksNullMax])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([absenceRow]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksNullMax])  // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([absenceRow])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.marksSummary[0].maxMarks).toBe(20);
@@ -381,13 +469,20 @@ describe('KnowledgeGraphService', () => {
     it('computes overallAttendancePct as 0 when attendanceSummary is empty (line 139 false branch)', async () => {
       // No attendance rows → ternary takes the : 0 branch
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])   // empty attendance
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([])              // 4. attendance — empty
+        .mockResolvedValueOnce([])              // 5. marks
+        .mockResolvedValueOnce([])              // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.overallAttendancePct).toBe(0);
@@ -395,13 +490,20 @@ describe('KnowledgeGraphService', () => {
 
     it('reports zero riskScore and LOW riskLevel when risk row absent (lines 173-174)', async () => {
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksRow])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([])    // no risk row
-        .mockResolvedValueOnce([{ cnt: 0 }]);
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([])              // 8. risk — no risk row
+        .mockResolvedValueOnce([{ cnt: 0 }])    // 9. absences
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.riskScore).toBe(0);
@@ -410,13 +512,20 @@ describe('KnowledgeGraphService', () => {
 
     it('falls back to 0 for recentAbsenceCount when absence row has no cnt (line 174)', async () => {
       mockQuery
-        .mockResolvedValueOnce([studentRow])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([attRow])
-        .mockResolvedValueOnce([marksRow])
-        .mockResolvedValueOnce([feeRow])
-        .mockResolvedValueOnce([riskRow])
-        .mockResolvedValueOnce([{}]);  // absences row exists but cnt is undefined
+        .mockResolvedValueOnce([studentRow])    // 1. students
+        .mockResolvedValueOnce([])              // 2. todaySlots
+        .mockResolvedValueOnce([])              // 3. weekSlots
+        .mockResolvedValueOnce([attRow])        // 4. attendance
+        .mockResolvedValueOnce([marksRow])      // 5. marks
+        .mockResolvedValueOnce([feeRow])        // 6. fees
+        .mockResolvedValueOnce([])              // 7. feeItems
+        .mockResolvedValueOnce([riskRow])       // 8. risk
+        .mockResolvedValueOnce([{}])            // 9. absences — row exists but cnt undefined
+        .mockResolvedValueOnce([])              // 10. announcements
+        .mockResolvedValueOnce([])              // 11. placements
+        .mockResolvedValueOnce([])              // 12. vtuWindows
+        .mockResolvedValueOnce([])              // 13. vtuElig
+        .mockResolvedValueOnce([]);             // 14. vtuReg
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.recentAbsenceCount).toBe(0);
