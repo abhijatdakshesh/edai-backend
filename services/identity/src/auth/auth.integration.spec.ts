@@ -17,6 +17,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService, type JwtPayload } from './auth.service';
+import { TokenBlocklistService } from './token-blocklist.service';
 import { UsersService } from '../users/users.service';
 import type { CreateUserDto } from '../dto/user.dto';
 
@@ -50,6 +51,12 @@ async function buildServices(): Promise<{
     },
   });
 
+  // Stub the blocklist — refresh tests should not depend on a live Redis.
+  const blocklistStub: Pick<TokenBlocklistService, 'block' | 'isBlocked'> = {
+    block: jest.fn().mockResolvedValue(undefined),
+    isBlocked: jest.fn().mockResolvedValue(false),
+  };
+
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       AuthService,
@@ -57,6 +64,10 @@ async function buildServices(): Promise<{
       {
         provide: JwtService,
         useValue: jwtServiceInstance,
+      },
+      {
+        provide: TokenBlocklistService,
+        useValue: blocklistStub,
       },
     ],
   }).compile();
@@ -241,10 +252,10 @@ describe('Full auth + user management workflow', () => {
 
     // The critical guard: using an access token as a refresh token must throw.
     const { accessToken } = await authService.login('admin@rvce.edu', 'Admin@123');
-    expect(() => authService.refresh(accessToken)).toThrow(UnauthorizedException);
+    await expect(authService.refresh(accessToken)).rejects.toThrow(UnauthorizedException);
 
     // Using a completely fabricated refresh token must throw.
-    expect(() => authService.refresh('not.a.valid.jwt')).toThrow(UnauthorizedException);
+    await expect(authService.refresh('not.a.valid.jwt')).rejects.toThrow(UnauthorizedException);
   });
 
   it('refresh token issued by login can obtain a new access token (full cycle)', async () => {
@@ -254,7 +265,7 @@ describe('Full auth + user management workflow', () => {
     const { refreshToken, accessToken: originalAccess } = await authService.login('teacher@rvce.edu', 'Teacher@123');
 
     // Use refresh token to get new access token
-    const { accessToken: newAccess, expiresIn } = authService.refresh(refreshToken);
+    const { accessToken: newAccess, expiresIn } = await authService.refresh(refreshToken);
     expect(newAccess).toBeTruthy();
     expect(expiresIn).toBe(900);
 

@@ -14,6 +14,7 @@ const mockKgSvc = {
   buildStudentGraph: jest.fn(),
   buildTeacherGraph: jest.fn(),
   buildParentGraph: jest.fn(),
+  buildAdminGraph: jest.fn(),
 };
 
 const studentGraph = { role: 'STUDENT', name: 'Alice', preferredLanguage: 'en' };
@@ -104,14 +105,14 @@ describe('ChatbotGateway', () => {
       expect(socket.emit).toHaveBeenCalledWith('chat:error', expect.objectContaining({ message: expect.stringContaining('role') }));
     });
 
-    it('routes ADMIN role to buildTeacherGraph', async () => {
-      const adminGraph = { role: 'TEACHER', preferredLanguage: 'en' };
-      mockKgSvc.buildTeacherGraph.mockResolvedValue(adminGraph);
+    it('routes ADMIN role to buildAdminGraph', async () => {
+      const adminGraph = { role: 'ADMIN', preferredLanguage: 'en' };
+      mockKgSvc.buildAdminGraph.mockResolvedValue(adminGraph);
       mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-admin');
       mockChatbotSvc.chatStream.mockResolvedValue('Here is the data...');
       const socket = makeSocket({ sub: 'ADMIN1', role: 'ADMIN' });
       await gateway.handleMessage({ message: 'Show at-risk students' }, socket);
-      expect(mockKgSvc.buildTeacherGraph).toHaveBeenCalledWith('ADMIN1');
+      expect(mockKgSvc.buildAdminGraph).toHaveBeenCalledWith('ADMIN1');
       expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
     });
 

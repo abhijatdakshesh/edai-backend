@@ -4,15 +4,28 @@ import { PlacementResumeService } from './placement-resume.service';
 import { PlacementScoreService } from './placement-score.service';
 
 // ---------------------------------------------------------------------------
-// Mock @anthropic-ai/sdk
+// Mock @google/generative-ai (Gemini) — service migrated from Anthropic.
+// We retain the legacy `mockAnthropicCreate` symbol name for assertion
+// continuity; it now wraps a Gemini-shaped response.
 // ---------------------------------------------------------------------------
 
 const mockAnthropicCreate = jest.fn();
 
-jest.mock('@anthropic-ai/sdk', () => ({
+jest.mock('@google/generative-ai', () => ({
   __esModule: true,
-  default: jest.fn().mockImplementation(() => ({
-    messages: { create: mockAnthropicCreate },
+  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+    getGenerativeModel: () => ({
+      generateContent: async (prompt: string) => {
+        const result = await mockAnthropicCreate({
+          messages: [{ role: 'user', content: prompt }],
+        });
+        // Translate "Anthropic-shaped" mock fixture into the Gemini response shape.
+        // Tests use `anthropicTextResponse` -> { content: [{ type: 'text', text }] }
+        const block = (result?.content ?? [])[0] ?? {};
+        const text = block?.type === 'text' ? String(block.text ?? '') : '';
+        return { response: { text: () => text } };
+      },
+    }),
   })),
 }));
 
