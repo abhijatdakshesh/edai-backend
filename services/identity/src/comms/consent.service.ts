@@ -25,8 +25,10 @@ export class ConsentService {
   /** key = `${principalId}::${institutionId}` */
   private cache: Map<string, ConsentRecord> = new Map();
 
-  constructor(@Optional() @InjectDataSource() private readonly ds: DataSource) {
-    this.hydrateFromDb().catch(e => this.logger.warn('Consent hydration skipped (no DB?)', e));
+  constructor(@Optional() @InjectDataSource() private readonly ds: DataSource | null) {
+    if (this.ds) {
+      this.hydrateFromDb().catch(e => this.logger.warn('Consent hydration skipped (no DB?)', e));
+    }
   }
 
   private key(principalId: string, institutionId: string): string {
@@ -34,6 +36,7 @@ export class ConsentService {
   }
 
   private async hydrateFromDb(): Promise<void> {
+    if (!this.ds) return;
     const rows = await this.ds.query(
       `SELECT principal_id, institution_id, channels, granted_at, revoked_at, active
        FROM consent_records WHERE active = true`,
@@ -57,8 +60,7 @@ export class ConsentService {
     if (existing) {
       const merged = Array.from(new Set([...existing.channels, ...channels])) as ConsentChannel[];
       existing.channels = merged;
-      // Persist async — fire-and-forget
-      this.ds.query(
+      this.ds?.query(
         `UPDATE consent_records SET channels = $1 WHERE principal_id = $2 AND institution_id = $3 AND active = true`,
         [merged, principalId, institutionId],
       ).catch(e => this.logger.warn('Consent update failed', e));
@@ -69,7 +71,7 @@ export class ConsentService {
       grantedAt: new Date().toISOString(), active: true,
     };
     this.cache.set(k, record);
-    this.ds.query(
+    this.ds?.query(
       `INSERT INTO consent_records (id, principal_id, institution_id, channels, active, granted_at)
        VALUES ($1, $2, $3, $4, true, NOW()) ON CONFLICT DO NOTHING`,
       [randomUUID(), principalId, institutionId, channels],
@@ -86,12 +88,12 @@ export class ConsentService {
       record.active = false;
       record.revokedAt = new Date().toISOString();
       this.cache.delete(k);
-      this.ds.query(
+      this.ds?.query(
         `UPDATE consent_records SET active = false, revoked_at = NOW() WHERE principal_id = $1 AND institution_id = $2 AND active = true`,
         [principalId, institutionId],
       ).catch(e => this.logger.warn('Consent revoke failed', e));
     } else {
-      this.ds.query(
+      this.ds?.query(
         `UPDATE consent_records SET channels = $1 WHERE principal_id = $2 AND institution_id = $3 AND active = true`,
         [record.channels, principalId, institutionId],
       ).catch(e => this.logger.warn('Consent channel update failed', e));
@@ -106,7 +108,7 @@ export class ConsentService {
     record.channels = [];
     record.revokedAt = new Date().toISOString();
     this.cache.delete(k);
-    this.ds.query(
+    this.ds?.query(
       `UPDATE consent_records SET active = false, channels = '{}', revoked_at = NOW()
        WHERE principal_id = $1 AND institution_id = $2 AND active = true`,
       [principalId, institutionId],
