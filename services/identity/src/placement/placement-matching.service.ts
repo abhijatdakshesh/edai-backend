@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -20,7 +20,7 @@ export class PlacementMatchingService {
   private readonly logger = new Logger(PlacementMatchingService.name);
   private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
-  constructor(@InjectDataSource() private dataSource: DataSource) {}
+  constructor(@Optional() @InjectDataSource() private dataSource: DataSource) {}
 
   async matchStudentsToCompany(companyId: string): Promise<number> {
     const company = await this.dataSource.query(

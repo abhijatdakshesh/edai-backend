@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -35,7 +35,7 @@ export class RecruiterService {
   private readonly logger = new Logger(RecruiterService.name);
   private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
-  constructor(@InjectDataSource() private ds: DataSource) {}
+  constructor(@Optional() @InjectDataSource() private ds: DataSource) {}
 
   // ── Job CRUD ──────────────────────────────────────────────────────────────
 

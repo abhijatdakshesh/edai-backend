@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -34,7 +34,7 @@ const FINAL_YEAR_THRESHOLD = 7;
 
 @Injectable()
 export class PlacementScoreService {
-  constructor(@InjectDataSource() private dataSource: DataSource) {}
+  constructor(@Optional() @InjectDataSource() private dataSource: DataSource) {}
 
   async getStudentProfile(usn: string): Promise<StudentPlacementProfile> {
     const [score, subjects] = await Promise.all([

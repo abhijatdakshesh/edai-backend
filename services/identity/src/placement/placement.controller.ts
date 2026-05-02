@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Body, Param, Query, Req, Res,
-  UseGuards, HttpStatus, Logger, NotFoundException, InternalServerErrorException,
+  UseGuards, HttpStatus, Logger, NotFoundException, InternalServerErrorException, Optional,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -49,7 +49,7 @@ export class PlacementController {
     private scoreService: PlacementScoreService,
     private matchingService: PlacementMatchingService,
     private resumeService: PlacementResumeService,
-    @InjectDataSource() private dataSource: DataSource,
+    @Optional() @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   // ── Student endpoints ── role-gated to prevent IDOR (DPDP Act 2023)

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -18,7 +18,7 @@ export class PlacementResumeService {
   private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
-    @InjectDataSource() private dataSource: DataSource,
+    @Optional() @InjectDataSource() private dataSource: DataSource,
     private scoreService: PlacementScoreService,
   ) {}
 
