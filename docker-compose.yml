@@ -19,6 +19,25 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Report Engine (FastAPI + ReportLab PDF generator) ────────────────────
+  report-engine:
+    build:
+      context: ./services/report-engine
+      dockerfile: DockerFile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   # ── Redis ────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine

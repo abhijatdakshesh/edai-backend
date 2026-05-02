@@ -6,6 +6,10 @@ export interface Student {
   name: string;
   dob?: string;
   sectionId?: string;
+  semester?: number;
+  section?: string;
+  department?: string;
+  preferredLanguage?: string;
   photoUrl?: string;
   biometricRef?: string;
   institutionId: string;

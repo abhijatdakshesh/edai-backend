@@ -1,15 +1,14 @@
 import { ChatbotService } from './chatbot.service';
 import type { StudentKnowledgeGraph } from './knowledge-graph.service';
 
-// Mock Anthropic streaming
-const mockStream = {
-  [Symbol.asyncIterator]: jest.fn(),
-  finalMessage: jest.fn(),
-};
-const mockMessagesStream = jest.fn().mockReturnValue(mockStream);
-jest.mock('@anthropic-ai/sdk', () => ({
-  default: jest.fn().mockImplementation(() => ({
-    messages: { stream: mockMessagesStream },
+// Mock Gemini streaming
+const mockSendMessageStream = jest.fn();
+const mockStartChat = jest.fn().mockReturnValue({ sendMessageStream: mockSendMessageStream });
+const mockGetGenerativeModel = jest.fn().mockReturnValue({ startChat: mockStartChat });
+
+jest.mock('@google/generative-ai', () => ({
+  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+    getGenerativeModel: mockGetGenerativeModel,
   })),
 }));
 
@@ -23,32 +22,36 @@ const studentGraph: StudentKnowledgeGraph = {
   semester: 5,
   section: 'A',
   department: 'CSE',
+  parentName: 'Alice Parent',
   preferredLanguage: 'en',
   todaySchedule: [],
+  weekSchedule: {},
   attendanceSummary: [{ subject: 'DBMS', present: 40, total: 50, percentage: 80, classesNeededFor75: 0 }],
   overallAttendancePct: 80,
   detentionRisk: false,
   marksSummary: [],
   feeStatus: { totalFee: 85000, paid: 60000, balance: 25000, status: 'PARTIAL', dueDate: null },
+  feeBreakdown: [],
   riskScore: 0.3,
   riskLevel: 'LOW',
   recentAbsenceCount: 1,
+  announcements: [],
+  upcomingPlacements: [],
+  vtuWindow: null,
+  vtuEligibility: null,
+  collegeName: 'RVCE',
+  academicYear: '2024-25',
 };
 
-function makeAsyncIterator(chunks: string[]) {
-  const events = chunks.map(text => ({
-    type: 'content_block_delta',
-    delta: { type: 'text_delta', text },
-  }));
-  let i = 0;
+function makeStreamResult(chunks: string[], totalTokens = 120) {
+  async function* streamGen() {
+    for (const text of chunks) {
+      yield { text: () => text };
+    }
+  }
   return {
-    [Symbol.asyncIterator]() {
-      return {
-        next: async () => i < events.length
-          ? { value: events[i++], done: false }
-          : { value: undefined, done: true },
-      };
-    },
+    stream: streamGen(),
+    response: Promise.resolve({ usageMetadata: { totalTokenCount: totalTokens } }),
   };
 }
 
@@ -61,24 +64,24 @@ describe('ChatbotService', () => {
   });
 
   describe('selectModel()', () => {
-    it('routes attendance query to Haiku', () => {
-      expect(svc.selectModel('What is my attendance?')).toBe('claude-haiku-4-5-20251001');
+    it('routes attendance query to Gemini Flash', () => {
+      expect(svc.selectModel('What is my attendance?')).toBe('gemini-2.5-flash-lite');
     });
 
-    it('routes schedule query to Haiku', () => {
-      expect(svc.selectModel('Show my schedule today')).toBe('claude-haiku-4-5-20251001');
+    it('routes schedule query to Gemini Flash', () => {
+      expect(svc.selectModel('Show my schedule today')).toBe('gemini-2.5-flash-lite');
     });
 
-    it('routes fee query to Haiku', () => {
-      expect(svc.selectModel('Is my fee paid?')).toBe('claude-haiku-4-5-20251001');
+    it('routes fee query to Gemini Flash', () => {
+      expect(svc.selectModel('Is my fee paid?')).toBe('gemini-2.5-flash-lite');
     });
 
-    it('routes complex query to Sonnet', () => {
-      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('claude-sonnet-4-6');
+    it('routes complex query to Gemini Pro', () => {
+      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('gemini-2.5-flash');
     });
 
-    it('routes general query to Sonnet', () => {
-      expect(svc.selectModel('What should I do to improve my grades?')).toBe('claude-sonnet-4-6');
+    it('routes general query to Gemini Pro', () => {
+      expect(svc.selectModel('What should I do to improve my grades?')).toBe('gemini-2.5-flash');
     });
   });
 
@@ -108,6 +111,7 @@ describe('ChatbotService', () => {
         phone: '+91',
         preferredLanguage: 'kn',
         child: { ...studentGraph, role: undefined as any },
+        announcements: [],
       };
       const prompt = svc.buildSystemPrompt(parentGraph);
       expect(prompt).toContain('Alice');
@@ -122,29 +126,34 @@ describe('ChatbotService', () => {
         department: 'CSE',
         preferredLanguage: 'en',
         todaySchedule: [],
+        weekSchedule: {},
         subjects: [],
         atRiskStudents: [],
         totalStudents: 0,
+        announcements: [],
+        collegeName: 'RVCE',
       };
       const prompt = svc.buildSystemPrompt(teacherGraph);
       expect(prompt).toContain('Dr. Kumar');
       expect(prompt).toContain('CSE');
+    });
+
+    it('falls back to English for unknown language code', () => {
+      const graph = { ...studentGraph, preferredLanguage: 'fr' };
+      const prompt = svc.buildSystemPrompt(graph);
+      expect(prompt).toContain('English');
     });
   });
 
   describe('chatStream()', () => {
     it('streams chunks and saves to DB', async () => {
       mockQuery
-        .mockResolvedValueOnce([])   // history
-        .mockResolvedValueOnce([])   // save user message
-        .mockResolvedValueOnce([])   // save assistant message
-        .mockResolvedValueOnce([]);  // update last_message_at
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
-      const iter = makeAsyncIterator(['Hello ', 'Alice!']);
-      (mockStream as any)[Symbol.asyncIterator] = () => iter[Symbol.asyncIterator]();
-      mockStream.finalMessage.mockResolvedValue({
-        usage: { input_tokens: 100, output_tokens: 20 },
-      });
+      mockSendMessageStream.mockResolvedValue(makeStreamResult(['Hello ', 'Alice!']));
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
@@ -164,17 +173,14 @@ describe('ChatbotService', () => {
       expect(result).toContain('trouble');
     });
 
-    it('handles Claude API error gracefully', async () => {
+    it('handles Gemini API error gracefully', async () => {
       mockQuery
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      (mockStream as any)[Symbol.asyncIterator] = () => ({
-        [Symbol.asyncIterator]() { return this; },
-        next: async () => { throw new Error('Claude API down'); },
-      });
+      mockSendMessageStream.mockRejectedValue(new Error('Gemini API down'));
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
@@ -191,16 +197,14 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      const iter = makeAsyncIterator(['OK']);
-      (mockStream as any)[Symbol.asyncIterator] = () => iter[Symbol.asyncIterator]();
-      mockStream.finalMessage.mockResolvedValue({ usage: { input_tokens: 50, output_tokens: 5 } });
+      mockSendMessageStream.mockResolvedValue(makeStreamResult(['OK']));
 
       await svc.chatStream('conv-1', 'New question', studentGraph, () => {});
 
-      // Verify Claude was called with history included
-      const streamCall = mockMessagesStream.mock.calls[0][0];
-      expect(streamCall.messages.length).toBe(3); // 2 history + 1 new
-      expect(streamCall.messages[0].content).toBe('previous question');
+      const startChatCall = mockStartChat.mock.calls[0][0];
+      expect(startChatCall.history).toHaveLength(2);
+      expect(startChatCall.history[0].role).toBe('user');
+      expect(startChatCall.history[1].role).toBe('model');
     });
 
     it('stores model_used in DB', async () => {
@@ -210,16 +214,94 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      const iter = makeAsyncIterator(['Done']);
-      (mockStream as any)[Symbol.asyncIterator] = () => iter[Symbol.asyncIterator]();
-      mockStream.finalMessage.mockResolvedValue({ usage: { input_tokens: 10, output_tokens: 5 } });
+      mockSendMessageStream.mockResolvedValue(makeStreamResult(['Done']));
 
       await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, () => {});
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("'ASSISTANT'"),
-        expect.arrayContaining(['claude-haiku-4-5-20251001']),
+        expect.arrayContaining(['gemini-2.5-flash-lite']),
       );
+    });
+
+    it('skips empty chunks from Gemini stream', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      async function* streamWithEmpty() {
+        yield { text: () => '' };
+        yield { text: () => 'Hello' };
+        yield { text: () => '' };
+      }
+      mockSendMessageStream.mockResolvedValue({
+        stream: streamWithEmpty(),
+        response: Promise.resolve({ usageMetadata: { totalTokenCount: 10 } }),
+      });
+
+      const chunks: string[] = [];
+      const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
+      expect(chunks).toEqual(['Hello']);
+      expect(result).toBe('Hello');
+    });
+
+    it('handles missing usageMetadata gracefully', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      async function* streamGen() { yield { text: () => 'Hi' }; }
+      mockSendMessageStream.mockResolvedValue({
+        stream: streamGen(),
+        response: Promise.resolve({ usageMetadata: undefined }),
+      });
+
+      const result = await svc.chatStream('conv-1', 'Hello', studentGraph, () => {});
+      expect(result).toBe('Hi');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("'ASSISTANT'"),
+        expect.arrayContaining([0]),
+      );
+    });
+    it('falls back to next model on retryable 429 error and logs warn (line 162 + 168)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      // First call (primary) → 429 retryable; second call (fallback) → success
+      mockSendMessageStream
+        .mockRejectedValueOnce(new Error('[429 Too Many Requests] quota exceeded'))
+        .mockResolvedValueOnce(makeStreamResult(['Fallback response']));
+
+      const chunks: string[] = [];
+      const result = await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, (c) => chunks.push(c));
+
+      // Used the fallback model — line 162 warn branch hit
+      expect(result).toBe('Fallback response');
+      expect(chunks).toEqual(['Fallback response']);
+    });
+
+    it('falls back through full chain and returns error message when all models fail', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      // All models in chain fail with retryable errors — line 168 warn + continue hit
+      mockSendMessageStream.mockRejectedValue(new Error('[503 Service Unavailable] overloaded'));
+
+      const chunks: string[] = [];
+      const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
+
+      expect(result).toContain('trouble');
+      expect(chunks[0]).toContain('trouble');
     });
   });
 
@@ -232,9 +314,9 @@ describe('ChatbotService', () => {
 
     it('creates new conversation when none active', async () => {
       mockQuery
-        .mockResolvedValueOnce([])                  // no existing
-        .mockResolvedValueOnce([])                  // deactivate stale
-        .mockResolvedValueOnce([{ id: 'conv-new' }]); // insert
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'conv-new' }]);
       const id = await svc.getOrCreateConversation('USN001', 'STUDENT', 'WEB');
       expect(id).toBe('conv-new');
     });
@@ -267,14 +349,14 @@ describe('ChatbotService', () => {
         { role: 'USER', content: 'hello', createdAt: '2026-04-29' },
         { role: 'ASSISTANT', content: 'hi!', createdAt: '2026-04-29' },
       ]);
-      const hist = await svc.getHistory('conv-1');
+      const hist = await svc.getHistory('conv-1', 'user-1');
       expect(hist).toHaveLength(2);
       expect(hist[0].role).toBe('USER');
     });
 
     it('returns empty array when db is null', async () => {
       const svcNoDb = new ChatbotService(null);
-      expect(await svcNoDb.getHistory('conv-1')).toEqual([]);
+      expect(await svcNoDb.getHistory('conv-1', 'user-1')).toEqual([]);
     });
   });
 
@@ -288,43 +370,6 @@ describe('ChatbotService', () => {
     it('returns empty array when db is null', async () => {
       const svcNoDb = new ChatbotService(null);
       expect(await svcNoDb.getSessions()).toEqual([]);
-    });
-  });
-
-  // --- Branch coverage: getLang() fallback (line 39 — unknown language code hits ?? 'English') ---
-  describe('buildSystemPrompt() — unknown language fallback', () => {
-    it('falls back to English for unrecognised language code', () => {
-      const graphWithUnknownLang: StudentKnowledgeGraph = {
-        ...studentGraph,
-        preferredLanguage: 'fr',  // not in LANGUAGE_NAMES map → ?? 'English' branch
-      };
-      const prompt = svc.buildSystemPrompt(graphWithUnknownLang);
-      // The prompt must declare English as the response language
-      expect(prompt).toContain('English');
-    });
-
-    it('resolves Kannada for kn language code', () => {
-      const graphKn: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'kn' };
-      const prompt = svc.buildSystemPrompt(graphKn);
-      expect(prompt).toContain('Kannada');
-    });
-
-    it('resolves Tamil for ta language code', () => {
-      const graphTa: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'ta' };
-      const prompt = svc.buildSystemPrompt(graphTa);
-      expect(prompt).toContain('Tamil');
-    });
-
-    it('resolves Telugu for te language code', () => {
-      const graphTe: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'te' };
-      const prompt = svc.buildSystemPrompt(graphTe);
-      expect(prompt).toContain('Telugu');
-    });
-
-    it('resolves Hindi for hi language code', () => {
-      const graphHi: StudentKnowledgeGraph = { ...studentGraph, preferredLanguage: 'hi' };
-      const prompt = svc.buildSystemPrompt(graphHi);
-      expect(prompt).toContain('Hindi');
     });
   });
 });

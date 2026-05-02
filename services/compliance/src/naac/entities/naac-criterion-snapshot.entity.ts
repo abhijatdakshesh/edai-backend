@@ -4,10 +4,13 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
 export type NaacCriterion = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 @Entity({ name: 'naac_criterion_snapshots', schema: 'naac' })
-@Index(['academicYear', 'criterion', 'subCriterion', 'dataPeriodEnd'], { unique: true })
+@Index(['institutionId', 'academicYear', 'criterion', 'subCriterion', 'dataPeriodEnd'], { unique: true })
 export class NaacCriterionSnapshotEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ name: 'institution_id', type: 'uuid' })
+  institutionId!: string;
 
   @Column({ name: 'academic_year', type: 'varchar', length: 9 })
   academicYear!: string;

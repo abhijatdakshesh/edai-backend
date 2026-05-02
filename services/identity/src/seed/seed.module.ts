@@ -13,6 +13,7 @@ import { StudentPortalModule } from '../student-portal/student-portal.module';
 import { ParentPortalModule } from '../parent-portal/parent-portal.module';
 import { CommsModule } from '../comms/comms.module';
 import { AdminPortalModule } from '../admin-portal/admin-portal.module';
+import { RecruiterModule } from '../recruiter/recruiter.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AdminPortalModule } from '../admin-portal/admin-portal.module';
     ParentPortalModule,
     CommsModule,
     AdminPortalModule,
+    RecruiterModule,
   ],
   providers: [SeedService],
 })

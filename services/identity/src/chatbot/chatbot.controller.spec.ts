@@ -18,6 +18,7 @@ const mockKgSvc = {
   buildStudentGraph: jest.fn(),
   buildParentGraph: jest.fn(),
   buildTeacherGraph: jest.fn(),
+  buildAdminGraph: jest.fn(),
 };
 
 const studentGraph = {
@@ -118,10 +119,25 @@ describe('ChatbotController', () => {
       expect(mockChatbotSvc.getOrCreateConversation).not.toHaveBeenCalled();
     });
 
+    it('routes ADMIN role to buildAdminGraph', async () => {
+      mockKgSvc.buildAdminGraph.mockResolvedValue({ role: 'ADMIN', preferredLanguage: 'en' });
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-admin');
+      mockChatbotSvc.chatStream.mockImplementation(async (_id: string, _msg: string, _g: unknown, onChunk: (t: string) => void) => {
+        onChunk('Admin response');
+        return 'Admin response';
+      });
+      const res = await controller.restChat(
+        { user: { sub: 'ADMIN001', role: 'ADMIN' } },
+        { message: 'Show at-risk students' },
+      );
+      expect(mockKgSvc.buildAdminGraph).toHaveBeenCalledWith('ADMIN001');
+      expect(res.message).toBe('Admin response');
+    });
+
     it('throws for unsupported role', async () => {
       await expect(
         controller.restChat(
-          { user: { sub: 'ADMIN001', role: 'ADMIN' } },
+          { user: { sub: 'GUEST001', role: 'GUEST' } },
           { message: 'Hi' },
         ),
       ).rejects.toThrow('Unsupported role');

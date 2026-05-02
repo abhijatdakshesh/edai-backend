@@ -90,13 +90,13 @@ describe('NaacService', () => {
     });
 
     it('saves report with PENDING status', async () => {
-      await service.generateReport({ academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
+      await service.generateReport({ institutionId: 'inst-1', academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
       expect(reportRepo.create).toHaveBeenCalledWith(expect.objectContaining({ status: 'PENDING' }));
       expect(reportRepo.save).toHaveBeenCalledTimes(1);
     });
 
     it('adds a job to the NAAC report queue', async () => {
-      await service.generateReport({ academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
+      await service.generateReport({ institutionId: 'inst-1', academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
       expect(mockQueue.add).toHaveBeenCalledWith(
         'generate',
         expect.objectContaining({ reportId: 'report-1', academicYear: '2025-2026' }),
@@ -105,7 +105,7 @@ describe('NaacService', () => {
     });
 
     it('returns the saved report entity', async () => {
-      const result = await service.generateReport({ academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
+      const result = await service.generateReport({ institutionId: 'inst-1', academicYear: '2025-2026', generatedBy: 'admin-1', format: 'PDF' });
       expect(result.id).toBe('report-1');
       expect(result.status).toBe('PENDING');
     });
@@ -163,6 +163,7 @@ describe('NaacService', () => {
       snapshotRepo.save.mockResolvedValue(saved);
 
       const result = await service.computeAndSaveCriterion2({
+        institutionId: 'inst-1',
         academicYear: '2025-2026',
         dataPeriodEnd: '2026-03-31',
         input: CRITERION2_INPUT,
@@ -177,6 +178,7 @@ describe('NaacService', () => {
       snapshotRepo.save.mockResolvedValue({ ...existing, score: 150 });
 
       await service.computeAndSaveCriterion2({
+        institutionId: 'inst-1',
         academicYear: '2025-2026',
         dataPeriodEnd: '2026-03-31',
         input: CRITERION2_INPUT,
@@ -193,6 +195,7 @@ describe('NaacService', () => {
       snapshotRepo.save.mockResolvedValue({ id: 'snap-3', criterion: 3, score: 60 } as NaacCriterionSnapshotEntity);
 
       const result = await service.computeAndSaveCriterion3({
+        institutionId: 'inst-1',
         academicYear: '2025-2026',
         dataPeriodEnd: '2026-03-31',
         input: CRITERION3_INPUT,
@@ -211,7 +214,7 @@ describe('NaacService', () => {
       ];
       snapshotRepo._qb.getMany.mockResolvedValue(snapshots);
 
-      const result = await service.getDashboard('2025-2026');
+      const result = await service.getDashboard('inst-1', '2025-2026');
       expect(result.academicYear).toBe('2025-2026');
       expect(result.criteria).toHaveLength(7);
       const c2 = result.criteria.find((c) => c.criterion === 2)!;
@@ -225,7 +228,7 @@ describe('NaacService', () => {
 
     it('returns null scores for criteria with no snapshots', async () => {
       snapshotRepo._qb.getMany.mockResolvedValue([]);
-      const result = await service.getDashboard('2024-2025');
+      const result = await service.getDashboard('inst-1', '2024-2025');
       expect(result.criteria.every((c) => c.score === null)).toBe(true);
     });
 
@@ -236,7 +239,7 @@ describe('NaacService', () => {
         { criterion: 2, score: 150, maxScore: 240, computedAt: new Date('2025-01-01') },
       ];
       snapshotRepo._qb.getMany.mockResolvedValue(snapshots);
-      const result = await service.getDashboard('2025-2026');
+      const result = await service.getDashboard('inst-1', '2025-2026');
       const c2 = result.criteria.find((c) => c.criterion === 2)!;
       expect(c2.score).toBe(200); // latest wins
     });

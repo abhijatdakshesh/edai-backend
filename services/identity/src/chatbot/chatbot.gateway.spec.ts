@@ -14,6 +14,7 @@ const mockKgSvc = {
   buildStudentGraph: jest.fn(),
   buildTeacherGraph: jest.fn(),
   buildParentGraph: jest.fn(),
+  buildAdminGraph: jest.fn(),
 };
 
 const studentGraph = { role: 'STUDENT', name: 'Alice', preferredLanguage: 'en' };
@@ -98,10 +99,21 @@ describe('ChatbotGateway', () => {
     });
 
     it('emits chat:error for unsupported role', async () => {
-      const socket = makeSocket({ sub: 'ADMIN1', role: 'ADMIN' });
+      const socket = makeSocket({ sub: 'GUEST1', role: 'GUEST' });
       await gateway.handleMessage({ message: 'Hi' }, socket);
 
       expect(socket.emit).toHaveBeenCalledWith('chat:error', expect.objectContaining({ message: expect.stringContaining('role') }));
+    });
+
+    it('routes ADMIN role to buildAdminGraph', async () => {
+      const adminGraph = { role: 'ADMIN', preferredLanguage: 'en' };
+      mockKgSvc.buildAdminGraph.mockResolvedValue(adminGraph);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-admin');
+      mockChatbotSvc.chatStream.mockResolvedValue('Here is the data...');
+      const socket = makeSocket({ sub: 'ADMIN1', role: 'ADMIN' });
+      await gateway.handleMessage({ message: 'Show at-risk students' }, socket);
+      expect(mockKgSvc.buildAdminGraph).toHaveBeenCalledWith('ADMIN1');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
     });
 
     it('emits chat:error when unauthenticated', async () => {
@@ -219,6 +231,67 @@ describe('ChatbotGateway', () => {
 
       // Should have routed to buildStudentGraph via the default STUDENT role
       expect(mockKgSvc.buildStudentGraph).toHaveBeenCalledWith('USN999');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Branch coverage: lines 91-92 in chatbot.gateway.ts
+  //
+  // Line 91 (truthy branch): `if (data.language) graph = { ...graph, preferredLanguage: data.language }`
+  //   — client sends an explicit language override (e.g. a Kannada-speaking parent
+  //     who switches the UI to Tamil mid-session).
+  //
+  // Line 92 (else + ?? branch): `graph = { ...graph, preferredLanguage: graph.preferredLanguage ?? 'en' }`
+  //   — no language override AND the knowledge graph has no preferredLanguage
+  //     (null/undefined), so the ?? 'en' fallback fires.
+  // ---------------------------------------------------------------------------
+  describe('handleMessage() — language override branches (lines 91-92)', () => {
+    it('overrides preferredLanguage when data.language is provided (line 91 truthy branch)', async () => {
+      // Knowledge graph returns Kannada preference; client sends 'ta' override
+      const graphKn = { ...studentGraph, preferredLanguage: 'kn' };
+      mockKgSvc.buildStudentGraph.mockResolvedValue(graphKn);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-lang-override');
+
+      let capturedGraph: Record<string, unknown> | undefined;
+      mockChatbotSvc.chatStream.mockImplementation(
+        async (_id: string, _msg: string, graph: Record<string, unknown>, onChunk: (t: string) => void) => {
+          capturedGraph = graph;
+          onChunk('Response in Tamil');
+          return 'Response in Tamil';
+        },
+      );
+
+      const socket = makeSocket({ sub: 'USN001', role: 'STUDENT' });
+      await gateway.handleMessage({ message: 'Hi', language: 'ta' }, socket);
+
+      // Line 91 branch: preferredLanguage must equal the client-supplied value
+      expect(capturedGraph?.preferredLanguage).toBe('ta');
+      expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
+    });
+
+    it('falls back to "en" when graph has no preferredLanguage and client sends none (line 92 ?? branch)', async () => {
+      // Knowledge graph has no preferredLanguage — simulates a new account where
+      // the student has not yet set a language preference in the ERP.
+      const graphNoLang = { role: 'STUDENT' as const, name: 'Bob', preferredLanguage: undefined as unknown as string };
+      mockKgSvc.buildStudentGraph.mockResolvedValue(graphNoLang);
+      mockChatbotSvc.getOrCreateConversation.mockResolvedValue('conv-lang-fallback');
+
+      let capturedGraph: Record<string, unknown> | undefined;
+      mockChatbotSvc.chatStream.mockImplementation(
+        async (_id: string, _msg: string, graph: Record<string, unknown>, onChunk: (t: string) => void) => {
+          capturedGraph = graph;
+          onChunk('Hello in English');
+          return 'Hello in English';
+        },
+      );
+
+      const socket = makeSocket({ sub: 'USN002', role: 'STUDENT' });
+      // No language field in the message — else branch fires
+      await gateway.handleMessage({ message: 'Hi' }, socket);
+
+      // Line 92 ?? branch: graph had no preferredLanguage, fallback 'en' applied
+      expect(capturedGraph?.preferredLanguage).toBe('en');
       expect(socket.emit).toHaveBeenCalledWith('chat:done', expect.any(Object));
     });
   });

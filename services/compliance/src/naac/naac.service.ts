@@ -3,7 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { IsNull, Repository } from 'typeorm';
-import { NaacCriterionSnapshotEntity } from './entities/naac-criterion-snapshot.entity';
+import { NaacCriterionSnapshotEntity, type NaacCriterion } from './entities/naac-criterion-snapshot.entity';
 import { NaacReportEntity, type ReportFormat } from './entities/naac-report.entity';
 import {
   NaacCriterionCalculatorService,
@@ -19,12 +19,14 @@ import {
 import { NAAC_REPORT_QUEUE, type NaacReportJob } from './naac-report.processor';
 
 export interface GenerateReportDto {
+  institutionId: string;
   academicYear: string;
   generatedBy: string;
   format: ReportFormat;
 }
 
 export interface ComputeCriterionDto {
+  institutionId: string;
   academicYear: string;
   dataPeriodEnd: string;
   input: Criterion1Input | Criterion2Input | Criterion3Input | Criterion4Input | Criterion5Input | Criterion6Input | Criterion7Input;
@@ -46,6 +48,7 @@ export class NaacService {
 
   async generateReport(dto: GenerateReportDto): Promise<NaacReportEntity> {
     const report = this.reportRepo.create({
+      institutionId: dto.institutionId,
       academicYear: dto.academicYear,
       generatedBy: dto.generatedBy,
       format: dto.format,
@@ -76,46 +79,47 @@ export class NaacService {
 
   async computeAndSaveCriterion1(dto: ComputeCriterionDto & { input: Criterion1Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion1(dto.input);
-    return this.saveSnapshot(1, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 1, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion2(dto: ComputeCriterionDto & { input: Criterion2Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion2(dto.input);
-    return this.saveSnapshot(2, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 2, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion3(dto: ComputeCriterionDto & { input: Criterion3Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion3(dto.input);
-    return this.saveSnapshot(3, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 3, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion4(dto: ComputeCriterionDto & { input: Criterion4Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion4(dto.input);
-    return this.saveSnapshot(4, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 4, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion5(dto: ComputeCriterionDto & { input: Criterion5Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion5(dto.input);
-    return this.saveSnapshot(5, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 5, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion6(dto: ComputeCriterionDto & { input: Criterion6Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion6(dto.input);
-    return this.saveSnapshot(6, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 6, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
   async computeAndSaveCriterion7(dto: ComputeCriterionDto & { input: Criterion7Input }): Promise<NaacCriterionSnapshotEntity> {
     const result = this.calculator.computeCriterion7(dto.input);
-    return this.saveSnapshot(7, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
+    return this.saveSnapshot(dto.institutionId, 7, dto.academicYear, dto.dataPeriodEnd, result.totalScore, result.maxScore, dto.input as unknown as Record<string, unknown>);
   }
 
-  async getDashboard(academicYear: string): Promise<{
+  async getDashboard(institutionId: string, academicYear: string): Promise<{
     academicYear: string;
     criteria: { criterion: number; score: number | null; maxScore: number | null; pct: number | null; lastUpdated: Date }[];
   }> {
     const snapshots = await this.snapshotRepo
       .createQueryBuilder('s')
-      .where('s.academicYear = :academicYear', { academicYear })
+      .where('s.institutionId = :institutionId', { institutionId })
+      .andWhere('s.academicYear = :academicYear', { academicYear })
       .andWhere('s.subCriterion IS NULL')
       .orderBy('s.computedAt', 'DESC')
       .getMany();
@@ -140,7 +144,8 @@ export class NaacService {
   }
 
   private async saveSnapshot(
-    criterion: number,
+    institutionId: string,
+    criterion: NaacCriterion,
     academicYear: string,
     dataPeriodEnd: string,
     score: number,
@@ -148,7 +153,7 @@ export class NaacService {
     dataPayload: Record<string, unknown>,
   ): Promise<NaacCriterionSnapshotEntity> {
     const existing = await this.snapshotRepo.findOne({
-      where: { academicYear, criterion: criterion as 1, subCriterion: IsNull(), dataPeriodEnd },
+      where: { institutionId, academicYear, criterion, subCriterion: IsNull(), dataPeriodEnd },
     });
 
     if (existing) {
@@ -159,8 +164,9 @@ export class NaacService {
     }
 
     const snapshot = this.snapshotRepo.create({
+      institutionId,
       academicYear,
-      criterion: criterion as 1,
+      criterion,
       subCriterion: null,
       score,
       maxScore,

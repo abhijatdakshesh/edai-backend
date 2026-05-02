@@ -6,8 +6,8 @@ function makeWindow(overrides: Partial<VtuWindow> = {}): VtuWindow {
   return {
     id: 'win-1',
     title: 'Apr/May 2026',
-    openDate: '2026-04-01',
-    closeDate: '2026-04-30',
+    openDate: '2000-01-01',
+    closeDate: '2099-12-31',
     semester: 5,
     isActive: true,
     subjectCodes: ['CS301', 'CS302'],

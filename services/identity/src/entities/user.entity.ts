@@ -7,7 +7,8 @@ export type UserRole =
   | 'PRINCIPAL'
   | 'TRUSTEE'
   | 'COUNSELLOR'
-  | 'ADMIN';
+  | 'ADMIN'
+  | 'RECRUITER';
 
 export type Language = 'kn' | 'en' | 'hi' | 'ta' | 'te' | 'ml';
 

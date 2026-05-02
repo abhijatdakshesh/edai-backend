@@ -1,12 +1,16 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 export type ReportStatus = 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED';
 export type ReportFormat = 'PDF' | 'DOCX';
 
 @Entity({ name: 'naac_reports', schema: 'naac' })
+@Index(['institutionId', 'academicYear'])
 export class NaacReportEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ name: 'institution_id', type: 'uuid' })
+  institutionId!: string;
 
   @Column({ name: 'academic_year', type: 'varchar', length: 9 })
   academicYear!: string;

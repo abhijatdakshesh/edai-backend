@@ -1,4 +1,7 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, Optional } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { RecruiterService } from '../recruiter/recruiter.service';
 import { CoursesService } from '../courses/courses.service';
 import { AttendanceApiService } from '../attendance-api/attendance-api.service';
 import { AssignmentsApiService } from '../assignments-api/assignments-api.service';
@@ -48,6 +51,8 @@ export class SeedService implements OnModuleInit {
     private readonly parentPortalSvc: ParentPortalService,
     private readonly commsSvc: CommsService,
     private readonly adminPortalSvc: AdminPortalService,
+    private readonly recruiterSvc: RecruiterService,
+    @Optional() @InjectDataSource() private readonly ds: DataSource,
   ) {}
 
   onModuleInit(): void {
@@ -66,6 +71,8 @@ export class SeedService implements OnModuleInit {
     this.seedComms();
     this.seedAcademicResults();
     this.seedAdminPortal();
+    // Fire-and-forget — recruiter seed is DB-backed (async), not in-memory
+    this.seedRecruiterJobs().catch(e => this.logger.warn('Recruiter seed skipped (DB may not be ready)', e));
     this.logger.log('Seed complete — all modules populated');
   }
 
@@ -433,5 +440,126 @@ export class SeedService implements OnModuleInit {
       `fees collected ₹${dashboard.feesCollected.toLocaleString('en-IN')}, ` +
       `${dashboard.alerts.length} active alerts`,
     );
+  }
+
+  private async seedRecruiterJobs(): Promise<void> {
+    const RECRUITER_ID = 'u-recruiter-01';
+    const INSTITUTION_ID = 'rvce';
+
+    const existing = await this.recruiterSvc.listMyJobs(RECRUITER_ID);
+    if ((existing as unknown[]).length > 0) {
+      this.logger.log('Recruiter jobs already seeded — skipping');
+      return;
+    }
+
+    const jobs = await Promise.all([
+      this.recruiterSvc.postJob(RECRUITER_ID, INSTITUTION_ID, {
+        title: 'Software Development Engineer – I (Backend)',
+        description: 'Flipkart Platform Engineering team hiring Backend SDE-Is for supply-chain and catalog microservices built on Java, Kafka, and distributed data stores. Strong DSA and large-scale systems curiosity required.',
+        roleType: 'PRODUCT',
+        ctcLpa: 18,
+        minCgpa: 7.5,
+        eligibleBranches: ['CSE', 'ISE'],
+        eligibleSemesters: [8],
+        requiredSkills: ['Java', 'Data Structures', 'System Design', 'SQL', 'Problem Solving'],
+        location: 'Bengaluru',
+        applyDeadline: '2026-07-15',
+      }),
+      this.recruiterSvc.postJob(RECRUITER_ID, INSTITUTION_ID, {
+        title: 'Systems Engineer – Digital (InfyTQ Track)',
+        description: 'Infosys hiring Systems Engineers for the InfyTQ track. 4-month training at Mysuru before client deployment in BFSI and retail digital transformation projects. All branches eligible with min 6.0 CGPA.',
+        roleType: 'SERVICE',
+        ctcLpa: 7,
+        minCgpa: 6.0,
+        eligibleBranches: ['CSE', 'ISE', 'ECE', 'EEE', 'ME'],
+        eligibleSemesters: [8],
+        requiredSkills: ['Python', 'SQL', 'Communication Skills', 'Agile'],
+        location: 'Bengaluru',
+        applyDeadline: '2026-06-30',
+      }),
+      this.recruiterSvc.postJob(RECRUITER_ID, INSTITUTION_ID, {
+        title: 'Associate Software Engineer – Cloud & DevOps',
+        description: 'Accenture Cloud First practice hiring engineers for AWS migration and DevOps pipeline modernization across Fortune 500 accounts. Containerization and automation scripting preferred.',
+        roleType: 'SERVICE',
+        ctcLpa: 9.5,
+        minCgpa: 6.5,
+        eligibleBranches: ['CSE', 'ISE', 'ECE'],
+        eligibleSemesters: [8],
+        requiredSkills: ['AWS', 'Docker', 'Linux', 'Python', 'CI/CD', 'Git'],
+        location: 'Bengaluru',
+        applyDeadline: '2026-07-05',
+      }),
+      this.recruiterSvc.postJob(RECRUITER_ID, INSTITUTION_ID, {
+        title: 'Software Engineer – Payments Infrastructure',
+        description: 'Razorpay Payments Infrastructure team processes Rs 10 lakh crore annually. Own components from design to production in first quarter. Deep thinking about latency, fault tolerance, and correctness required.',
+        roleType: 'STARTUP',
+        ctcLpa: 24,
+        minCgpa: 8.0,
+        eligibleBranches: ['CSE', 'ISE'],
+        eligibleSemesters: [8],
+        requiredSkills: ['Go', 'Distributed Systems', 'PostgreSQL', 'REST APIs', 'System Design', 'Redis'],
+        location: 'Bengaluru',
+        applyDeadline: '2026-07-10',
+      }),
+      this.recruiterSvc.postJob(RECRUITER_ID, INSTITUTION_ID, {
+        title: 'Embedded Software Engineer – ADAS',
+        description: 'Bosch ADAS software division hiring embedded engineers for sensor fusion, camera perception, and real-time control systems. Strong C programming and microcontroller exposure required.',
+        roleType: 'CORE',
+        ctcLpa: 11,
+        minCgpa: 7.0,
+        eligibleBranches: ['ECE', 'EEE'],
+        eligibleSemesters: [8],
+        requiredSkills: ['C', 'Embedded C', 'RTOS', 'CAN', 'AUTOSAR', 'Microcontrollers', 'MATLAB'],
+        location: 'Bengaluru',
+        applyDeadline: '2026-07-20',
+      }),
+    ]);
+
+    const [flipkartId, infosysId, accentureId, razorpayId, boschId] = jobs.map(j => j.id);
+
+    // Flipkart: 5 apps — full funnel with Karan (CGPA 8.7) getting OFFERED
+    await this.ds.query(`
+      INSERT INTO recruiter_applications (id, job_id, student_usn, status) VALUES
+      (gen_random_uuid(), $1, '1RV21CS004', 'OFFERED'),
+      (gen_random_uuid(), $1, '1RV21CS001', 'INTERVIEW'),
+      (gen_random_uuid(), $1, '1RV21CS002', 'SHORTLISTED'),
+      (gen_random_uuid(), $1, '1RV21CS003', 'APPLIED'),
+      (gen_random_uuid(), $1, '1RV21CS005', 'REJECTED')
+      ON CONFLICT (job_id, student_usn) DO NOTHING
+    `, [flipkartId]);
+
+    // Infosys: 3 apps — broad funnel (high-volume role)
+    await this.ds.query(`
+      INSERT INTO recruiter_applications (id, job_id, student_usn, status) VALUES
+      (gen_random_uuid(), $1, '1RV21CS003', 'SHORTLISTED'),
+      (gen_random_uuid(), $1, '1RV21CS005', 'SHORTLISTED'),
+      (gen_random_uuid(), $1, '1RV21CS002', 'APPLIED')
+      ON CONFLICT (job_id, student_usn) DO NOTHING
+    `, [infosysId]);
+
+    // Accenture: 2 apps
+    await this.ds.query(`
+      INSERT INTO recruiter_applications (id, job_id, student_usn, status) VALUES
+      (gen_random_uuid(), $1, '1RV21CS001', 'INTERVIEW'),
+      (gen_random_uuid(), $1, '1RV21CS003', 'APPLIED')
+      ON CONFLICT (job_id, student_usn) DO NOTHING
+    `, [accentureId]);
+
+    // Razorpay: 1 app — Karan OFFERED (triggers HIGH decline risk in Flipkart predict-offers demo)
+    await this.ds.query(`
+      INSERT INTO recruiter_applications (id, job_id, student_usn, status) VALUES
+      (gen_random_uuid(), $1, '1RV21CS004', 'OFFERED')
+      ON CONFLICT (job_id, student_usn) DO NOTHING
+    `, [razorpayId]);
+
+    // Bosch: 2 apps (CSE cross-applying to CORE — realistic)
+    await this.ds.query(`
+      INSERT INTO recruiter_applications (id, job_id, student_usn, status) VALUES
+      (gen_random_uuid(), $1, '1RV21CS001', 'APPLIED'),
+      (gen_random_uuid(), $1, '1RV21CS002', 'APPLIED')
+      ON CONFLICT (job_id, student_usn) DO NOTHING
+    `, [boschId]);
+
+    this.logger.log('Recruiter seed complete — 5 jobs, 13 applications');
   }
 }

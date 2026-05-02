@@ -61,7 +61,7 @@ export class ChatbotGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   @SubscribeMessage('chat:message')
   async handleMessage(
-    @MessageBody() data: { message: string; conversationId?: string },
+    @MessageBody() data: { message: string; conversationId?: string; language?: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const user = client.data?.user as { sub: string; role?: string } | undefined;
@@ -80,10 +80,16 @@ export class ChatbotGateway implements OnGatewayConnection, OnGatewayDisconnect 
         graph = await this.knowledgeGraphService.buildTeacherGraph(identifier);
       } else if (role === 'PARENT') {
         graph = await this.knowledgeGraphService.buildParentGraph(identifier);
+      } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
+        graph = await this.knowledgeGraphService.buildAdminGraph(identifier);
       } else {
         client.emit('chat:error', { message: 'Chatbot not available for your role.' });
         return;
       }
+
+      // Allow client to override language; default to English
+      if (data.language) graph = { ...graph, preferredLanguage: data.language };
+      else graph = { ...graph, preferredLanguage: graph.preferredLanguage ?? 'en' };
 
       const conversationId = data.conversationId
         ?? await this.chatbotService.getOrCreateConversation(identifier, role, 'WEB', graph.preferredLanguage);
@@ -109,8 +115,13 @@ export class ChatbotGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { conversationId: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    const user = client.data?.user as { sub: string; role?: string } | undefined;
+    if (!user) {
+      client.emit('chat:error', { message: 'Not authenticated' });
+      return;
+    }
     try {
-      const history = await this.chatbotService.getHistory(data.conversationId);
+      const history = await this.chatbotService.getHistory(data.conversationId, user.sub);
       client.emit('chat:history', history);
     } catch {
       client.emit('chat:error', { message: 'Could not load history.' });

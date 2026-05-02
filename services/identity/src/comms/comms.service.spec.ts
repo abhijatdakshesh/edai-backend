@@ -368,7 +368,7 @@ describe('CommsService', () => {
   describe('onModuleInit()', () => {
     it('skips hydration when no repos injected', async () => {
       const mockEvts = { emitAiCallCompleted: jest.fn() };
-      const consent = new ConsentService();
+      const consent = new ConsentService(null);
       const svc = new CommsService(mockEvts as any, consent);
       await svc.onModuleInit();
       expect(svc.callLogs).toEqual([]);
@@ -378,7 +378,7 @@ describe('CommsService', () => {
     it('hydrates callLogs from DB, converts Date calledAt to ISO string', async () => {
       const mockRow = { id: 'call-db-1', studentUsn: 'USN001', studentName: 'Alice', parentId: 'p1', outcome: 'ANSWERED', duration: 60, transcript: null, summary: null, institutionId: 'rvce', classId: 'CS-A', calledAt: new Date('2026-04-01T10:00:00Z') };
       const mockCallRepo = { find: jest.fn().mockResolvedValue([mockRow]), order: {}, take: 500 };
-      const consent = new ConsentService();
+      const consent = new ConsentService(null);
       const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, mockCallRepo as any, undefined);
       await svc.onModuleInit();
       expect(svc.callLogs).toHaveLength(1);
@@ -388,7 +388,7 @@ describe('CommsService', () => {
     it('hydrates announcements from DB', async () => {
       const mockRow = { id: 'ann-db-1', institutionId: 'rvce', title: 'Holiday', content: 'No class', audience: 'ALL', createdAt: new Date('2026-04-10T09:00:00Z') };
       const mockAnnRepo = { find: jest.fn().mockResolvedValue([mockRow]) };
-      const consent = new ConsentService();
+      const consent = new ConsentService(null);
       const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, undefined, mockAnnRepo as any);
       await svc.onModuleInit();
       expect(svc.announcements).toHaveLength(1);

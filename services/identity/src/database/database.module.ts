@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, getDataSourceToken } from '@nestjs/typeorm';
+import { SnakeNamingStrategy } from './snake-naming.strategy';
 import { FeeItemEntity } from '../entities/fee-item.entity';
 import { PromotionBatchEntity, PromotionAuditEntity } from '../entities/promotion-batch.entity';
 import { VtuWindowEntity, VtuEligibilityEntity, VtuRegistrationEntity } from '../entities/vtu.entity';
 import { AiCallLogEntity, ConsentRecordEntity, AnnouncementEntity } from '../entities/comms.entity';
 import { StudentEntity, ParentStudentLinkEntity } from '../entities/student-orm.entity';
+import { AlumniOutcomeEntity } from '../entities/placement.entity';
 
 const ALL_ENTITIES = [
   StudentEntity,
@@ -18,6 +20,7 @@ const ALL_ENTITIES = [
   AiCallLogEntity,
   ConsentRecordEntity,
   AnnouncementEntity,
+  AlumniOutcomeEntity,
 ];
 
 /**
@@ -32,13 +35,26 @@ const ALL_ENTITIES = [
           type: 'postgres',
           url: process.env['DATABASE_URL'],
           entities: ALL_ENTITIES,
-          synchronize: process.env.NODE_ENV !== 'production',
+          synchronize: false,
+          namingStrategy: new SnakeNamingStrategy(),
           ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
           logging: false,
+          extra: {
+            max: parseInt(process.env['DB_POOL_MAX'] ?? '20', 10),
+            idleTimeoutMillis: 30_000,
+            connectionTimeoutMillis: 5_000,
+          },
         }),
         TypeOrmModule.forFeature(ALL_ENTITIES),
       ]
     : [],
-  exports: process.env['DATABASE_URL'] ? [TypeOrmModule] : [],
+  // When no DATABASE_URL, register a null DataSource so modules importing DatabaseModule
+  // can inject DataSource (receiving null) without NestJS throwing a DI resolution error.
+  providers: process.env['DATABASE_URL']
+    ? []
+    : [{ provide: getDataSourceToken(), useValue: null }],
+  exports: process.env['DATABASE_URL']
+    ? [TypeOrmModule]
+    : [getDataSourceToken()],
 })
 export class DatabaseModule {}
