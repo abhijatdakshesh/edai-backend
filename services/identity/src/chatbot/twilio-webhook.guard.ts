@@ -8,8 +8,10 @@ export class TwilioWebhookGuard implements CanActivate {
     const twilioSig = req.headers['x-twilio-signature'] as string | undefined;
     const authToken = process.env['TWILIO_AUTH_TOKEN'];
 
-    // Skip validation in test/dev mode when no credentials configured
-    if (!authToken || process.env['NODE_ENV'] === 'test') return true;
+    // No Twilio token configured — allow (e.g. local dev without Twilio)
+    if (!authToken) return true;
+    // Only bypass signature validation in test when explicitly opted in
+    if (process.env['NODE_ENV'] === 'test' && process.env['ALLOW_WEBHOOK_IN_TEST'] === 'true') return true;
     if (!twilioSig) throw new ForbiddenException('Missing Twilio signature');
 
     try {

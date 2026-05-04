@@ -24,12 +24,14 @@ export class AdminPortalController {
   }
 
   @Get('analytics/attendance-trend')
-  getAttendanceTrend(@Query('institutionId') _institutionId?: string) {
+  // TODO: pass institutionId to service once multi-tenant filtering is implemented
+  getAttendanceTrend() {
     return this.svc.getAttendanceTrend();
   }
 
   @Get('analytics/fee-collection')
-  getFeeCollection(@Query('year') _year?: string) {
+  // TODO: pass year to service once year-based filtering is implemented
+  getFeeCollection() {
     return this.svc.getFeeCollection();
   }
 

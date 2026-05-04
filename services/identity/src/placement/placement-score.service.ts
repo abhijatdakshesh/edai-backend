@@ -55,7 +55,7 @@ export class PlacementScoreService {
         JOIN subjects sub ON sub.id = im.subject_id
         WHERE s.student_id = $1
         ORDER BY sub.name, im.ia_number
-      `, [usn]).catch(() => [] as Record<string, unknown>[]),
+      `, [usn]).catch((err) => { this.logger?.warn('Failed to fetch subject marks', err); return [] as Record<string, unknown>[]; }),
     ]);
 
     if (!score[0]) throw new NotFoundException(`Student ${usn} not found`);
