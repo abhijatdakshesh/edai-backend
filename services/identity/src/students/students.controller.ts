@@ -11,10 +11,6 @@ interface ContactInfo {
   consentVoice: boolean;
 }
 
-interface AuthenticatedRequest extends Request {
-  user?: { userId: string };
-}
-
 @Controller('students')
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
@@ -30,9 +26,10 @@ export class StudentsController {
   @Get(':id')
   async findById(
     @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: Request,
   ): Promise<Student> {
-    const requesterId = req.user?.userId ?? id;
+    const jwtUser = (req as unknown as { user?: { userId: string } }).user;
+    const requesterId = jwtUser?.userId ?? id;
     return this.studentsService.findById(id, requesterId);
   }
 }

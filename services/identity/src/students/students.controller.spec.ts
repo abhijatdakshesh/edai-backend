@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import type { Request } from 'express';
 import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
@@ -7,6 +8,10 @@ const mockStudentsService = {
   findById: jest.fn(),
   findContactByUsn: jest.fn(),
 };
+
+function makeReq(userId?: string): { user?: { userId: string } } {
+  return userId ? { user: { userId } } : {};
+}
 
 describe('StudentsController', () => {
   let controller: StudentsController;
@@ -22,31 +27,31 @@ describe('StudentsController', () => {
   });
 
   describe('findById', () => {
-    it('delegates to service with id and requesterId header', async () => {
+    it('delegates to service using JWT userId from request', async () => {
       const mockStudent = { id: 's-1', name: 'Alice' };
       mockStudentsService.findById.mockResolvedValue(mockStudent);
 
-      const result = await controller.findById('s-1', 'u-s-1');
+      const result = await controller.findById('s-1', makeReq('u-s-1') as unknown as Request);
       expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 'u-s-1');
       expect(result).toBe(mockStudent);
     });
 
-    it('uses default requesterId s-1 when header absent', async () => {
+    it('falls back to student id when no JWT user present', async () => {
       const mockStudent = { id: 's-1', name: 'Alice' };
       mockStudentsService.findById.mockResolvedValue(mockStudent);
 
-      await (controller.findById as (id: string, r?: string) => Promise<unknown>).call(controller, 's-1');
+      await controller.findById('s-1', makeReq() as unknown as Request);
       expect(mockStudentsService.findById).toHaveBeenCalledWith('s-1', 's-1');
     });
 
     it('propagates NotFoundException from service', async () => {
       mockStudentsService.findById.mockRejectedValue(new NotFoundException());
-      await expect(controller.findById('s-99', 'any')).rejects.toThrow(NotFoundException);
+      await expect(controller.findById('s-99', makeReq('any') as unknown as Request)).rejects.toThrow(NotFoundException);
     });
 
     it('propagates ForbiddenException from service', async () => {
       mockStudentsService.findById.mockRejectedValue(new ForbiddenException());
-      await expect(controller.findById('s-1', 'random')).rejects.toThrow(ForbiddenException);
+      await expect(controller.findById('s-1', makeReq('random') as unknown as Request)).rejects.toThrow(ForbiddenException);
     });
   });
 
