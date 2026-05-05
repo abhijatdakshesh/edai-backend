@@ -114,16 +114,22 @@ describe('NaacService', () => {
   // ── getReport ───────────────────────────────────────────────────────────────
 
   describe('getReport', () => {
-    it('returns report by id', async () => {
-      const report = { id: 'r-1', status: 'DONE' } as NaacReportEntity;
+    it('returns report by id scoped to institutionId', async () => {
+      const report = { id: 'r-1', status: 'DONE', institutionId: 'inst-1' } as NaacReportEntity;
       reportRepo.findOne.mockResolvedValue(report);
-      const result = await service.getReport('r-1');
+      const result = await service.getReport('r-1', 'inst-1');
       expect(result.id).toBe('r-1');
+      expect(reportRepo.findOne).toHaveBeenCalledWith({ where: { id: 'r-1', institutionId: 'inst-1' } });
     });
 
     it('throws NotFoundException for unknown id', async () => {
       reportRepo.findOne.mockResolvedValue(null);
-      await expect(service.getReport('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getReport('missing', 'inst-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when institutionId does not match (tenant isolation)', async () => {
+      reportRepo.findOne.mockResolvedValue(null); // DB returns null for wrong tenant
+      await expect(service.getReport('r-1', 'other-inst')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -133,24 +139,27 @@ describe('NaacService', () => {
     it('returns list of reports ordered DESC by triggeredAt', async () => {
       const reports = [{ id: 'r-1' }, { id: 'r-2' }] as NaacReportEntity[];
       reportRepo._qb.getMany.mockResolvedValue(reports);
-      const result = await service.listReports();
+      const result = await service.listReports('inst-1');
       expect(result).toHaveLength(2);
       expect(reportRepo._qb.orderBy).toHaveBeenCalledWith('r.triggeredAt', 'DESC');
     });
 
-    it('filters by academicYear when provided', async () => {
+    it('always filters by institutionId (tenant isolation)', async () => {
       reportRepo._qb.getMany.mockResolvedValue([]);
-      await service.listReports('2025-2026');
+      await service.listReports('inst-1');
       expect(reportRepo._qb.where).toHaveBeenCalledWith(
-        expect.stringContaining('academicYear'),
-        { academicYear: '2025-2026' },
+        expect.stringContaining('institutionId'),
+        { institutionId: 'inst-1' },
       );
     });
 
-    it('does not add where clause when academicYear not provided', async () => {
+    it('additionally filters by academicYear when provided', async () => {
       reportRepo._qb.getMany.mockResolvedValue([]);
-      await service.listReports();
-      expect(reportRepo._qb.where).not.toHaveBeenCalled();
+      await service.listReports('inst-1', '2025-2026');
+      expect(reportRepo._qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('academicYear'),
+        { academicYear: '2025-2026' },
+      );
     });
   });
 

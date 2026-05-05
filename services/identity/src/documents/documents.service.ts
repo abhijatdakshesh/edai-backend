@@ -96,7 +96,13 @@ function mapRow(r: Record<string, unknown>): DocumentRequest {
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
-  private readonly anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] ?? '' });
+  private get anthropic(): Anthropic {
+    const key = process.env['ANTHROPIC_API_KEY'];
+    if (!key) throw new Error('ANTHROPIC_API_KEY environment variable is required');
+    if (!this._anthropic) this._anthropic = new Anthropic({ apiKey: key });
+    return this._anthropic;
+  }
+  private _anthropic?: Anthropic;
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,

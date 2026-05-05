@@ -2,6 +2,7 @@
   "name": "edai-backend",
   "private": true,
   "workspaces": [
+    "shared/tenant-guard",
     "services/identity",
     "services/attendance",
     "services/academics",

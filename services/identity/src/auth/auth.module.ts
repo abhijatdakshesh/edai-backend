@@ -11,7 +11,11 @@ import { TokenBlocklistService } from './token-blocklist.service';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'edai-dev-secret-change-in-production',
+      secret: (() => {
+        const s = process.env['JWT_SECRET'];
+        if (!s) throw new Error('JWT_SECRET environment variable is required');
+        return s;
+      })(),
       signOptions: {
         expiresIn: '15m',
         issuer: 'edai-identity',

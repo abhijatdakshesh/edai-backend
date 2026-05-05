@@ -114,13 +114,13 @@ export interface CriterionScoreResult {
 // Source: NAAC Revised Accreditation Framework 2022, Annexure II
 // These are ESTIMATES based on public framework docs — always label as such.
 
-const C1_MAX = 150;  // Criterion I  — Curricular Aspects
-const C2_MAX = 350;  // Criterion II — Teaching-Learning and Evaluation
-const C3_MAX = 120;  // Criterion III — Research, Innovations and Extension
-const C4_MAX = 100;  // Criterion IV — Infrastructure and Learning Resources
-const C5_MAX = 130;  // Criterion V  — Student Support and Progression
-const C6_MAX = 100;  // Criterion VI — Governance, Leadership and Management
-const C7_MAX = 50;   // Criterion VII — Institutional Values and Best Practices
+const C1_MAX = 150;  // Criterion I  — Curricular Aspects          (sub-scores: 40+40+40+30=150)
+const C2_MAX = 240;  // Criterion II — Teaching-Learning             (sub-scores: 30+40+60+70+40=240; official NAAC weight is 350 — sub-criteria below are estimates pending full RAF mapping)
+const C3_MAX = 100;  // Criterion III — Research, Innovations        (sub-scores: 30+30+40=100)
+const C4_MAX = 100;  // Criterion IV — Infrastructure                (sub-scores: 30+30+25+15=100)
+const C5_MAX = 130;  // Criterion V  — Student Support               (sub-scores: 30+40+20+20+20=130)
+const C6_MAX = 100;  // Criterion VI — Governance                    (sub-scores: 20+30+20+20+10=100)
+const C7_MAX = 50;   // Criterion VII — Institutional Values         (sub-scores: 15+10+15+10=50)
 
 export const CRITERION_MAX_SCORES: Record<number, number> = {
   1: C1_MAX,

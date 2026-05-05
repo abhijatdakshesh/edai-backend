@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
 import { NaacService, CriterionResult } from './naac.service';
 
 // ─── NAAC Criterion context for prompt grounding ─────────────────────────────
@@ -27,7 +27,6 @@ const CRITERION_NAAC_DESCRIPTIONS: Record<string, string> = {
 @Injectable()
 export class NaacSsrService {
   private readonly logger = new Logger(NaacSsrService.name);
-  private readonly genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -55,7 +54,7 @@ export class NaacSsrService {
       };
     }
 
-    const paragraph = await this.callGemini(
+    const paragraph = await this.callClaude(
       criterion,
       dashboard.institution.name,
       dashboard.institution.affiliation,
@@ -85,7 +84,7 @@ export class NaacSsrService {
     // Generate paragraphs sequentially to avoid rate limits
     const sections: Array<{ criterionId: string; criterionName: string; paragraph: string }> = [];
     for (const criterion of dashboard.criteria) {
-      const paragraph = await this.callGemini(
+      const paragraph = await this.callClaude(
         criterion,
         dashboard.institution.name,
         dashboard.institution.affiliation,
@@ -158,21 +157,18 @@ Requirements:
 Return ONLY the paragraph text. No preamble, no labels.`;
   }
 
-  private async callGemini(
+  private async callClaude(
     criterion: CriterionResult,
     institutionName: string,
     affiliation: string,
   ): Promise<string> {
     const prompt = this.buildPrompt(criterion, institutionName, affiliation);
-
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
-      return text || this.fallbackParagraph(criterion);
+      const text = await claudeGenerate(prompt, CLAUDE_SMART);
+      return text.trim() || this.fallbackParagraph(criterion);
     } catch (err) {
       this.logger.warn(
-        `[NAAC-SSR] Gemini call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
+        `[NAAC-SSR] Claude call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return this.fallbackParagraph(criterion);
     }

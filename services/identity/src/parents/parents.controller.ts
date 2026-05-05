@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ParentsService } from './parents.service';
 import { LinkStudentDto } from '../dto/auth.dto';
 
@@ -6,6 +7,7 @@ import { LinkStudentDto } from '../dto/auth.dto';
 export class ParentsController {
   constructor(private readonly parentsService: ParentsService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post('link-student')
   @HttpCode(HttpStatus.OK)
   linkStudent(@Body() dto: LinkStudentDto): { linked: boolean } {

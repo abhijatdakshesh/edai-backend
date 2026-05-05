@@ -8,7 +8,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -149,7 +149,6 @@ interface GeminiTimetableResponse {
 @Injectable()
 export class TimetableService {
   private readonly logger = new Logger(TimetableService.name);
-  private readonly genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -242,7 +241,7 @@ export class TimetableService {
   async getClassrooms(): Promise<Classroom[]> {
     if (!this.db) return [];
     const rows = await this.db.query(
-      `SELECT * FROM classrooms WHERE is_active=TRUE ORDER BY name`,
+      `SELECT * FROM classrooms WHERE is_active=TRUE ORDER BY name LIMIT 500`,
     ) as Record<string, unknown>[];
     return rows.map(r => ({
       id: r['id'] as string,
@@ -305,11 +304,9 @@ export class TimetableService {
 
     let rawJson: string;
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent(prompt);
-      rawJson = result.response.text().trim();
+      rawJson = await claudeGenerate(prompt, CLAUDE_SMART, 8192);
     } catch (err) {
-      this.logger.error(`[Timetable] Gemini failed for ${configId}: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(`[Timetable] Claude failed for ${configId}: ${err instanceof Error ? err.message : String(err)}`);
       throw new InternalServerErrorException('AI timetable generation failed');
     }
 

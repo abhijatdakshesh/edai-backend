@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { CommsService } from './comms.service';
 import { ConsentService, ConsentChannel } from './consent.service';
@@ -100,8 +100,12 @@ export class CommsController {
   }
 
   @ Post('parent-comms/calls/trigger')
-  triggerParentCall(@Body() body: { parentId: string; studentUsn: string }) {
-    return this.svc.triggerParentCall(body.parentId, body.studentUsn);
+  triggerParentCall(@Body() body: { parentId: string; studentUsn: string; type: string }, @Request() req: any) {
+    const authenticatedUserId = req.user?.sub;
+    if (authenticatedUserId && authenticatedUserId !== body.parentId) {
+      throw new ForbiddenException('Cannot trigger calls for another parent');
+    }
+    return this.svc.triggerParentCall(body.parentId, body.studentUsn, body.type);
   }
 
   @ Get('parent-comms/notifications')

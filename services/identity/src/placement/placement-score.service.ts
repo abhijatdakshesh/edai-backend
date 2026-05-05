@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -33,6 +33,7 @@ const FINAL_YEAR_THRESHOLD = 7;
 
 @Injectable()
 export class PlacementScoreService {
+  private readonly logger = new Logger(PlacementScoreService.name);
   constructor(@Optional() @InjectDataSource() private dataSource: DataSource | null) {}
 
   private requireDb(): DataSource {
@@ -55,7 +56,7 @@ export class PlacementScoreService {
         JOIN subjects sub ON sub.id = im.subject_id
         WHERE s.student_id = $1
         ORDER BY sub.name, im.ia_number
-      `, [usn]).catch(() => [] as Record<string, unknown>[]),
+      `, [usn]).catch((err) => { this.logger?.warn('Failed to fetch subject marks', err); return [] as Record<string, unknown>[]; }),
     ]);
 
     if (!score[0]) throw new NotFoundException(`Student ${usn} not found`);

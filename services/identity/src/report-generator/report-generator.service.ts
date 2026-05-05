@@ -87,7 +87,7 @@ export class ReportGeneratorService {
         await this.db.query(
           `UPDATE report_generations SET status = 'FAILED', error_message = $2 WHERE id = $1`,
           [genId, (err as Error).message],
-        ).catch(() => {});
+        ).catch((dbErr) => { this.logger.error('DB update failed', dbErr); });
       }
       throw err;
     }

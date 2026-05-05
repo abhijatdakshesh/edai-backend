@@ -156,7 +156,6 @@ export class UsersService {
       ...user,
       ...(dto.name && { name: dto.name }),
       ...(dto.email && { email: dto.email }),
-      ...(dto.role && { role: dto.role }),
       ...(dto.sapId !== undefined && { sapId: dto.sapId }),
       ...(dto.departmentCode !== undefined && { departmentCode: dto.departmentCode }),
       ...(dto.preferredLanguage && { preferredLanguage: dto.preferredLanguage }),

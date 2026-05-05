@@ -1,15 +1,14 @@
 import { ChatbotService } from './chatbot.service';
 import type { StudentKnowledgeGraph } from './knowledge-graph.service';
 
-// Mock Gemini streaming
-const mockSendMessageStream = jest.fn();
-const mockStartChat = jest.fn().mockReturnValue({ sendMessageStream: mockSendMessageStream });
-const mockGetGenerativeModel = jest.fn().mockReturnValue({ startChat: mockStartChat });
+// ─── Mock Claude AI ──────────────────────────────────────────────────────────
 
-jest.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: mockGetGenerativeModel,
-  })),
+const mockMessagesStream = jest.fn();
+
+jest.mock('../shared/claude-ai', () => ({
+  getAnthropicClient: jest.fn(() => ({ messages: { stream: mockMessagesStream } })),
+  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
+  CLAUDE_SMART: 'claude-sonnet-4-6',
 }));
 
 const mockQuery = jest.fn();
@@ -43,15 +42,17 @@ const studentGraph: StudentKnowledgeGraph = {
   academicYear: '2024-25',
 };
 
-function makeStreamResult(chunks: string[], totalTokens = 120) {
+/** Build a mock Claude stream that yields content_block_delta chunks. */
+function makeClaudeStream(chunks: string[], inputTokens = 10, outputTokens = 110) {
   async function* streamGen() {
     for (const text of chunks) {
-      yield { text: () => text };
+      yield { type: 'content_block_delta', delta: { type: 'text_delta', text } };
     }
   }
+  const iter = streamGen();
   return {
-    stream: streamGen(),
-    response: Promise.resolve({ usageMetadata: { totalTokenCount: totalTokens } }),
+    [Symbol.asyncIterator]: () => iter,
+    finalMessage: jest.fn().mockResolvedValue({ usage: { input_tokens: inputTokens, output_tokens: outputTokens } }),
   };
 }
 
@@ -64,24 +65,24 @@ describe('ChatbotService', () => {
   });
 
   describe('selectModel()', () => {
-    it('routes attendance query to Gemini Flash', () => {
-      expect(svc.selectModel('What is my attendance?')).toBe('gemini-2.5-flash-lite');
+    it('routes attendance query to CLAUDE_FAST', () => {
+      expect(svc.selectModel('What is my attendance?')).toBe('claude-haiku-4-5-20251001');
     });
 
-    it('routes schedule query to Gemini Flash', () => {
-      expect(svc.selectModel('Show my schedule today')).toBe('gemini-2.5-flash-lite');
+    it('routes schedule query to CLAUDE_FAST', () => {
+      expect(svc.selectModel('Show my schedule today')).toBe('claude-haiku-4-5-20251001');
     });
 
-    it('routes fee query to Gemini Flash', () => {
-      expect(svc.selectModel('Is my fee paid?')).toBe('gemini-2.5-flash-lite');
+    it('routes fee query to CLAUDE_FAST', () => {
+      expect(svc.selectModel('Is my fee paid?')).toBe('claude-haiku-4-5-20251001');
     });
 
-    it('routes complex query to Gemini Pro', () => {
-      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('gemini-2.5-flash');
+    it('routes complex query to CLAUDE_SMART', () => {
+      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('claude-sonnet-4-6');
     });
 
-    it('routes general query to Gemini Pro', () => {
-      expect(svc.selectModel('What should I do to improve my grades?')).toBe('gemini-2.5-flash');
+    it('routes general query to CLAUDE_SMART', () => {
+      expect(svc.selectModel('What should I do to improve my grades?')).toBe('claude-sonnet-4-6');
     });
   });
 
@@ -148,12 +149,12 @@ describe('ChatbotService', () => {
   describe('chatStream()', () => {
     it('streams chunks and saves to DB', async () => {
       mockQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])   // history
+        .mockResolvedValueOnce([])   // INSERT user message
+        .mockResolvedValueOnce([])   // INSERT assistant message
+        .mockResolvedValueOnce([]);  // UPDATE last_message_at
 
-      mockSendMessageStream.mockResolvedValue(makeStreamResult(['Hello ', 'Alice!']));
+      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['Hello ', 'Alice!']));
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
@@ -173,21 +174,21 @@ describe('ChatbotService', () => {
       expect(result).toContain('trouble');
     });
 
-    it('handles Gemini API error gracefully', async () => {
+    it('handles Claude API error gracefully', async () => {
       mockQuery
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockSendMessageStream.mockRejectedValue(new Error('Gemini API down'));
+      mockMessagesStream.mockImplementationOnce(() => { throw new Error('Claude API down'); });
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
       expect(result).toContain('trouble');
     });
 
-    it('uses conversation history from DB', async () => {
+    it('uses conversation history from DB with assistant role', async () => {
       mockQuery
         .mockResolvedValueOnce([
           { role: 'USER', content: 'previous question' },
@@ -197,14 +198,13 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockSendMessageStream.mockResolvedValue(makeStreamResult(['OK']));
+      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['OK']));
 
       await svc.chatStream('conv-1', 'New question', studentGraph, () => {});
 
-      const startChatCall = mockStartChat.mock.calls[0][0];
-      expect(startChatCall.history).toHaveLength(2);
-      expect(startChatCall.history[0].role).toBe('user');
-      expect(startChatCall.history[1].role).toBe('model');
+      const streamCall = mockMessagesStream.mock.calls[0][0];
+      expect(streamCall.messages).toHaveLength(3); // 2 history + 1 current
+      expect(streamCall.messages[1].role).toBe('assistant');
     });
 
     it('stores model_used in DB', async () => {
@@ -214,50 +214,30 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockSendMessageStream.mockResolvedValue(makeStreamResult(['Done']));
+      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['Done']));
 
       await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, () => {});
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("'ASSISTANT'"),
-        expect.arrayContaining(['gemini-2.5-flash-lite']),
+        expect.arrayContaining(['claude-haiku-4-5-20251001']),
       );
     });
 
-    it('skips empty chunks from Gemini stream', async () => {
+    it('handles missing usage fields gracefully', async () => {
       mockQuery
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      async function* streamWithEmpty() {
-        yield { text: () => '' };
-        yield { text: () => 'Hello' };
-        yield { text: () => '' };
+      async function* streamGen() {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } };
       }
-      mockSendMessageStream.mockResolvedValue({
-        stream: streamWithEmpty(),
-        response: Promise.resolve({ usageMetadata: { totalTokenCount: 10 } }),
-      });
-
-      const chunks: string[] = [];
-      const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
-      expect(chunks).toEqual(['Hello']);
-      expect(result).toBe('Hello');
-    });
-
-    it('handles missing usageMetadata gracefully', async () => {
-      mockQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
-
-      async function* streamGen() { yield { text: () => 'Hi' }; }
-      mockSendMessageStream.mockResolvedValue({
-        stream: streamGen(),
-        response: Promise.resolve({ usageMetadata: undefined }),
+      const iter = streamGen();
+      mockMessagesStream.mockReturnValueOnce({
+        [Symbol.asyncIterator]: () => iter,
+        finalMessage: jest.fn().mockResolvedValue({ usage: { input_tokens: undefined, output_tokens: undefined } }),
       });
 
       const result = await svc.chatStream('conv-1', 'Hello', studentGraph, () => {});
@@ -266,42 +246,6 @@ describe('ChatbotService', () => {
         expect.stringContaining("'ASSISTANT'"),
         expect.arrayContaining([0]),
       );
-    });
-    it('falls back to next model on retryable 429 error and logs warn (line 162 + 168)', async () => {
-      mockQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
-
-      // First call (primary) → 429 retryable; second call (fallback) → success
-      mockSendMessageStream
-        .mockRejectedValueOnce(new Error('[429 Too Many Requests] quota exceeded'))
-        .mockResolvedValueOnce(makeStreamResult(['Fallback response']));
-
-      const chunks: string[] = [];
-      const result = await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, (c) => chunks.push(c));
-
-      // Used the fallback model — line 162 warn branch hit
-      expect(result).toBe('Fallback response');
-      expect(chunks).toEqual(['Fallback response']);
-    });
-
-    it('falls back through full chain and returns error message when all models fail', async () => {
-      mockQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
-
-      // All models in chain fail with retryable errors — line 168 warn + continue hit
-      mockSendMessageStream.mockRejectedValue(new Error('[503 Service Unavailable] overloaded'));
-
-      const chunks: string[] = [];
-      const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
-
-      expect(result).toContain('trouble');
-      expect(chunks[0]).toContain('trouble');
     });
   });
 

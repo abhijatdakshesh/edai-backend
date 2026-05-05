@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { claudeGenerate, CLAUDE_FAST } from '../shared/claude-ai';
 import { randomUUID } from 'node:crypto';
 
 function sanitize(v: unknown, maxLen = 300): string {
@@ -33,7 +33,6 @@ export interface CandidateFilter {
 @Injectable()
 export class RecruiterService {
   private readonly logger = new Logger(RecruiterService.name);
-  private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(@Optional() @InjectDataSource() private ds: DataSource) {}
 
@@ -176,7 +175,6 @@ export class RecruiterService {
 
     if (!candidates.length) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const candidateList = (candidates as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} name=${sanitize(c['name'])} dept=${sanitize(c['department'])} cgpa=${c['cgpa']} skills=${sanitize(JSON.stringify(c['skills']))} score=${c['readiness_score'] ?? 'N/A'}`
     ).join('\n');
@@ -194,8 +192,7 @@ Return a JSON array ranked best-to-worst: [{"usn":"...", "rank":1, "fitScore":85
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       return parsed;
     } catch (err) {
@@ -215,7 +212,6 @@ Return ONLY the JSON array, no markdown.`;
     requiredSkills: string[];
     ctcLpa: number;
   }): Promise<{ title: string; description: string; requirements: string[] }> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Generate a professional job description for a ${sanitize(params.roleType)} company hiring for Indian engineering college students (final year).
 
 Role: ${sanitize(params.roleTitle)}
@@ -227,8 +223,7 @@ Return JSON: {"title":"...","description":"2-3 paragraph JD","requirements":["re
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return {
@@ -247,7 +242,6 @@ Return ONLY the JSON, no markdown.`;
     requiredSkills: string[];
     round: 'APTITUDE' | 'TECHNICAL' | 'HR';
   }): Promise<{ question: string; expectedAnswer: string; difficulty: 'EASY' | 'MEDIUM' | 'HARD' }[]> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Generate 10 ${sanitize(params.round)} interview questions for:
 Role: ${sanitize(params.roleTitle)}
 Company type: ${sanitize(params.roleType)}
@@ -257,8 +251,7 @@ Return JSON array: [{"question":"...","expectedAnswer":"brief answer","difficult
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return [{ question: `Explain your experience with ${params.requiredSkills[0] ?? 'programming'}`, expectedAnswer: 'Varies by candidate', difficulty: 'MEDIUM' }];
@@ -272,7 +265,6 @@ Return ONLY the JSON array, no markdown.`;
     candidates: unknown[];
     interpretation: string;
   }> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Parse this recruiter candidate search query into structured filters for an Indian engineering college database.
 
 Query: "${sanitize(query)}"
@@ -291,8 +283,7 @@ Return JSON: {"branch":"CSE","semester":8,"minCgpa":8.0,"minPlacementScore":null
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       const filter = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       const { interpretation, ...candidateFilter } = filter as CandidateFilter & { interpretation: string };
       const candidates = await this.searchCandidates(institutionId, { ...candidateFilter, limit: 50 });
@@ -309,7 +300,6 @@ Return ONLY the JSON, no markdown.`;
     const candidates = await this.searchCandidates(institutionId, { limit: 50 });
     if (!candidates.length) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const jdSnippet = sanitize(jdText, 2000);
     const candidateList = (candidates as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} name=${sanitize(c['name'])} dept=${sanitize(c['department'])} cgpa=${c['cgpa']} skills=${sanitize(JSON.stringify(c['skills']))}`
@@ -326,8 +316,7 @@ Return JSON array (top 10 max): [{"usn":"...","matchScore":85,"matchReasons":["r
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Semantic match failed', err);
@@ -354,7 +343,6 @@ Return ONLY the JSON array, no markdown.`;
 
     if (!others.length) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const target = targetStudent as Record<string, unknown>;
     const otherList = (others as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} dept=${sanitize(c['department'])} cgpa=${c['cgpa']} skills=${sanitize(JSON.stringify(c['skills']))}`
@@ -370,8 +358,7 @@ Return JSON array (top 5): [{"usn":"...","similarityScore":88,"sharedTraits":["t
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Look-alike failed', err);
@@ -388,7 +375,6 @@ Return ONLY the JSON array, no markdown.`;
     const candidates = await this.searchCandidates(institutionId, { ...filterWithoutCgpa, limit: 80 });
     if (!candidates.length) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const candidateList = (candidates as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} name=${sanitize(c['name'])} cgpa=${c['cgpa']} score=${c['placement_score'] ?? 'N/A'} skills=${sanitize(JSON.stringify(c['skills']))}`
     ).join('\n');
@@ -403,8 +389,7 @@ Signals could include: high placement score despite average CGPA, diverse skill 
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Hidden gems failed', err);
@@ -426,7 +411,6 @@ Return ONLY the JSON array, no markdown.`;
 
     if (!candidates.length) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const candidateList = (candidates as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} name=${sanitize(c['name'])} skills=${sanitize(JSON.stringify(c['skills']))}`
     ).join('\n');
@@ -442,8 +426,7 @@ estimatedRampWeeks = weeks to get productive (2-16 range).
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Skill adjacency failed', err);
@@ -460,7 +443,6 @@ Return ONLY the JSON array, no markdown.`;
     poolImpact: string;
     inclusiveScore: number;
   }> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Analyze this job description for an Indian engineering campus placement drive and suggest improvements to maximize candidate pool size and quality.
 
 Job Description: ${sanitize(params.jdText, 2000)}
@@ -473,8 +455,7 @@ inclusiveScore: 0-100, higher is more inclusive language.
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('JD improve failed', err);
@@ -492,7 +473,6 @@ Return ONLY the JSON, no markdown.`;
     flagged: { phrase: string; suggestion: string; reason: string }[];
     overallScore: number;
   }> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Check this job description for exclusionary, biased, or non-inclusive language targeting Indian engineering college graduates.
 
 Job Description: ${sanitize(jdText, 2000)}
@@ -502,8 +482,7 @@ overallScore: 0-100, higher = more inclusive. If no issues found, return flagged
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Inclusive check failed', err);
@@ -519,7 +498,6 @@ Return ONLY the JSON, no markdown.`;
     location: string;
     requiredSkills: string[];
   }): Promise<{ suggestedMin: number; suggestedMax: number; median: number; reasoning: string }> {
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Suggest a competitive salary range (in LPA) for this campus placement role at a Tier-1 Karnataka engineering college (like RVCE/BMS) for the 2025-26 batch.
 
 Role: ${sanitize(params.roleTitle)}
@@ -531,8 +509,7 @@ Return JSON: {"suggestedMin":8,"suggestedMax":12,"median":10,"reasoning":"Based 
 Numbers in LPA (Lakhs Per Annum). Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Salary benchmark failed', err);
@@ -563,7 +540,6 @@ Numbers in LPA (Lakhs Per Annum). Return ONLY the JSON, no markdown.`;
     `, [usns, jobId]);
     const competingSet = new Set((competingOffers as { student_usn: string }[]).map(r => r.student_usn));
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const candidateList = (shortlisted as Record<string, unknown>[]).map((c, i) => {
       const hasCompeting = competingSet.has(String(c['student_id']));
       return `${i + 1}. USN=${sanitize(c['student_id'])} cgpa=${c['cgpa']} score=${c['readiness_score'] ?? 'N/A'} competingOffer=${hasCompeting}`;
@@ -582,8 +558,7 @@ Return JSON array: [{"usn":"...","acceptProbability":75,"joiningProbability":60,
 suggestedCTC is the CTC in LPA to maximize acceptance. Return ONLY the JSON array, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Offer prediction failed', err);
@@ -611,7 +586,6 @@ suggestedCTC is the CTC in LPA to maximize acceptance. Return ONLY the JSON arra
     const job = jobs[0] as Record<string, unknown> | undefined;
     if (!job) return [];
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const channelLimits: Record<string, number> = { WHATSAPP: 1000, LINKEDIN: 300, EMAIL: 5000 };
     const limit = channelLimits[params.channel] ?? 5000;
 
@@ -630,8 +604,7 @@ Return JSON: {"subject":"...email subject if EMAIL channel else null","body":"th
 Return ONLY the JSON, no markdown.`;
 
       try {
-        const res = await model.generateContent(prompt);
-        const text = res.response.text().trim();
+        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
         const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { subject?: string; body: string };
         results.push({
           candidateUsn: candidate['studentId'] ?? candidate['student_id'] ?? candidate['usn'],
@@ -680,7 +653,6 @@ Return ONLY the JSON, no markdown.`;
       this.ds.query(`SELECT student_id, name, department, cgpa FROM students WHERE student_id = ANY($1::text[]) AND institution_id = $2`, [safeAll, institutionId]),
     ]);
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const shortlistSummary = (shortlisted as Record<string, unknown>[]).map(c =>
       `USN=${sanitize(c['student_id'])} dept=${sanitize(c['department'])} cgpa=${c['cgpa']}`
     ).join(', ');
@@ -703,8 +675,7 @@ Return JSON: {
 overallBiasScore: 0-100, higher = more biased. flags = specific concerns. Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Bias audit failed', err);
@@ -729,7 +700,6 @@ overallBiasScore: 0-100, higher = more biased. flags = specific concerns. Return
       FROM students WHERE student_id = ANY($1::text[]) AND institution_id = $2
     `, [currentShortlist, institutionId]);
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const candidateList = (candidates as Record<string, unknown>[]).map((c, i) =>
       `${i + 1}. USN=${sanitize(c['student_id'])} dept=${sanitize(c['department'])} cgpa=${c['cgpa']}`
     ).join('\n');
@@ -744,8 +714,7 @@ Prioritize department diversity and avoid over-representation of any single bran
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { reorderedUsns: string[] };
       return parsed;
     } catch (err) {
@@ -816,14 +785,12 @@ Return ONLY the JSON, no markdown.`;
 
     if (totalApplied > 0) {
       try {
-        const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const prompt = `Generate 3 concise, actionable hiring insights for a campus recruiter in India.
+            const prompt = `Generate 3 concise, actionable hiring insights for a campus recruiter in India.
 Funnel data: ${totalApplied} applied, ${shortlisted} shortlisted, ${interview} in interview, ${offered} offered.
 Top required skills: ${Object.keys(skillFreq).slice(0, 5).join(', ')}.
 Return JSON array of 3 strings: ["insight1","insight2","insight3"]
 Return ONLY the JSON array, no markdown.`;
-        const res = await model.generateContent(prompt);
-        const text = res.response.text().trim();
+        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
         aiInsights = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       } catch {
         // keep default insights
@@ -838,7 +805,6 @@ Return ONLY the JSON array, no markdown.`;
   async recruiterNlQuery(recruiterId: string, query: string): Promise<{ answer: string; table?: Record<string, unknown>[] }> {
     const analytics = await this.getAnalytics(recruiterId) as Record<string, unknown>;
 
-    const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `A recruiter is asking: "${sanitize(query)}"
 
 Here is their current hiring data:
@@ -849,8 +815,7 @@ Return JSON: {"answer":"...","table":[{"Column":"Value"}]|null}
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const res = await model.generateContent(prompt);
-      const text = res.response.text().trim();
+      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { answer: string; table?: Record<string, unknown>[] };
       return { answer: parsed.answer, table: parsed.table ?? undefined };
     } catch (err) {

@@ -266,9 +266,9 @@ export class KnowledgeGraphService {
           maxMarks: +m.max_marks || 20,
         })),
         feeStatus: fees[0] ? {
-          totalFee: +fees[0].total_amount,
-          paid: +fees[0].paid_amount,
-          balance: +fees[0].balance,
+          totalFee: +(fees[0]?.total_amount ?? 0),
+          paid: +(fees[0]?.paid_amount ?? 0),
+          balance: +(fees[0]?.balance ?? 0),
           status: fees[0].payment_status,
           dueDate: fees[0].due_date,
         } : { totalFee: 0, paid: 0, balance: 0, status: 'UNKNOWN', dueDate: null },

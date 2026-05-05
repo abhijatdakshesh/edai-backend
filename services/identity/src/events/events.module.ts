@@ -5,7 +5,11 @@ import { EventsGateway } from './events.gateway';
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'edai-dev-secret-change-in-production',
+      secret: (() => {
+        const s = process.env['JWT_SECRET'];
+        if (!s) throw new Error('JWT_SECRET environment variable is required');
+        return s;
+      })(),
     }),
   ],
   providers: [EventsGateway],

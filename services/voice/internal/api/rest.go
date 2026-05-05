@@ -3,10 +3,14 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -121,8 +125,41 @@ func (s *Server) getAudio(callID string) ([]byte, bool) {
 	return e.data, true
 }
 
+// jwtAuth validates a HS256 Bearer token using JWT_SECRET env var.
+// Only the signature is verified — it does not decode claims (no extra dependency).
+func jwtAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			log.Println("[jwtAuth] JWT_SECRET not set — rejecting request")
+			http.Error(w, "server misconfiguration", http.StatusInternalServerError)
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			http.Error(w, "missing Bearer token", http.StatusUnauthorized)
+			return
+		}
+		token := strings.TrimPrefix(auth, "Bearer ")
+		parts := strings.Split(token, ".")
+		if len(parts) != 3 {
+			http.Error(w, "malformed token", http.StatusUnauthorized)
+			return
+		}
+		signingInput := parts[0] + "." + parts[1]
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(signingInput))
+		expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if !hmac.Equal([]byte(expected), []byte(parts[2])) {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/voice/calls/trigger", s.triggerCall)
+	mux.HandleFunc("/voice/calls/trigger", jwtAuth(s.triggerCall))
 	mux.HandleFunc("/voice/calls/", s.getCallStatus)
 	mux.HandleFunc("/voice/webhook/twilio/answer", s.twilioSig(s.twilioAnswer))
 	mux.HandleFunc("/voice/webhook/twilio/gather", s.twilioSig(s.twilioGather))

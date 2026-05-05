@@ -68,6 +68,14 @@ async function buildServiceNoDB(): Promise<DocumentsService> {
 describe('DocumentsService', () => {
   let service: DocumentsService;
 
+  beforeAll(() => {
+    process.env['ANTHROPIC_API_KEY'] = 'test-key-ci';
+  });
+
+  afterAll(() => {
+    delete process.env['ANTHROPIC_API_KEY'];
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
     service = await buildService();
