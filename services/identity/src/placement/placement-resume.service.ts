@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import * as PDFDocument from 'pdfkit';
@@ -15,7 +15,6 @@ const COMPANY_TYPE_CONTEXT: Record<string, string> = {
 @Injectable()
 export class PlacementResumeService {
   private readonly logger = new Logger(PlacementResumeService.name);
-  private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(
     @Optional() @InjectDataSource() private dataSource: DataSource,
@@ -47,11 +46,9 @@ Format as clean plain text, section headers in CAPS, no markdown, no asterisks. 
 
     let resumeText = '';
     try {
-      const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      const result = await model.generateContent(claudePrompt);
-      resumeText = result.response.text();
+      resumeText = await claudeGenerate(claudePrompt, CLAUDE_SMART, 4096);
     } catch (err) {
-      this.logger.error('Gemini resume error', err);
+      this.logger.error('Claude resume error', err);
       resumeText = `OBJECTIVE\nSeeking a ${companyType.toLowerCase()} role.\n\nEDUCATION\nBE in ${profile.department}, RVITM Bengaluru — CGPA: ${profile.cgpa}/10`;
     }
 

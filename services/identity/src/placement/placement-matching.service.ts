@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -18,7 +18,6 @@ function sanitizeForPrompt(value: unknown): string {
 @Injectable()
 export class PlacementMatchingService {
   private readonly logger = new Logger(PlacementMatchingService.name);
-  private genai = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
 
   constructor(@Optional() @InjectDataSource() private dataSource: DataSource) {}
 
@@ -69,9 +68,7 @@ Score fit (0-100): CGPA 40%, attendance 20%, readiness 30%, profile 10%. Output 
     let matches: MatchResult[] = [];
 
     try {
-      const model = this.genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await claudeGenerate(prompt, CLAUDE_SMART);
       const json = text.replace(/```json\n?|\n?```/g, '').trim();
       const parsed: unknown = JSON.parse(json);
 

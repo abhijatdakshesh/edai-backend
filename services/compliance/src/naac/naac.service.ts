@@ -65,15 +65,18 @@ export class NaacService {
     return saved;
   }
 
-  async getReport(reportId: string): Promise<NaacReportEntity> {
-    const report = await this.reportRepo.findOne({ where: { id: reportId } });
+  async getReport(reportId: string, institutionId: string): Promise<NaacReportEntity> {
+    const report = await this.reportRepo.findOne({ where: { id: reportId, institutionId } });
     if (!report) throw new NotFoundException(`Report ${reportId} not found`);
     return report;
   }
 
-  async listReports(academicYear?: string): Promise<NaacReportEntity[]> {
-    const qb = this.reportRepo.createQueryBuilder('r').orderBy('r.triggeredAt', 'DESC');
-    if (academicYear) qb.where('r.academicYear = :academicYear', { academicYear });
+  async listReports(institutionId: string, academicYear?: string): Promise<NaacReportEntity[]> {
+    const qb = this.reportRepo
+      .createQueryBuilder('r')
+      .where('r.institutionId = :institutionId', { institutionId })
+      .orderBy('r.triggeredAt', 'DESC');
+    if (academicYear) qb.andWhere('r.academicYear = :academicYear', { academicYear });
     return qb.getMany();
   }
 

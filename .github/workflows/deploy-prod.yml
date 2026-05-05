@@ -1,15 +1,20 @@
-name: Deploy Production
+name: Deploy Production — Identity Service
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "services/identity/**"
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type DEPLOY to confirm production release'
+        description: "Type DEPLOY to confirm production release"
         required: true
 
 jobs:
   gate-check:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Validate confirmation
         if: ${{ github.event.inputs.confirm != 'DEPLOY' }}
@@ -17,26 +22,43 @@ jobs:
           echo "Confirmation not provided. Aborting."
           exit 1
 
-  deploy:
-    needs: gate-check
+  build-and-deploy:
+    needs: [gate-check]
+    if: always() && (needs.gate-check.result == 'success' || github.event_name == 'push')
     runs-on: ubuntu-latest
-    environment:
-      name: production
+    environment: production
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Blue-green deploy via ArgoCD
+      - name: Build and push to ACR
         run: |
-          echo "ArgoCD blue-green sync for production — placeholder"
-          # argocd app sync rvtrust-prod --strategy=blueGreen
+          az acr login --name edaiacrprod
+          docker build \
+            -t edaiacrprod.azurecr.io/identity:${{ github.sha }} \
+            -t edaiacrprod.azurecr.io/identity:latest \
+            -f services/identity/Dockerfile \
+            services/identity
+          docker push edaiacrprod.azurecr.io/identity:${{ github.sha }}
+          docker push edaiacrprod.azurecr.io/identity:latest
 
-      - name: Health check & rollback guard
+      - name: Deploy to Container Apps
         run: |
-          echo "Health check and auto-rollback after 5 min — placeholder"
+          az containerapp update \
+            --name edai-identity \
+            --resource-group edai-prod-rg \
+            --image edaiacrprod.azurecr.io/identity:${{ github.sha }}
+
+      - name: Health check
+        run: |
+          sleep 20
+          FQDN=$(az containerapp show \
+            --name edai-identity \
+            --resource-group edai-prod-rg \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail "https://${FQDN}/health" || (echo "Health check failed" && exit 1)

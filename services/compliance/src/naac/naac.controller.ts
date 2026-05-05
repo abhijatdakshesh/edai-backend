@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NaacService } from './naac.service';
@@ -24,6 +24,24 @@ export class NaacController {
   @Get('dashboard')
   getDashboard(@Req() req: AuthRequest, @Query('academicYear') academicYear = '2024-25') {
     return this.naacService.getDashboard(req.user.institutionId, academicYear);
+  }
+
+  @Get('reports')
+  listReports(@Req() req: AuthRequest, @Query('academicYear') academicYear?: string) {
+    return this.naacService.listReports(req.user.institutionId, academicYear);
+  }
+
+  @Get('reports/:id')
+  getReport(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.naacService.getReport(id, req.user.institutionId);
+  }
+
+  @Post('reports/generate')
+  generateReport(
+    @Req() req: AuthRequest,
+    @Body() body: { academicYear: string; generatedBy: string; format: 'PDF' | 'EXCEL' },
+  ) {
+    return this.naacService.generateReport({ institutionId: req.user.institutionId, ...body });
   }
 
   @Post('criteria/1')

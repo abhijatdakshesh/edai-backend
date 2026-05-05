@@ -43,29 +43,29 @@ export class ComplianceService {
     return report;
   }
 
-  addEvidence(reportId: string, item: Omit<EvidenceItem, 'id' | 'uploadedAt'>): EvidenceItem {
-    const report = this.findById(reportId);
+  addEvidence(reportId: string, institutionId: string, item: Omit<EvidenceItem, 'id' | 'uploadedAt'>): EvidenceItem {
+    const report = this.findById(reportId, institutionId);
     const evidence: EvidenceItem = { ...item, id: randomUUID(), uploadedAt: new Date().toISOString() };
     report.evidenceItems.push(evidence);
     return evidence;
   }
 
-  generate(reportId: string): ComplianceReport {
-    const report = this.findById(reportId);
+  generate(reportId: string, institutionId: string): ComplianceReport {
+    const report = this.findById(reportId, institutionId);
     report.generatedAt = new Date().toISOString();
     report.status = 'IN_REVIEW';
     this.logger.log(`Report generated: id=${reportId} type=${report.type}`);
     return report;
   }
 
-  approve(reportId: string): ComplianceReport {
-    const report = this.findById(reportId);
+  approve(reportId: string, institutionId: string): ComplianceReport {
+    const report = this.findById(reportId, institutionId);
     report.status = 'APPROVED';
     return report;
   }
 
-  submit(reportId: string): ComplianceReport {
-    const report = this.findById(reportId);
+  submit(reportId: string, institutionId: string): ComplianceReport {
+    const report = this.findById(reportId, institutionId);
     report.status = 'SUBMITTED';
     return report;
   }
@@ -74,8 +74,8 @@ export class ComplianceService {
     return this.reports.filter((r) => r.institutionId === institutionId);
   }
 
-  findById(id: string): ComplianceReport {
-    const report = this.reports.find((r) => r.id === id);
+  findById(id: string, institutionId: string): ComplianceReport {
+    const report = this.reports.find((r) => r.id === id && r.institutionId === institutionId);
     if (!report) throw new NotFoundException('Report not found');
     return report;
   }
