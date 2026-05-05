@@ -4,30 +4,15 @@ import { PlacementResumeService } from './placement-resume.service';
 import { PlacementScoreService } from './placement-score.service';
 
 // ---------------------------------------------------------------------------
-// Mock @google/generative-ai (Gemini) — service migrated from Anthropic.
-// We retain the legacy `mockAnthropicCreate` symbol name for assertion
-// continuity; it now wraps a Gemini-shaped response.
+// Mock Claude AI
 // ---------------------------------------------------------------------------
 
-const mockAnthropicCreate = jest.fn();
-
-jest.mock('@google/generative-ai', () => ({
-  __esModule: true,
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: () => ({
-      generateContent: async (prompt: string) => {
-        const result = await mockAnthropicCreate({
-          messages: [{ role: 'user', content: prompt }],
-        });
-        // Translate "Anthropic-shaped" mock fixture into the Gemini response shape.
-        // Tests use `anthropicTextResponse` -> { content: [{ type: 'text', text }] }
-        const block = (result?.content ?? [])[0] ?? {};
-        const text = block?.type === 'text' ? String(block.text ?? '') : '';
-        return { response: { text: () => text } };
-      },
-    }),
-  })),
+jest.mock('../shared/claude-ai', () => ({
+  claudeGenerate: jest.fn(),
+  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
+  CLAUDE_SMART: 'claude-sonnet-4-6',
 }));
+const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Mock PDFKit — we test PDF pipeline integration, but skip real rendering
@@ -102,12 +87,12 @@ const MOCK_PROFILE = {
 
 const PROFILE_NO_SUBJECTS = { ...MOCK_PROFILE, subjects: [] };
 
-function anthropicTextResponse(text: string) {
-  return { content: [{ type: 'text', text }] };
+function claudeTextResponse(text: string): string {
+  return text;
 }
 
-function anthropicNonTextResponse() {
-  return { content: [{ type: 'image', source: {} }] };
+function claudeEmptyResponse(): string {
+  return '';
 }
 
 const RESUME_TEXT = `OBJECTIVE
@@ -157,7 +142,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([{ phone: '+919876543210', email: 'alice@test.com' }]) // student contact
         .mockResolvedValueOnce([]);  // INSERT resume
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
 
       await buildModule(query);
       const result = await service.generateResume('1RV21CS001', 'PRODUCT');
@@ -169,77 +154,77 @@ describe('PlacementResumeService', () => {
     it('calls Claude with PRODUCT company context', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'PRODUCT');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('product-based tech company');
-      expect(callArgs.messages[0].content).toContain('DSA, system design');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('product-based tech company');
+      expect(callArgs).toContain('DSA, system design');
     });
 
     it('calls Claude with SERVICE company context', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'SERVICE');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('service-based IT company');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('service-based IT company');
     });
 
     it('calls Claude with STARTUP company context', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'STARTUP');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('startup');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('startup');
     });
 
     it('calls Claude with CORE company context', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'CORE');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('core engineering company');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('core engineering company');
     });
 
     it('includes student CGPA, attendance, and backlogs in the Claude prompt', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'PRODUCT');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('8.5/10');
-      expect(callArgs.messages[0].content).toContain('85%');
-      expect(callArgs.messages[0].content).toContain('Backlogs: 0');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('8.5/10');
+      expect(callArgs).toContain('85%');
+      expect(callArgs).toContain('Backlogs: 0');
     });
 
     it('includes subject performance with ia3 null displayed as N/A', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'PRODUCT');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
       // Operating Systems has ia3=null → should show N/A
-      expect(callArgs.messages[0].content).toContain('IA3=N/A');
+      expect(callArgs).toContain('IA3=N/A');
     });
 
     it('shows N/A for ia1 and ia2 when they are null (covers ?? N/A branches for all three marks)', async () => {
@@ -251,15 +236,15 @@ describe('PlacementResumeService', () => {
       };
       scoreService.getStudentProfile.mockResolvedValue(profileWithNullMarks);
       mockDbQuery = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(mockDbQuery);
 
       await service.generateResume('1RV21CS001', 'SERVICE');
 
-      const callArgs = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(callArgs.messages[0].content).toContain('IA1=N/A');
-      expect(callArgs.messages[0].content).toContain('IA2=N/A');
-      expect(callArgs.messages[0].content).toContain('IA3=N/A');
+      const callArgs = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(callArgs).toContain('IA1=N/A');
+      expect(callArgs).toContain('IA2=N/A');
+      expect(callArgs).toContain('IA3=N/A');
     });
 
     it('inserts resume text to DB after generation', async () => {
@@ -269,7 +254,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([{ phone: '+919876543210', email: 'alice@test.com' }])
         .mockResolvedValueOnce([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(query);
 
       await service.generateResume('1RV21CS001', 'PRODUCT');
@@ -288,7 +273,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([{}])  // contact row with no email/phone
         .mockResolvedValueOnce([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'SERVICE');
@@ -303,7 +288,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([{ email: 'alice@test.com' }])  // no phone field
         .mockResolvedValueOnce([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'SERVICE');
@@ -313,7 +298,7 @@ describe('PlacementResumeService', () => {
     it('handles student with empty subjects array without crashing', async () => {
       scoreService.getStudentProfile.mockResolvedValue(PROFILE_NO_SUBJECTS);
       const query = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'CORE');
@@ -327,7 +312,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([])   // no student row in DB
         .mockResolvedValueOnce([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(RESUME_TEXT));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(RESUME_TEXT));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'STARTUP');
@@ -337,7 +322,7 @@ describe('PlacementResumeService', () => {
     it('returns empty resumeText when Claude returns non-text content type', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       const query = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicNonTextResponse());
+      mockClaudeGenerate.mockResolvedValueOnce(claudeEmptyResponse());
       await buildModule(query);
 
       // Should not throw — empty string passed to PDF builder
@@ -356,7 +341,7 @@ describe('PlacementResumeService', () => {
         .mockResolvedValueOnce([{ phone: '+919876543210', email: 'alice@test.com' }])
         .mockResolvedValueOnce([]);
 
-      mockAnthropicCreate.mockRejectedValueOnce(new Error('overloaded'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('overloaded'));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'PRODUCT');
@@ -375,7 +360,7 @@ describe('PlacementResumeService', () => {
     it('fallback text mentions the companyType in lowercase', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       const query = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockRejectedValueOnce(new Error('timeout'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('timeout'));
       await buildModule(query);
 
       await service.generateResume('1RV21CS001', 'STARTUP');
@@ -388,7 +373,7 @@ describe('PlacementResumeService', () => {
     it('fallback text includes department name', async () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       const query = jest.fn().mockResolvedValue([]);
-      mockAnthropicCreate.mockRejectedValueOnce(new Error('quota exceeded'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('quota exceeded'));
       await buildModule(query);
 
       await service.generateResume('1RV21CS001', 'CORE');
@@ -407,7 +392,7 @@ describe('PlacementResumeService', () => {
       const query = jest.fn().mockResolvedValue([]);
       // Resume with uppercase section header and a normal line
       const resumeWithSections = 'TECHNICAL SKILLS\nJava, Python, SQL';
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(resumeWithSections));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(resumeWithSections));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'PRODUCT');
@@ -418,7 +403,7 @@ describe('PlacementResumeService', () => {
       scoreService.getStudentProfile.mockResolvedValue(MOCK_PROFILE);
       const query = jest.fn().mockResolvedValue([]);
       const resumeWithBlanks = 'EDUCATION\n\nBE in CSE\n\nOBJECTIVE';
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(resumeWithBlanks));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(resumeWithBlanks));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'PRODUCT');
@@ -430,7 +415,7 @@ describe('PlacementResumeService', () => {
       const query = jest.fn().mockResolvedValue([]);
       // Line is uppercase but has parenthesis — should NOT be treated as header
       const resumeWithParenLine = 'BE IN CSE (2021-2025)\nSome achievement';
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(resumeWithParenLine));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeTextResponse(resumeWithParenLine));
       await buildModule(query);
 
       const result = await service.generateResume('1RV21CS001', 'PRODUCT');

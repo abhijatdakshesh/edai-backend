@@ -3,30 +3,15 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import { PlacementMatchingService } from './placement-matching.service';
 
 // ---------------------------------------------------------------------------
-// Mock @google/generative-ai (Gemini) — service migrated from Anthropic.
-// We retain the legacy `mockAnthropicCreate` symbol name for assertion
-// continuity; it now wraps a Gemini-shaped response.
+// Mock Claude AI
 // ---------------------------------------------------------------------------
 
-const mockAnthropicCreate = jest.fn();
-
-jest.mock('@google/generative-ai', () => ({
-  __esModule: true,
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: () => ({
-      generateContent: async (prompt: string) => {
-        const result = await mockAnthropicCreate({
-          messages: [{ role: 'user', content: prompt }],
-        });
-        // Translate "Anthropic-shaped" mock fixture into the Gemini response shape.
-        // Tests use `anthropicTextResponse` -> { content: [{ type: 'text', text }] }
-        const block = (result?.content ?? [])[0] ?? {};
-        const text = block?.type === 'text' ? String(block.text ?? '') : '[]';
-        return { response: { text: () => text } };
-      },
-    }),
-  })),
+jest.mock('../shared/claude-ai', () => ({
+  claudeGenerate: jest.fn(),
+  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
+  CLAUDE_SMART: 'claude-sonnet-4-6',
 }));
+const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -93,10 +78,8 @@ function makeStudentMatchRow(overrides: Record<string, unknown> = {}): Record<st
   };
 }
 
-function anthropicTextResponse(json: unknown): Record<string, unknown> {
-  return {
-    content: [{ type: 'text', text: JSON.stringify(json) }],
-  };
+function claudeJsonResponse(json: unknown): string {
+  return JSON.stringify(json);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +133,7 @@ describe('PlacementMatchingService', () => {
 
       expect(result).toBe(0);
       // Claude should NOT be called when eligible list is empty
-      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+      expect(mockClaudeGenerate).not.toHaveBeenCalled();
     });
 
     // ── Claude success path ───────────────────────────────────────────────────
@@ -171,13 +154,13 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);   // upsert calls
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(claudeMatches));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse(claudeMatches));
 
       await buildModule(query);
       const count = await service.matchStudentsToCompany('co-1');
 
       expect(count).toBe(2);
-      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(mockClaudeGenerate).toHaveBeenCalledTimes(1);
 
       // Verify upsert was called for each match
       const upsertCalls = query.mock.calls.slice(2); // skip company + eligible queries
@@ -203,16 +186,16 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(fiftyTwoStudents)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(claudeMatches));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse(claudeMatches));
 
       await buildModule(query);
       const count = await service.matchStudentsToCompany('co-1');
 
       // Only first 50 sent to Claude; returned 50 matches, all saved
       expect(count).toBe(50);
-      const promptArg = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
+      const promptArg = mockClaudeGenerate.mock.calls[0][0] as string;
       // The prompt must not contain the 51st student's USN
-      expect(promptArg.messages[0].content).not.toContain('1RV21CS050');
+      expect(promptArg).not.toContain('1RV21CS050');
     });
 
     // ── Claude error fallback path ────────────────────────────────────────────
@@ -229,7 +212,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockRejectedValueOnce(new Error('API rate limit exceeded'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('API rate limit exceeded'));
 
       await buildModule(query);
       const count = await service.matchStudentsToCompany('co-1');
@@ -255,7 +238,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockRejectedValueOnce(new Error('timeout'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('timeout'));
 
       await buildModule(query);
       await service.matchStudentsToCompany('co-1');
@@ -287,7 +270,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce([])                          // first upsert succeeds
         .mockRejectedValueOnce(new Error('DB constraint')); // second upsert fails
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(claudeMatches));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse(claudeMatches));
 
       await buildModule(query);
 
@@ -308,31 +291,30 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockRejectedValueOnce(new Error('DB down'));
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(claudeMatches));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse(claudeMatches));
 
       await buildModule(query);
       const count = await service.matchStudentsToCompany('co-1');
       expect(count).toBe(0);
     });
 
-    // ── Claude returns non-text content block ─────────────────────────────────
+    // ── Claude returns invalid JSON (covers fallback path) ────────────────────
 
-    it('uses empty matches array when Claude returns non-text content block', async () => {
+    it('uses fallback when Claude returns invalid JSON (empty string)', async () => {
       const students = [makeEligibleStudent('1RV21CS001', 80)];
 
       const query = jest
         .fn()
         .mockResolvedValueOnce([makeCompanyRow()])
-        .mockResolvedValueOnce(students);
+        .mockResolvedValueOnce(students)
+        .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [{ type: 'image', source: {} }],
-      });
+      mockClaudeGenerate.mockResolvedValueOnce('');
 
       await buildModule(query);
-      // Falls into JSON.parse('[]') path → 0 saved
+      // Falls back to readiness scorer → 1 match
       const count = await service.matchStudentsToCompany('co-1');
-      expect(count).toBe(0);
+      expect(count).toBe(1);
     });
 
     // ── required_skills null guard (covers sanitizeForPrompt ?? '' branch) ──────
@@ -346,7 +328,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse([
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse([
         { usn: '1RV21CS001', fitScore: 80, offerProbability: 60, rationale: 'OK.' },
       ]));
 
@@ -354,8 +336,8 @@ describe('PlacementMatchingService', () => {
       await expect(service.matchStudentsToCompany('co-1')).resolves.toBe(1);
 
       // Prompt must show N/A for null required_skills (not "null" or crash)
-      const promptArg = mockAnthropicCreate.mock.calls[0][0] as { messages: Array<{ content: string }> };
-      expect(promptArg.messages[0].content).toContain('N/A');
+      const promptArg = mockClaudeGenerate.mock.calls[0][0] as string;
+      expect(promptArg).toContain('N/A');
     });
 
     it('handles null company name — sanitizeForPrompt ?? branch produces empty string', async () => {
@@ -367,7 +349,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse([
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse([
         { usn: '1RV21CS001', fitScore: 75, offerProbability: 55, rationale: 'Adequate.' },
       ]));
 
@@ -379,7 +361,7 @@ describe('PlacementMatchingService', () => {
     // ── Claude returns non-array JSON (covers !Array.isArray branch) ──────────
 
     it('falls back to readiness scorer when Claude returns a JSON object instead of array', async () => {
-      // Covers line 81: !Array.isArray(parsed) → throws → caught → fallback
+      // Covers !Array.isArray(parsed) → throws → caught → fallback
       const students = [makeEligibleStudent('1RV21CS001', 80)];
       const query = jest
         .fn()
@@ -388,9 +370,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValue([]);
 
       // Claude returns an object, not array — should trigger fallback
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: '{"error": "unexpected response"}' }],
-      });
+      mockClaudeGenerate.mockResolvedValueOnce('{"error": "unexpected response"}');
 
       await buildModule(query);
       // Fallback computes fitScore = round(80 * 0.9) = 72
@@ -398,26 +378,6 @@ describe('PlacementMatchingService', () => {
       expect(count).toBe(1);
       const upsertParams = query.mock.calls[2][1] as unknown[];
       expect(upsertParams[2]).toBe(72);
-    });
-
-    // ── Claude returns non-text content block ─────────────────────────────────
-
-    it('produces 0 matches when Claude returns non-text content block (image type)', async () => {
-      const students = [makeEligibleStudent('1RV21CS001', 80)];
-
-      const query = jest
-        .fn()
-        .mockResolvedValueOnce([makeCompanyRow()])
-        .mockResolvedValueOnce(students);
-
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [{ type: 'image', source: {} }],
-      });
-
-      await buildModule(query);
-      // Non-text → text = '[]' → empty array → 0 saved
-      const count = await service.matchStudentsToCompany('co-1');
-      expect(count).toBe(0);
     });
 
     // ── USN allowlist — Claude hallucination filter ────────────────────────────
@@ -435,7 +395,7 @@ describe('PlacementMatchingService', () => {
         .mockResolvedValueOnce(students)
         .mockResolvedValue([]);
 
-      mockAnthropicCreate.mockResolvedValueOnce(anthropicTextResponse(claudeMatches));
+      mockClaudeGenerate.mockResolvedValueOnce(claudeJsonResponse(claudeMatches));
 
       await buildModule(query);
       const count = await service.matchStudentsToCompany('co-1');

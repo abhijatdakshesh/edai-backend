@@ -3,7 +3,7 @@
 // All calls include a DPDP consent check; minimal PII is included in prompts.
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getAnthropicClient, CLAUDE_FAST, CLAUDE_SMART } from '../shared/claude-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph, AdminKnowledgeGraph } from './knowledge-graph.service';
@@ -15,43 +15,10 @@ const LANGUAGE_NAMES: Record<string, string> = {
 // Keyword-based model routing — no extra API call (Sujit: unit economics)
 const SIMPLE_PATTERNS = ['schedule', 'today', 'tomorrow', 'fee', 'balance', 'paid', 'attendance', 'percentage', 'class', 'timetable', 'room', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'vtu', 'exam', 'eligible'];
 
-/**
- * Ordered fallback chains per tier.
- * gemini-2.0-flash is GA and the most stable fast model as of mid-2025.
- * gemini-1.5-flash is the final backstop — broadly available, never deprecated mid-cycle.
- * gemini-2.5-flash-lite / gemini-2.5-flash are tried first; on 404/503/429 we walk down.
- */
-const MODEL_CHAIN_FAST = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-];
-const MODEL_CHAIN_COMPLEX = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-];
-
-// HTTP status codes / error message patterns that warrant a model fallback
-function isRetryableModelError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  // 404 = model deprecated/not-found; 429 = rate limit; 503 = overloaded
-  return (
-    msg.includes('404') ||
-    msg.includes('not found') ||
-    msg.includes('deprecated') ||
-    msg.includes('429') ||
-    msg.includes('quota') ||
-    msg.includes('503') ||
-    msg.includes('overloaded')
-  );
-}
-
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
-  private readonly genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY'] ?? '');
+  private get anthropic() { return getAnthropicClient(); }
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -59,14 +26,7 @@ export class ChatbotService {
 
   selectModel(message: string): string {
     const lower = message.toLowerCase();
-    return SIMPLE_PATTERNS.some(p => lower.includes(p))
-      ? 'gemini-2.5-flash-lite'
-      : 'gemini-2.5-flash';
-  }
-
-  /** Returns the fallback chain for the initially-selected model name. */
-  private modelChain(primaryModel: string): string[] {
-    return primaryModel === 'gemini-2.5-flash-lite' ? MODEL_CHAIN_FAST : MODEL_CHAIN_COMPLEX;
+    return SIMPLE_PATTERNS.some(p => lower.includes(p)) ? CLAUDE_FAST : CLAUDE_SMART;
   }
 
   private getLang(graph: KnowledgeGraph): string {
@@ -133,55 +93,40 @@ ${JSON.stringify(graph, null, 2)}`;
       [conversationId, userMessage],
     );
 
-    const primaryModel = this.selectModel(userMessage);
-    const chain = this.modelChain(primaryModel);
+    const selectedModel = this.selectModel(userMessage);
     let fullText = '';
     let tokensUsed = 0;
-    let usedModel = primaryModel;
 
-    // Build Gemini chat history (excludes current message)
-    const chatHistory = history.map(h => ({
-      role: h.role === 'USER' ? 'user' : 'model',
-      parts: [{ text: h.content }],
-    }));
+    // Build Claude message history (user/assistant roles)
+    const claudeMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      ...history.map(h => ({
+        role: (h.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: h.content,
+      })),
+      { role: 'user', content: userMessage },
+    ];
 
     const systemInstruction = this.buildSystemPrompt(graph);
 
-    let geminiSucceeded = false;
-    for (const modelName of chain) {
-      try {
-        const model = this.genAI.getGenerativeModel({ model: modelName, systemInstruction });
-        const chat = model.startChat({ history: chatHistory });
-        const result = await chat.sendMessageStream(userMessage);
+    try {
+      const stream = this.anthropic.messages.stream({
+        model: selectedModel,
+        max_tokens: 1024,
+        system: systemInstruction,
+        messages: claudeMessages,
+      });
 
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            fullText += text;
-            onChunk(text);
-          }
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+          fullText += chunk.delta.text;
+          onChunk(chunk.delta.text);
         }
-
-        const finalResponse = await result.response;
-        tokensUsed = finalResponse.usageMetadata?.totalTokenCount ?? 0;
-        usedModel = modelName;
-        if (modelName !== primaryModel) {
-          this.logger.warn(`Gemini fallback: ${primaryModel} → ${modelName}`);
-        }
-        geminiSucceeded = true;
-        break;
-      } catch (err) {
-        if (isRetryableModelError(err)) {
-          this.logger.warn(`Gemini model ${modelName} unavailable, trying next in chain`, (err as Error).message);
-          continue;
-        }
-        // Non-retryable error (auth, bad request, etc.) — bail immediately
-        this.logger.error(`Gemini non-retryable error on ${modelName}`, err);
-        break;
       }
-    }
 
-    if (!geminiSucceeded) {
+      const finalMsg = await stream.finalMessage();
+      tokensUsed = (finalMsg.usage.input_tokens ?? 0) + (finalMsg.usage.output_tokens ?? 0);
+    } catch (err) {
+      this.logger.error('Claude chat error', err);
       fullText = "I'm having trouble right now. Please try again in a moment.";
       onChunk(fullText);
     }
@@ -190,7 +135,7 @@ ${JSON.stringify(graph, null, 2)}`;
     await this.db.query(
       `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
        VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
-      [conversationId, fullText, tokensUsed, usedModel],
+      [conversationId, fullText, tokensUsed, selectedModel],
     );
 
     await this.db.query(

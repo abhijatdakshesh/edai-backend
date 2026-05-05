@@ -16,16 +16,14 @@ import {
   TimetableSlot,
 } from './timetable.service';
 
-// ─── Mock Gemini SDK ──────────────────────────────────────────────────────────
+// ─── Mock Claude AI ──────────────────────────────────────────────────────────
 
-const mockGenerateContent = jest.fn();
-jest.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: jest.fn().mockReturnValue({ generateContent: mockGenerateContent }),
-  })),
+jest.mock('../shared/claude-ai', () => ({
+  claudeGenerate: jest.fn(),
+  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
+  CLAUDE_SMART: 'claude-sonnet-4-6',
 }));
-
-const mockGeminiResponse = (text: string) => ({ response: { text: () => text } });
+const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
 
 // ─── Mock DataSource ──────────────────────────────────────────────────────────
 
@@ -450,7 +448,7 @@ describe('TimetableService', () => {
 
     it('happy path: returns GeneratedTimetable with populated views', async () => {
       setupHappyPathMocks();
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(minimalGeminiJson));
+      mockClaudeGenerate.mockResolvedValueOnce(minimalGeminiJson);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -476,22 +474,22 @@ describe('TimetableService', () => {
       await expect(noDb.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('throws InternalServerErrorException when Gemini throws an Error', async () => {
+    it('throws InternalServerErrorException when Claude throws an Error', async () => {
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
-      mockGenerateContent.mockRejectedValueOnce(new Error('Gemini API down'));
+      mockClaudeGenerate.mockRejectedValueOnce(new Error('Claude API down'));
 
       await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('throws InternalServerErrorException when Gemini throws a non-Error string', async () => {
+    it('throws InternalServerErrorException when Claude throws a non-Error string', async () => {
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
-      mockGenerateContent.mockRejectedValueOnce('rate_limit_exceeded');
+      mockClaudeGenerate.mockRejectedValueOnce('rate_limit_exceeded');
 
       await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
     });
@@ -501,7 +499,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse('not json at all'));
+      mockClaudeGenerate.mockResolvedValueOnce('not json at all');
 
       await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
     });
@@ -509,7 +507,7 @@ describe('TimetableService', () => {
     it('strips plain ``` fences before parsing', async () => {
       setupHappyPathMocks();
       const fenced = `\`\`\`\n${minimalGeminiJson}\n\`\`\``;
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(fenced));
+      mockClaudeGenerate.mockResolvedValueOnce(fenced);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -519,7 +517,7 @@ describe('TimetableService', () => {
     it('strips ```json fences before parsing', async () => {
       setupHappyPathMocks();
       const fenced = `\`\`\`json\n${minimalGeminiJson}\n\`\`\``;
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(fenced));
+      mockClaudeGenerate.mockResolvedValueOnce(fenced);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -527,7 +525,7 @@ describe('TimetableService', () => {
     });
 
     it('defaults conflicts to [] when parsed.conflicts is undefined', async () => {
-      // Gemini response has no conflicts key
+      // Claude response has no conflicts key
       const noConflictsJson = JSON.stringify({ slots: [geminiSlot] });
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
@@ -537,7 +535,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // INSERT slot
         .mockResolvedValueOnce([]) // DELETE conflicts (0 inserts)
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(noConflictsJson));
+      mockClaudeGenerate.mockResolvedValueOnce(noConflictsJson);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -555,7 +553,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([])  // INSERT slot
         .mockResolvedValueOnce([])  // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       await svc.generate(CONFIG_ID);
 
@@ -585,7 +583,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // INSERT break slot
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -601,31 +599,27 @@ describe('TimetableService', () => {
 
     it('prompt contains department, semester, and "no markdown" instruction', async () => {
       setupHappyPathMocks();
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(minimalGeminiJson));
+      mockClaudeGenerate.mockResolvedValueOnce(minimalGeminiJson);
 
       await svc.generate(CONFIG_ID);
 
-      const prompt: string = mockGenerateContent.mock.calls[0][0] as string;
+      const prompt: string = mockClaudeGenerate.mock.calls[0][0] as string;
       expect(prompt).toContain('CSE');
       expect(prompt).toContain('5');
       expect(prompt).toContain('no markdown');
     });
 
-    it('uses gemini-2.5-flash model', async () => {
-      const { GoogleGenerativeAI } = jest.requireMock('@google/generative-ai') as {
-        GoogleGenerativeAI: jest.Mock;
-      };
-      const mockGetModel = jest.fn().mockReturnValue({ generateContent: mockGenerateContent });
-      GoogleGenerativeAI.mockImplementationOnce(() => ({ getGenerativeModel: mockGetModel }));
-
-      // Re-build service so constructor picks up fresh mock
-      const freshSvc = await buildService(true);
+    it('uses claude-sonnet-4-6 model', async () => {
       setupHappyPathMocks();
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(minimalGeminiJson));
+      mockClaudeGenerate.mockResolvedValueOnce(minimalGeminiJson);
 
-      await freshSvc.generate(CONFIG_ID);
+      await svc.generate(CONFIG_ID);
 
-      expect(mockGetModel).toHaveBeenCalledWith({ model: 'gemini-2.5-flash' });
+      expect(mockClaudeGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        'claude-sonnet-4-6',
+        8192,
+      );
     });
 
     it('NotFoundException propagates when getConfig throws (config not found)', async () => {
@@ -635,7 +629,7 @@ describe('TimetableService', () => {
       await expect(svc.generate(CONFIG_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it('persists conflicts when Gemini returns non-empty conflicts array', async () => {
+    it('persists conflicts when Claude returns non-empty conflicts array', async () => {
       const conflict = {
         conflictType: 'FACULTY_CLASH',
         description: 'Dr. Sharma double-booked',
@@ -655,7 +649,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([])                // DELETE conflicts
         .mockResolvedValueOnce([])                // INSERT conflict (line 459)
         .mockResolvedValueOnce([]);               // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -682,7 +676,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]) // INSERT conflict
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -718,7 +712,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // INSERT slot
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -726,7 +720,7 @@ describe('TimetableService', () => {
     });
 
     it('parsed.slots is undefined → defaults to [] (line 330 ?? branch)', async () => {
-      // Gemini returns JSON with no slots key at all
+      // Claude returns JSON with no slots key at all
       const json = JSON.stringify({ conflicts: [] });
 
       mockQuery
@@ -737,7 +731,7 @@ describe('TimetableService', () => {
         // no slot INSERTs since slots=[]
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       const result = await svc.generate(CONFIG_ID);
 
@@ -755,17 +749,17 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // DELETE slots
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(minimalGeminiJson));
+      mockClaudeGenerate.mockResolvedValueOnce(minimalGeminiJson);
 
       await svc.generate(CONFIG_ID);
 
-      const prompt: string = mockGenerateContent.mock.calls[0][0] as string;
+      const prompt: string = mockClaudeGenerate.mock.calls[0][0] as string;
       expect(prompt).toContain('LH-101, LH-102, LH-103');
       expect(prompt).toContain('LAB-CS-A, LAB-CS-B');
     });
 
     it('logger line uses ?? 0 when parsed.slots/conflicts are undefined', async () => {
-      // Gemini returns {} with no slots or conflicts keys
+      // Claude returns {} with no slots or conflicts keys
       const json = JSON.stringify({});
 
       mockQuery
@@ -775,7 +769,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // DELETE slots
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
 
       // Should not throw — ?? 0 handles undefined .length
       const result = await svc.generate(CONFIG_ID);
@@ -807,7 +801,7 @@ describe('TimetableService', () => {
         .mockResolvedValueOnce([]) // DELETE conflicts
         .mockResolvedValueOnce([]); // UPDATE status='GENERATED'
 
-      mockGenerateContent.mockResolvedValueOnce(mockGeminiResponse(json));
+      mockClaudeGenerate.mockResolvedValueOnce(json);
     }
 
     it('viewBySection[section][day][period] = correct slot', async () => {

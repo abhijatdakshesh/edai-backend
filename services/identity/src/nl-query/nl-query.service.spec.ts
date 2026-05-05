@@ -3,19 +3,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import { NlQueryService } from './nl-query.service';
 
-const mockGenerate = jest.fn();
-
-jest.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: jest.fn().mockReturnValue({ generateContent: mockGenerate }),
-  })),
+jest.mock('../shared/claude-ai', () => ({
+  claudeGenerate: jest.fn(),
+  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
+  CLAUDE_SMART: 'claude-sonnet-4-6',
 }));
+const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
 
 const mockQuery = jest.fn();
 const mockDataSource = { query: mockQuery };
 
-function geminiOk(sql: string) {
-  return { response: { text: () => sql } };
+function claudeOk(sql: string) {
+  return sql;
 }
 
 async function buildService(withDb = true): Promise<NlQueryService> {
@@ -43,7 +42,7 @@ describe('NlQueryService', () => {
   describe('query — happy path', () => {
     it('returns sql, columns, rows, rowCount on success', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT name AS "Student Name" FROM students LIMIT 5'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT name AS "Student Name" FROM students LIMIT 5'));
       mockQuery.mockResolvedValue([{ 'Student Name': 'Arjun Sharma' }]);
       const result = await svc.query('show all students');
       expect(result.sql).toContain('SELECT');
@@ -53,7 +52,7 @@ describe('NlQueryService', () => {
 
     it('strips markdown fences from generated SQL', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('```sql\nSELECT id FROM students\n```'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('```sql\nSELECT id FROM students\n```'));
       mockQuery.mockResolvedValue([]);
       const result = await svc.query('list student ids');
       expect(result.sql).toBe('SELECT id FROM students');
@@ -61,7 +60,7 @@ describe('NlQueryService', () => {
 
     it('returns empty columns when rows is empty', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students WHERE 1=0'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students WHERE 1=0'));
       mockQuery.mockResolvedValue([]);
       const result = await svc.query('list nothing');
       expect(result.columns).toEqual([]);
@@ -70,7 +69,7 @@ describe('NlQueryService', () => {
 
     it('appends LIMIT when SQL has none', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students'));
       mockQuery.mockResolvedValue([]);
       await svc.query('list students');
       expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('LIMIT 500'));
@@ -78,7 +77,7 @@ describe('NlQueryService', () => {
 
     it('does not double-append LIMIT when already present', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students LIMIT 10'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students LIMIT 10'));
       mockQuery.mockResolvedValue([]);
       await svc.query('list 10 students');
       const sql: string = mockQuery.mock.calls[0][0];
@@ -94,7 +93,7 @@ describe('NlQueryService', () => {
     ];
     test.each(dmlCases)('blocks: %s', async (badSql) => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk(badSql));
+      mockClaudeGenerate.mockResolvedValue(claudeOk(badSql));
       await expect(svc.query('do something bad')).rejects.toBeInstanceOf(BadRequestException);
       expect(mockQuery).not.toHaveBeenCalled();
     });
@@ -103,12 +102,12 @@ describe('NlQueryService', () => {
   describe('safety — non-SELECT blocking', () => {
     it('blocks SQL starting with EXPLAIN (no DML)', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('EXPLAIN SELECT * FROM students'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('EXPLAIN SELECT * FROM students'));
       await expect(svc.query('explain query')).rejects.toBeInstanceOf(BadRequestException);
     });
     it('blocks SQL starting with WITH', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('WITH cte AS (SELECT 1 AS n) SELECT n FROM cte'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('WITH cte AS (SELECT 1 AS n) SELECT n FROM cte'));
       await expect(svc.query('cte query')).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -116,12 +115,12 @@ describe('NlQueryService', () => {
   describe('safety — multi-statement blocking', () => {
     it('blocks SQL with embedded semicolons (no DML)', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT 1; SELECT 2'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT 1; SELECT 2'));
       await expect(svc.query('two selects')).rejects.toBeInstanceOf(BadRequestException);
     });
     it('allows trailing semicolon (stripped before check)', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students;'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students;'));
       mockQuery.mockResolvedValue([]);
       await expect(svc.query('list with semicolon')).resolves.toBeDefined();
     });
@@ -130,7 +129,7 @@ describe('NlQueryService', () => {
   describe('safety — DML in string literal is allowed', () => {
     it('allows SELECT with DELETE in a string value', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk("SELECT id FROM students WHERE name = 'DELETE ME'"));
+      mockClaudeGenerate.mockResolvedValue(claudeOk("SELECT id FROM students WHERE name = 'DELETE ME'"));
       mockQuery.mockResolvedValue([]);
       await expect(svc.query("find student named 'DELETE ME'")).resolves.toBeDefined();
     });
@@ -139,37 +138,37 @@ describe('NlQueryService', () => {
   describe('database error handling', () => {
     it('throws InternalServerErrorException when dataSource is null', async () => {
       const svc = await buildService(false);
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students'));
       await expect(svc.query('list students')).rejects.toBeInstanceOf(InternalServerErrorException);
     });
     it('wraps DB Error instances as BadRequestException', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students'));
       mockQuery.mockRejectedValue(new Error('column "x" does not exist'));
       await expect(svc.query('list students')).rejects.toBeInstanceOf(BadRequestException);
     });
     it('wraps non-Error DB rejections as BadRequestException', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue(geminiOk('SELECT id FROM students'));
+      mockClaudeGenerate.mockResolvedValue(claudeOk('SELECT id FROM students'));
       mockQuery.mockRejectedValue('raw string error');
       await expect(svc.query('list students')).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
-  describe('Gemini SDK error handling', () => {
-    it('throws when Gemini returns empty text', async () => {
+  describe('Claude SDK error handling', () => {
+    it('throws when Claude returns empty text', async () => {
       const svc = await buildService();
-      mockGenerate.mockResolvedValue({ response: { text: () => '' } });
+      mockClaudeGenerate.mockResolvedValue('');
       await expect(svc.query('test')).rejects.toBeInstanceOf(InternalServerErrorException);
     });
     it('wraps SDK Error as InternalServerErrorException', async () => {
       const svc = await buildService();
-      mockGenerate.mockRejectedValue(new Error('quota exceeded'));
+      mockClaudeGenerate.mockRejectedValue(new Error('quota exceeded'));
       await expect(svc.query('test')).rejects.toBeInstanceOf(InternalServerErrorException);
     });
     it('wraps non-Error SDK rejection as InternalServerErrorException', async () => {
       const svc = await buildService();
-      mockGenerate.mockRejectedValue('sdk_string_error');
+      mockClaudeGenerate.mockRejectedValue('sdk_string_error');
       await expect(svc.query('test')).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
