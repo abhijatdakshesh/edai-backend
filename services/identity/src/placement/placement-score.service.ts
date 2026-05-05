@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -33,6 +33,7 @@ const FINAL_YEAR_THRESHOLD = 7;
 
 @Injectable()
 export class PlacementScoreService {
+  private readonly logger = new Logger(PlacementScoreService.name);
   constructor(@Optional() @InjectDataSource() private dataSource: DataSource | null) {}
 
   private requireDb(): DataSource {

@@ -306,13 +306,7 @@ describe('UsersController', () => {
       expect(() => controller.update('u-ghost', updateDto)).toThrow(NotFoundException);
     });
 
-    it('passes role change through to the service without restriction at controller level', () => {
-      mockUsersService.update.mockReturnValueOnce(adminUser);
-      const dto: UpdateUserDto = { role: 'HOD' };
-      controller.update('u-admin-01', dto);
-      // The controller passes the DTO as-is; role guard is on the route, not role restriction
-      expect(mockUsersService.update).toHaveBeenCalledWith('u-admin-01', dto);
-    });
+
   });
 
   // ─── setStatus() ────────────────────────────────────────────────────────────

@@ -439,6 +439,7 @@ describe('TwilioWebhookGuard', () => {
     else process.env['TWILIO_AUTH_TOKEN'] = savedAuthToken;
     if (savedNodeEnv === undefined) delete process.env['NODE_ENV'];
     else process.env['NODE_ENV'] = savedNodeEnv;
+    delete process.env['ALLOW_WEBHOOK_IN_TEST'];
   });
 
   // Branch 1: NODE_ENV === 'test' → skip validation, return true immediately
@@ -447,6 +448,7 @@ describe('TwilioWebhookGuard', () => {
     // reachable. Explicitly confirm both conditions on line 12 are exercised.
     process.env['NODE_ENV'] = 'test';
     process.env['TWILIO_AUTH_TOKEN'] = 'any-token';
+    process.env['ALLOW_WEBHOOK_IN_TEST'] = 'true';
 
     const result = await guard.canActivate(makeContext());
     expect(result).toBe(true);

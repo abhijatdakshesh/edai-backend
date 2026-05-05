@@ -214,7 +214,7 @@ export class RiskService {
       `SELECT email, name FROM faculty WHERE department = $1 AND designation ILIKE '%hod%' LIMIT 1`,
       [department],
     );
-    const hodEmail: string | undefined = hodRow[0]?.email ?? process.env['FALLBACK_ALERT_EMAIL'] ?? 'admin@rvce.edu';
+    const hodEmail: string | undefined = hodRow[0]?.email ?? process.env['FALLBACK_ALERT_EMAIL'];
     const hodName: string = hodRow[0]?.name ?? 'HOD';
 
     if (!hodEmail) {

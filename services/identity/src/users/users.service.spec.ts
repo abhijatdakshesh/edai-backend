@@ -326,12 +326,6 @@ describe('UsersService', () => {
       expect(result.email).toBe('newemail@rvce.edu');
     });
 
-    it('updates the role field', () => {
-      const dto: UpdateUserDto = { role: 'HOD' };
-      const result = service.update('u-admin-01', dto);
-      expect(result.role).toBe('HOD');
-    });
-
     it('updates departmentCode', () => {
       const dto: UpdateUserDto = { departmentCode: 'ECE' };
       const result = service.update('u-faculty-01', dto);

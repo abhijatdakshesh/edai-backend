@@ -201,8 +201,8 @@ describe('CommsController', () => {
 
   it('triggerParentCall delegates body to service', () => {
     mockCommsService.triggerParentCall.mockReturnValue({ callId: 'pc-1', status: 'QUEUED' });
-    controller.triggerParentCall({ parentId: 'p1', studentUsn: 'USN001' });
-    expect(mockCommsService.triggerParentCall).toHaveBeenCalledWith('p1', 'USN001');
+    controller.triggerParentCall({ parentId: 'p1', studentUsn: 'USN001', type: 'ATTENDANCE' }, {});
+    expect(mockCommsService.triggerParentCall).toHaveBeenCalledWith('p1', 'USN001', 'ATTENDANCE');
   });
 
   // ─── notifications ───────────────────────────────────────────────────────────
