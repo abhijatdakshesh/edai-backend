@@ -4,6 +4,7 @@ import {
   Optional,
   NotFoundException,
   InternalServerErrorException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -232,8 +233,19 @@ export class TimetableService {
     let q = `SELECT * FROM timetable_configs`;
     if (department) { q += ` WHERE department=$1`; params.push(department); }
     q += ` ORDER BY created_at DESC LIMIT 50`;
-    const rows = await this.db.query(q, params) as Record<string, unknown>[];
-    return rows.map(r => this.mapConfig(r, []));
+    try {
+      const rows = await this.db.query(q, params) as Record<string, unknown>[];
+      return rows.map(r => this.mapConfig(r, []));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        this.logger.error('[Timetable] timetable_configs table missing — run migration 005_add_timetable');
+        throw new ServiceUnavailableException(
+          'Timetable tables not initialised. Run migration 005_add_timetable on the production database.',
+        );
+      }
+      throw err;
+    }
   }
 
   // ── getClassrooms ─────────────────────────────────────────────────────────
@@ -297,6 +309,11 @@ export class TimetableService {
 
   async generate(configId: string): Promise<GeneratedTimetable> {
     if (!this.db) throw new InternalServerErrorException('No database');
+    if (!process.env['ANTHROPIC_API_KEY']) {
+      throw new InternalServerErrorException(
+        'ANTHROPIC_API_KEY is not configured. Set it in the production environment.',
+      );
+    }
 
     const config = await this.getConfig(configId);
     const classrooms = await this.getClassrooms();

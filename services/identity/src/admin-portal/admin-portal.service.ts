@@ -1,6 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { FeesApiService } from '../fees-api/fees-api.service';
 
+// ─── Alert types ─────────────────────────────────────────────────────────────
+
+type AlertSeverity = 'critical' | 'warning' | 'info';
+type AlertCategory = 'attendance' | 'fees' | 'performance' | 'system' | 'grievance';
+
+export interface AdminAlert {
+  id: string;
+  severity: AlertSeverity;
+  category: AlertCategory;
+  title: string;
+  message: string;
+  student?: string;
+  class?: string;
+  occurredAt: string;
+  resolved: boolean;
+}
+
 export interface AdminDashboard {
   totalStudents: number;
   totalFaculty: number;
@@ -33,6 +50,58 @@ export interface BulkImportResult {
 @Injectable()
 export class AdminPortalService {
   constructor(private readonly feesSvc: FeesApiService) {}
+
+  // In-memory alert store — keyed by id. Seeded once and mutated by resolve.
+  private readonly _alerts: Map<string, AdminAlert> = new Map([
+    ['al-001', {
+      id: 'al-001', severity: 'critical', category: 'attendance',
+      title: 'Low attendance threshold breached',
+      message: '12 students dropped below 75% attendance this week.',
+      occurredAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      resolved: false,
+    }],
+    ['al-002', {
+      id: 'al-002', severity: 'warning', category: 'fees',
+      title: 'Overdue fee payments',
+      message: '8 students have outstanding fees past due date.',
+      occurredAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      resolved: false,
+    }],
+    ['al-003', {
+      id: 'al-003', severity: 'warning', category: 'performance',
+      title: 'Mid-semester performance dip — ECE',
+      message: 'ECE Semester 5 average IA score fell to 12/25 (below 15 threshold).',
+      occurredAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      resolved: false,
+    }],
+    ['al-004', {
+      id: 'al-004', severity: 'info', category: 'system',
+      title: 'VTU exam window opens in 3 days',
+      message: 'End-semester exam registration window opens 2026-05-08.',
+      occurredAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+      resolved: false,
+    }],
+    ['al-005', {
+      id: 'al-005', severity: 'info', category: 'grievance',
+      title: 'Pending grievance resolution',
+      message: '2 student grievances open for more than 7 days without response.',
+      occurredAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      resolved: true,
+    }],
+  ]);
+
+  getAlerts(): AdminAlert[] {
+    return Array.from(this._alerts.values()).sort(
+      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+    );
+  }
+
+  resolveAlert(id: string): AdminAlert {
+    const alert = this._alerts.get(id);
+    if (!alert) throw new Error(`Alert ${id} not found`);
+    alert.resolved = true;
+    return alert;
+  }
 
   getDashboard(): AdminDashboard {
     const feesCollected = this.feesSvc.feeItems
