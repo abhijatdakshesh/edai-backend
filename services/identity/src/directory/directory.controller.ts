@@ -1,4 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 interface OrgNode {
   role: string;
@@ -7,6 +8,7 @@ interface OrgNode {
 
 @Controller('directory')
 export class DirectoryController {
+  @UseGuards(JwtAuthGuard)
   @Get('org-chart')
   orgChart(): { institution: string; hierarchy: OrgNode[] } {
     return {

@@ -47,9 +47,7 @@ export class UpdateUserDto {
   @IsEmail()
   email?: string;
 
-  @IsOptional()
-  @IsEnum(['STUDENT', 'PARENT', 'FACULTY', 'HOD', 'DEAN', 'PRINCIPAL', 'TRUSTEE', 'COUNSELLOR', 'ADMIN'])
-  role?: UserRole;
+  // role intentionally omitted — privilege escalation prevention; use dedicated admin endpoint
 
   @IsOptional()
   @IsString()
