@@ -119,7 +119,7 @@ export interface GeneratedTimetable {
   generatedAt: string;
 }
 
-interface GeminiSlot {
+interface ClaudeSlot {
   section: string;
   day: string;
   period: number;
@@ -131,7 +131,7 @@ interface GeminiSlot {
   isBreak?: boolean;
 }
 
-interface GeminiConflict {
+interface ClaudeConflict {
   conflictType: string;
   description: string;
   day?: string;
@@ -140,9 +140,9 @@ interface GeminiConflict {
   severity?: string;
 }
 
-interface GeminiTimetableResponse {
-  slots: GeminiSlot[];
-  conflicts?: GeminiConflict[];
+interface ClaudeTimetableResponse {
+  slots: ClaudeSlot[];
+  conflicts?: ClaudeConflict[];
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -327,15 +327,15 @@ export class TimetableService {
       throw new InternalServerErrorException('AI timetable generation failed');
     }
 
-    // Strip markdown fences Gemini sometimes adds despite instructions
+    // Strip markdown fences Claude sometimes adds despite instructions
     const jsonStr = rawJson
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/\s*```\s*$/i, '')
       .trim();
 
-    let parsed: GeminiTimetableResponse;
+    let parsed: ClaudeTimetableResponse;
     try {
-      parsed = JSON.parse(jsonStr) as GeminiTimetableResponse;
+      parsed = JSON.parse(jsonStr) as ClaudeTimetableResponse;
     } catch {
       this.logger.error(`[Timetable] JSON parse failed. Raw: ${rawJson.slice(0, 500)}`);
       throw new InternalServerErrorException('AI returned malformed timetable JSON');
@@ -440,12 +440,12 @@ The conflicts array must be [] if the timetable is fully valid with zero constra
 
   private async persistSlots(
     configId: string,
-    geminiSlots: GeminiSlot[],
+    claudeSlots: ClaudeSlot[],
     classrooms: Classroom[],
   ): Promise<void> {
     await this.db!.query(`DELETE FROM timetable_slots WHERE config_id=$1`, [configId]);
 
-    for (const s of geminiSlots) {
+    for (const s of claudeSlots) {
       const classroom = classrooms.find(c => c.name === s.classroomName);
       await this.db!.query(
         `INSERT INTO timetable_slots
@@ -465,11 +465,11 @@ The conflicts array must be [] if the timetable is fully valid with zero constra
 
   private async persistConflicts(
     configId: string,
-    geminiConflicts: GeminiConflict[],
+    claudeConflicts: ClaudeConflict[],
   ): Promise<void> {
     await this.db!.query(`DELETE FROM timetable_conflicts WHERE config_id=$1`, [configId]);
 
-    for (const c of geminiConflicts) {
+    for (const c of claudeConflicts) {
       await this.db!.query(
         `INSERT INTO timetable_conflicts
            (id, config_id, conflict_type, description, day, period, affected_entity, severity)
@@ -483,10 +483,10 @@ The conflicts array must be [] if the timetable is fully valid with zero constra
 
   private buildViews(
     configId: string,
-    geminiSlots: GeminiSlot[],
-    geminiConflicts: GeminiConflict[],
+    claudeSlots: ClaudeSlot[],
+    claudeConflicts: ClaudeConflict[],
   ): GeneratedTimetable {
-    const slots: TimetableSlot[] = geminiSlots.map(s => ({
+    const slots: TimetableSlot[] = claudeSlots.map(s => ({
       id: randomUUID(),
       configId,
       section: s.section,
@@ -501,7 +501,7 @@ The conflicts array must be [] if the timetable is fully valid with zero constra
       isBreak: s.isBreak ?? false,
     }));
 
-    const conflicts: TimetableConflict[] = geminiConflicts.map(c => ({
+    const conflicts: TimetableConflict[] = claudeConflicts.map(c => ({
       id: randomUUID(),
       configId,
       conflictType: c.conflictType,
