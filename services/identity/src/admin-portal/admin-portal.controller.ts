@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import * as PDFDocument from 'pdfkit';
@@ -12,6 +12,20 @@ import { Roles } from '../roles/roles.decorator';
 @Controller()
 export class AdminPortalController {
   constructor(private readonly svc: AdminPortalService) {}
+
+  @Get('admin/alerts')
+  getAlerts() {
+    return this.svc.getAlerts();
+  }
+
+  @Patch('admin/alerts/:id/resolve')
+  resolveAlert(@Param('id') id: string) {
+    try {
+      return this.svc.resolveAlert(id);
+    } catch {
+      throw new NotFoundException(`Alert ${id} not found`);
+    }
+  }
 
   @Get('analytics/admin/dashboard')
   getDashboard() {

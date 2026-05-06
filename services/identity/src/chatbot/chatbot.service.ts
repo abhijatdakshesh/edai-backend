@@ -1,5 +1,4 @@
-// DPDP_DATA_RESIDENCY_WARNING: Google Gemini API processes data on Google-hosted servers.
-// India region available via Vertex AI. Pending migration from AI Studio to Vertex AI India.
+// DPDP_DATA_RESIDENCY_WARNING: Anthropic Claude API processes data on Anthropic-hosted servers.
 // All calls include a DPDP consent check; minimal PII is included in prompts.
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
