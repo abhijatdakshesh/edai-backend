@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
 
 const SCHEMA_CONTEXT = `
-You are a PostgreSQL expert for EdAI, an Indian college ERP (RVCE, Bangalore).
+You are a PostgreSQL expert for Ed8AI, an Indian college ERP (RVCE, Bangalore).
 Generate ONLY a single, read-only SELECT statement. No markdown, no explanation, no semicolon.
 
 Tables available (column names are EXACT — use them as-is):

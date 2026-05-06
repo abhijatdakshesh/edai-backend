@@ -44,8 +44,8 @@ export async function createNestHttpApp(
   });
 
   const config = new DocumentBuilder()
-    .setTitle('EdAI Unified API')
-    .setDescription('Single API server for EdAI ERP — all frontend contracts')
+    .setTitle('Ed8AI Unified API')
+    .setDescription('Single API server for Ed8AI ERP — all frontend contracts')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

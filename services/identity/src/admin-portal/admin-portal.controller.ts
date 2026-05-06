@@ -114,7 +114,7 @@ export class AdminPortalController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
       doc.pipe(res);
-      doc.fontSize(16).text(`EdAI Report: ${safeType}`, { underline: true }).moveDown();
+      doc.fontSize(16).text(`Ed8AI Report: ${safeType}`, { underline: true }).moveDown();
       doc.fontSize(10).fillColor('grey').text(`Generated: ${new Date().toLocaleString('en-IN')}`).fillColor('black').moveDown();
       if (rows.length > 0) {
         const headers = Object.keys(rows[0]);
@@ -168,7 +168,7 @@ export class AdminPortalController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
       doc.pipe(res);
-      doc.fontSize(16).text(`EdAI Report: ${safeType}`, { underline: true }).moveDown();
+      doc.fontSize(16).text(`Ed8AI Report: ${safeType}`, { underline: true }).moveDown();
       doc.fontSize(10).fillColor('grey').text(`Generated: ${new Date().toLocaleString('en-IN')}`).fillColor('black').moveDown();
       if (rows.length > 0) {
         const headers = Object.keys(rows[0]!);

@@ -39,7 +39,7 @@ const makeCriterion = (
   maxScore: 40,
   earnedScore: 32,
   weightedScore: 80,
-  metrics: [makeMetric(`${id}.1`), makeMetric(`${id}.2`, { liveData: null, edaiNote: 'EdAI evidence note' })],
+  metrics: [makeMetric(`${id}.1`), makeMetric(`${id}.2`, { liveData: null, edaiNote: 'Ed8AI evidence note' })],
   ...overrides,
 });
 
@@ -255,7 +255,7 @@ describe('NaacSsrService', () => {
 
     it('includes edaiNote in prompt when metric has edaiNote', async () => {
       const criterion = makeCriterion('C6', {
-        metrics: [makeMetric('6.2.2', { edaiNote: 'EdAI counts as e-governance evidence' })],
+        metrics: [makeMetric('6.2.2', { edaiNote: 'Ed8AI counts as e-governance evidence' })],
       });
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
       mockClaudeGenerate.mockResolvedValue('ok');
@@ -263,7 +263,7 @@ describe('NaacSsrService', () => {
       await service.generateCriterionParagraph('C6');
 
       const promptSent: string = mockClaudeGenerate.mock.calls[0][0];
-      expect(promptSent).toContain('EdAI counts as e-governance evidence');
+      expect(promptSent).toContain('Ed8AI counts as e-governance evidence');
     });
 
     it('uses known NAAC context description for recognised criterion IDs (C1–C7)', async () => {

@@ -290,7 +290,7 @@ export class DocumentsService {
       pdf.on('error', reject);
 
       // Header
-      pdf.font('Helvetica-Bold').fontSize(18).text('EdAI — Official Document', { align: 'center' });
+      pdf.font('Helvetica-Bold').fontSize(18).text('Ed8AI — Official Document', { align: 'center' });
       pdf.moveDown(0.5);
       pdf.font('Helvetica').fontSize(12).text(`Document No: ${doc.docNumber}`, { align: 'center' });
       pdf.text(`Type: ${DOC_LABEL[doc.docType]}`, { align: 'center' });
@@ -312,7 +312,7 @@ export class DocumentsService {
       // Footer
       pdf.fontSize(9).fillColor('#888')
         .text('This is a computer-generated document. Verify at: ' + verifyUrl, { align: 'center' });
-      pdf.text('EdAI by Raycraft Technologies — DPDP Act 2023 compliant', { align: 'center' });
+      pdf.text('Ed8AI by Raycraft Technologies — DPDP Act 2023 compliant', { align: 'center' });
 
       pdf.end();
     });

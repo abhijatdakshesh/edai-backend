@@ -252,7 +252,7 @@ export class RiskService {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">
         <div style="background:#1a1a1a;padding:24px;border-radius:8px 8px 0 0">
-          <h2 style="color:#fff;margin:0">EdAI Weekly Risk Alert</h2>
+          <h2 style="color:#fff;margin:0">Ed8AI Weekly Risk Alert</h2>
           <p style="color:#aaa;margin:4px 0 0">${department} Department · ${dateStr}</p>
         </div>
         <div style="background:#fff;border:1px solid #eee;padding:24px">
@@ -285,7 +285,7 @@ export class RiskService {
             </thead>
             <tbody>${studentRows}</tbody>
           </table>
-          ${students.length > 20 ? `<p style="color:#aaa;font-size:13px;margin-top:8px">+ ${students.length - 20} more. Log in to EdAI to see the full list.</p>` : ''}
+          ${students.length > 20 ? `<p style="color:#aaa;font-size:13px;margin-top:8px">+ ${students.length - 20} more. Log in to Ed8AI to see the full list.</p>` : ''}
           <div style="margin-top:24px;padding:16px;background:#F9F7F4;border-radius:8px;text-align:center">
             <a href="${frontendUrl}/admin/risk" style="background:#1a1a1a;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">
               View Full Dashboard →
@@ -293,7 +293,7 @@ export class RiskService {
           </div>
         </div>
         <div style="background:#F9F7F4;padding:16px;text-align:center;border-radius:0 0 8px 8px">
-          <p style="font-size:12px;color:#aaa;margin:0">EdAI by Raycraft Technologies · Auto-generated alert · Do not reply</p>
+          <p style="font-size:12px;color:#aaa;margin:0">Ed8AI by Raycraft Technologies · Auto-generated alert · Do not reply</p>
         </div>
       </div>
     `;
