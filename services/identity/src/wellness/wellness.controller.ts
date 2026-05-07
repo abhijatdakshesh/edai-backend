@@ -75,7 +75,7 @@ export class WellnessController {
     return this.svc.getRiskScore(usn);
   }
 
-  @Patch('wellness/study-plan/tasks/:id/complete')
+  @Post('wellness/study-plan/tasks/:id/complete')
   completeTask(@Param('id') id: string) {
     return this.svc.updateTask(id, true);
   }
