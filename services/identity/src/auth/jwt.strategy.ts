@@ -20,6 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   validate(payload: JwtPayload) {
     const user = this.authService.validatePayload(payload);
     if (!user) throw new UnauthorizedException('Token invalid or user inactive');
-    return user; // attached to request.user
+    // Attach sub from the JWT payload so controllers that destructure { sub } work consistently with WS gateway.
+    return { ...user, sub: payload.sub }; // attached to request.user
   }
 }

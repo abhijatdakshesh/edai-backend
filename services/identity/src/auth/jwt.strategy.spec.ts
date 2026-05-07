@@ -52,7 +52,7 @@ describe('JwtStrategy', () => {
       mockAuthService.validatePayload.mockReturnValue(safeUser);
 
       const result = strategy.validate(validPayload);
-      expect(result).toBe(safeUser);
+      expect(result).toEqual({ ...safeUser, sub: validPayload.sub });
       expect(mockAuthService.validatePayload).toHaveBeenCalledWith(validPayload);
     });
 
@@ -90,7 +90,7 @@ describe('JwtStrategy', () => {
       const safeUser = { id: 'u-faculty-01', role: 'FACULTY' };
       mockAuthService.validatePayload.mockReturnValue(safeUser);
       const result = strategy.validate(facultyPayload);
-      expect(result).toBe(safeUser);
+      expect(result).toEqual({ ...safeUser, sub: facultyPayload.sub });
     });
 
     it('works for STUDENT role payload', () => {
@@ -104,7 +104,7 @@ describe('JwtStrategy', () => {
       const safeUser = { id: 'u-student-01', role: 'STUDENT' };
       mockAuthService.validatePayload.mockReturnValue(safeUser);
       const result = strategy.validate(studentPayload);
-      expect(result).toBe(safeUser);
+      expect(result).toEqual({ ...safeUser, sub: studentPayload.sub });
     });
   });
 
