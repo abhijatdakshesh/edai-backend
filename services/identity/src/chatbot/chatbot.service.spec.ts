@@ -1,14 +1,14 @@
 import { ChatbotService } from './chatbot.service';
 import type { StudentKnowledgeGraph } from './knowledge-graph.service';
 
-// ─── Mock Claude AI ──────────────────────────────────────────────────────────
+// ─── Mock Gemini AI ──────────────────────────────────────────────────────────
 
-const mockMessagesStream = jest.fn();
+const mockGenerateContentStream = jest.fn();
 
-jest.mock('../shared/claude-ai', () => ({
-  getAnthropicClient: jest.fn(() => ({ messages: { stream: mockMessagesStream } })),
-  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
-  CLAUDE_SMART: 'claude-sonnet-4-6',
+jest.mock('../shared/gemini-ai', () => ({
+  getGeminiClient: jest.fn(() => ({ models: { generateContentStream: mockGenerateContentStream } })),
+  GEMINI_FAST: 'gemini-2.5-flash',
+  GEMINI_SMART: 'gemini-2.5-pro',
 }));
 
 const mockQuery = jest.fn();
@@ -42,18 +42,17 @@ const studentGraph: StudentKnowledgeGraph = {
   academicYear: '2024-25',
 };
 
-/** Build a mock Claude stream that yields content_block_delta chunks. */
-function makeClaudeStream(chunks: string[], inputTokens = 10, outputTokens = 110) {
+/** Build a mock Gemini stream that yields { text } chunks and (optionally) trailing usageMetadata. */
+function makeGeminiStream(chunks: string[], promptTokens = 10, candidatesTokens = 110) {
   async function* streamGen() {
-    for (const text of chunks) {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text } };
+    for (let i = 0; i < chunks.length; i++) {
+      const isLast = i === chunks.length - 1;
+      yield isLast
+        ? { text: chunks[i], usageMetadata: { promptTokenCount: promptTokens, candidatesTokenCount: candidatesTokens } }
+        : { text: chunks[i] };
     }
   }
-  const iter = streamGen();
-  return {
-    [Symbol.asyncIterator]: () => iter,
-    finalMessage: jest.fn().mockResolvedValue({ usage: { input_tokens: inputTokens, output_tokens: outputTokens } }),
-  };
+  return Promise.resolve({ [Symbol.asyncIterator]: () => streamGen() });
 }
 
 describe('ChatbotService', () => {
@@ -65,24 +64,24 @@ describe('ChatbotService', () => {
   });
 
   describe('selectModel()', () => {
-    it('routes attendance query to CLAUDE_FAST', () => {
-      expect(svc.selectModel('What is my attendance?')).toBe('claude-haiku-4-5-20251001');
+    it('routes attendance query to GEMINI_FAST', () => {
+      expect(svc.selectModel('What is my attendance?')).toBe('gemini-2.5-flash');
     });
 
-    it('routes schedule query to CLAUDE_FAST', () => {
-      expect(svc.selectModel('Show my schedule today')).toBe('claude-haiku-4-5-20251001');
+    it('routes schedule query to GEMINI_FAST', () => {
+      expect(svc.selectModel('Show my schedule today')).toBe('gemini-2.5-flash');
     });
 
-    it('routes fee query to CLAUDE_FAST', () => {
-      expect(svc.selectModel('Is my fee paid?')).toBe('claude-haiku-4-5-20251001');
+    it('routes fee query to GEMINI_FAST', () => {
+      expect(svc.selectModel('Is my fee paid?')).toBe('gemini-2.5-flash');
     });
 
-    it('routes complex query to CLAUDE_SMART', () => {
-      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('claude-sonnet-4-6');
+    it('routes complex query to GEMINI_SMART', () => {
+      expect(svc.selectModel('Am I at risk of failing this semester?')).toBe('gemini-2.5-pro');
     });
 
-    it('routes general query to CLAUDE_SMART', () => {
-      expect(svc.selectModel('What should I do to improve my grades?')).toBe('claude-sonnet-4-6');
+    it('routes general query to GEMINI_SMART', () => {
+      expect(svc.selectModel('What should I do to improve my grades?')).toBe('gemini-2.5-pro');
     });
   });
 
@@ -154,7 +153,7 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])   // INSERT assistant message
         .mockResolvedValueOnce([]);  // UPDATE last_message_at
 
-      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['Hello ', 'Alice!']));
+      mockGenerateContentStream.mockReturnValueOnce(makeGeminiStream(['Hello ', 'Alice!']));
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
@@ -174,21 +173,21 @@ describe('ChatbotService', () => {
       expect(result).toContain('trouble');
     });
 
-    it('handles Claude API error gracefully', async () => {
+    it('handles Gemini API error gracefully', async () => {
       mockQuery
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockMessagesStream.mockImplementationOnce(() => { throw new Error('Claude API down'); });
+      mockGenerateContentStream.mockImplementationOnce(() => Promise.reject(new Error('Gemini API down')));
 
       const chunks: string[] = [];
       const result = await svc.chatStream('conv-1', 'Hi', studentGraph, (c) => chunks.push(c));
       expect(result).toContain('trouble');
     });
 
-    it('uses conversation history from DB with assistant role', async () => {
+    it('uses conversation history from DB with model role', async () => {
       mockQuery
         .mockResolvedValueOnce([
           { role: 'USER', content: 'previous question' },
@@ -198,13 +197,14 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['OK']));
+      mockGenerateContentStream.mockReturnValueOnce(makeGeminiStream(['OK']));
 
       await svc.chatStream('conv-1', 'New question', studentGraph, () => {});
 
-      const streamCall = mockMessagesStream.mock.calls[0][0];
-      expect(streamCall.messages).toHaveLength(3); // 2 history + 1 current
-      expect(streamCall.messages[1].role).toBe('assistant');
+      const streamCall = mockGenerateContentStream.mock.calls[0][0];
+      expect(streamCall.contents).toHaveLength(3); // 2 history + 1 current
+      // Gemini uses 'model' (not 'assistant') for the AI side
+      expect(streamCall.contents[1].role).toBe('model');
     });
 
     it('stores model_used in DB', async () => {
@@ -214,13 +214,13 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      mockMessagesStream.mockReturnValueOnce(makeClaudeStream(['Done']));
+      mockGenerateContentStream.mockReturnValueOnce(makeGeminiStream(['Done']));
 
       await svc.chatStream('conv-1', 'What is my attendance?', studentGraph, () => {});
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("'ASSISTANT'"),
-        expect.arrayContaining(['claude-haiku-4-5-20251001']),
+        expect.arrayContaining(['gemini-2.5-flash']),
       );
     });
 
@@ -231,14 +231,13 @@ describe('ChatbotService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
+      // Stream yields one text chunk with NO usageMetadata anywhere
       async function* streamGen() {
-        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } };
+        yield { text: 'Hi' };
       }
-      const iter = streamGen();
-      mockMessagesStream.mockReturnValueOnce({
-        [Symbol.asyncIterator]: () => iter,
-        finalMessage: jest.fn().mockResolvedValue({ usage: { input_tokens: undefined, output_tokens: undefined } }),
-      });
+      mockGenerateContentStream.mockReturnValueOnce(
+        Promise.resolve({ [Symbol.asyncIterator]: () => streamGen() }),
+      );
 
       const result = await svc.chatStream('conv-1', 'Hello', studentGraph, () => {});
       expect(result).toBe('Hi');

@@ -101,8 +101,12 @@ export class CommsController {
 
   @ Post('parent-comms/calls/trigger')
   triggerParentCall(@Body() body: { parentId: string; studentUsn: string; type: string }, @Request() req: any) {
+    // Admins/principals/etc may trigger calls on behalf of any parent. Parents themselves
+    // can only trigger their own calls (sub must match parentId).
+    const role = req.user?.role;
     const authenticatedUserId = req.user?.sub;
-    if (authenticatedUserId && authenticatedUserId !== body.parentId) {
+    const isStaff = role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'COUNSELLOR';
+    if (!isStaff && authenticatedUserId && authenticatedUserId !== body.parentId) {
       throw new ForbiddenException('Cannot trigger calls for another parent');
     }
     return this.svc.triggerParentCall(body.parentId, body.studentUsn, body.type);
