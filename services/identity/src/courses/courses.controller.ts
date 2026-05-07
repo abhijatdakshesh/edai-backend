@@ -39,4 +39,19 @@ export class CoursesController {
     const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
     return this.coursesService.enroll(id, usn);
   }
+
+  @Delete('student/courses/:courseId/enroll')
+  unenrollStudent(@Param('courseId') id: string, @Request() req: any) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    return this.coursesService.unenroll(id, usn);
+  }
+
+  @Get('student/courses')
+  getStudentEnrollments(@Request() req: any): { courseIds: string[] } {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    const courseIds = this.coursesService.enrollments
+      .filter((e) => e.studentUsn === usn)
+      .map((e) => e.courseId);
+    return { courseIds };
+  }
 }

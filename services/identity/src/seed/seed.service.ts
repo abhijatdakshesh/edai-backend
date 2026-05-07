@@ -87,6 +87,16 @@ export class SeedService implements OnModuleInit {
       { id: 'course-7', name: 'Circuit Theory', code: 'EC501', credits: 4, department: 'Electronics', instructorName: 'Dr. Vinod Hegde', instructorId: 'teacher-006', enrolled: 85 },
       { id: 'course-8', name: 'Thermodynamics', code: 'ME501', credits: 4, department: 'Mechanical', instructorName: 'Dr. Prakash Nair', instructorId: 'teacher-007', enrolled: 78 },
     ];
+
+    // Seed enrollments for the demo students so the My Courses page shows
+    // realistic "Enrolled" badges out-of-the-box.
+    const seededEnrollments = ['1RV21CS001', 'u-student-01'].flatMap((usn) => [
+      { courseId: 'course-1', studentUsn: usn },
+      { courseId: 'course-2', studentUsn: usn },
+      { courseId: 'course-3', studentUsn: usn },
+      { courseId: 'course-4', studentUsn: usn },
+    ]);
+    this.coursesSvc.enrollments = seededEnrollments;
   }
 
   private seedClasses(): void {
