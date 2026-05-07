@@ -102,6 +102,18 @@ export class ChatbotController {
     return { conversationId, message: fullResponse, timestamp: new Date().toISOString() };
   }
 
+  // PUBLIC — anonymous chatbot for pre-login visitors. Returns college-info-only
+  // answers (no student PII, no DB lookups). Rate-limit at gateway / WAF.
+  @Post('public/ask')
+  async publicAsk(
+    @Body() body: { message: string },
+  ): Promise<{ message: string; timestamp: string }> {
+    const message = (body?.message ?? '').toString().trim();
+    if (!message) return { message: 'Please ask a question.', timestamp: new Date().toISOString() };
+    const reply = await this.chatbotService.askPublic(message);
+    return { message: reply, timestamp: new Date().toISOString() };
+  }
+
   // Admin: list chat sessions
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'PRINCIPAL')
