@@ -120,7 +120,7 @@ export class KnowledgeGraphService {
                   COALESCE(preferred_language, 'en') AS lang,
                   COALESCE(parent_name, '') AS parent_name
            FROM students WHERE student_id = $1 LIMIT 1`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT ts.subject_name, ts.faculty_name,
                   ts.classroom_name AS room_number,
@@ -132,7 +132,7 @@ export class KnowledgeGraphService {
            WHERE s.student_id = $1 AND ts.day = $2 AND tc.status = 'PUBLISHED'
              AND ts.is_break = false AND ts.faculty_name != 'N/A'
            ORDER BY ts.period`, [usn, today],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT ts.subject_name, ts.faculty_name,
                   ts.classroom_name AS room_number,
@@ -144,7 +144,7 @@ export class KnowledgeGraphService {
            WHERE s.student_id = $1 AND tc.status = 'PUBLISHED'
              AND ts.is_break = false AND ts.faculty_name != 'N/A'
            ORDER BY ts.day, ts.period`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT subject_name,
                   COUNT(*) FILTER (WHERE status = 'PRESENT')::int AS present,
@@ -153,7 +153,7 @@ export class KnowledgeGraphService {
                   GREATEST(0, CEIL((0.75 * COUNT(*) - COUNT(*) FILTER (WHERE status='PRESENT')) / 0.25))::int AS needed
            FROM attendance WHERE student_id = $1
            GROUP BY subject_name ORDER BY pct ASC`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT subject_name,
                   MAX(CASE WHEN exam_type = 'IA1' THEN marks_obtained END)::float AS ia1,
@@ -161,14 +161,14 @@ export class KnowledgeGraphService {
                   MAX(max_marks)::int AS max_marks
            FROM internal_marks WHERE student_id = $1
            GROUP BY subject_name`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT total_amount::float, paid_amount::float,
                   (total_amount - paid_amount)::float AS balance,
                   payment_status, due_date
            FROM fee_payments WHERE student_id = $1
            ORDER BY created_at DESC LIMIT 1`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT component, amount::float, status, due_date
            FROM fee_items WHERE usn = $1
@@ -176,28 +176,28 @@ export class KnowledgeGraphService {
         ).catch(() => []),
         this.db!.query(
           `SELECT risk_score::float, risk_level FROM student_risk_scores WHERE student_id = $1 LIMIT 1`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT COUNT(*)::int AS cnt FROM attendance
            WHERE student_id = $1 AND status = 'ABSENT'
              AND attendance_date >= CURRENT_DATE - INTERVAL '7 days'`, [usn],
-        ),
+        ).catch(() => [{ cnt: 0 }]),
         this.db!.query(
           `SELECT title, content FROM announcements
            WHERE audience IN ('STUDENT','ALL') ORDER BY created_at DESC LIMIT 5`,
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT company, status, scheduled_date, min_cgpa, rounds, venue, eligible_depts
            FROM placement_drives
            WHERE status = 'OPEN' AND scheduled_date >= CURRENT_DATE
            ORDER BY scheduled_date ASC LIMIT 5`,
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT title, semester, open_date, close_date, is_active
            FROM vtu_windows
            WHERE is_active = true AND semester = (SELECT semester FROM students WHERE student_id = $1)
            LIMIT 1`, [usn],
-        ),
+        ).catch(() => []),
         this.db!.query(
           `SELECT ve.eligible_subjects, ve.is_eligible, ve.category,
                   vw.title AS window_title, vw.open_date, vw.close_date

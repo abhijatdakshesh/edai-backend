@@ -2,7 +2,7 @@
 // All calls include a DPDP consent check; minimal PII is included in prompts.
 
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { getAnthropicClient, CLAUDE_FAST, CLAUDE_SMART } from '../shared/claude-ai';
+import { getGeminiClient, GEMINI_FAST, GEMINI_SMART } from '../shared/gemini-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph, AdminKnowledgeGraph } from './knowledge-graph.service';
@@ -17,7 +17,7 @@ const SIMPLE_PATTERNS = ['schedule', 'today', 'tomorrow', 'fee', 'balance', 'pai
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
-  private get anthropic() { return getAnthropicClient(); }
+  private get gemini() { return getGeminiClient(); }
 
   constructor(
     @Optional() @InjectDataSource() private readonly db: DataSource | null,
@@ -25,7 +25,7 @@ export class ChatbotService {
 
   selectModel(message: string): string {
     const lower = message.toLowerCase();
-    return SIMPLE_PATTERNS.some(p => lower.includes(p)) ? CLAUDE_FAST : CLAUDE_SMART;
+    return SIMPLE_PATTERNS.some(p => lower.includes(p)) ? GEMINI_FAST : GEMINI_SMART;
   }
 
   private getLang(graph: KnowledgeGraph): string {
@@ -96,36 +96,39 @@ ${JSON.stringify(graph, null, 2)}`;
     let fullText = '';
     let tokensUsed = 0;
 
-    // Build Claude message history (user/assistant roles)
-    const claudeMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+    // Build Gemini message history (user/model roles)
+    const geminiContents = [
       ...history.map(h => ({
-        role: (h.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: h.content,
+        role: (h.role === 'USER' ? 'user' : 'model') as 'user' | 'model',
+        parts: [{ text: h.content }],
       })),
-      { role: 'user', content: userMessage },
+      { role: 'user' as const, parts: [{ text: userMessage }] },
     ];
 
     const systemInstruction = this.buildSystemPrompt(graph);
 
     try {
-      const stream = this.anthropic.messages.stream({
+      const stream = await this.gemini.models.generateContentStream({
         model: selectedModel,
-        max_tokens: 1024,
-        system: systemInstruction,
-        messages: claudeMessages,
+        contents: geminiContents,
+        config: {
+          maxOutputTokens: 1024,
+          systemInstruction,
+        },
       });
 
+      let lastUsage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
       for await (const chunk of stream) {
-        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-          fullText += chunk.delta.text;
-          onChunk(chunk.delta.text);
+        const text = chunk.text ?? '';
+        if (text) {
+          fullText += text;
+          onChunk(text);
         }
+        if (chunk.usageMetadata) lastUsage = chunk.usageMetadata;
       }
-
-      const finalMsg = await stream.finalMessage();
-      tokensUsed = (finalMsg.usage.input_tokens ?? 0) + (finalMsg.usage.output_tokens ?? 0);
+      tokensUsed = (lastUsage?.promptTokenCount ?? 0) + (lastUsage?.candidatesTokenCount ?? 0);
     } catch (err) {
-      this.logger.error('Claude chat error', err);
+      this.logger.error('Gemini chat error', err);
       fullText = "I'm having trouble right now. Please try again in a moment.";
       onChunk(fullText);
     }
