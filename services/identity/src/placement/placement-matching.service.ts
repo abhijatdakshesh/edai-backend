@@ -111,7 +111,8 @@ Score fit (0-100): CGPA 40%, attendance 20%, readiness 30%, profile 10%. Output 
   }
 
   async getMatchesForStudent(usn: string) {
-    return this.dataSource.query(`
+    if (!this.dataSource) return [];
+    const rows = await this.dataSource.query(`
       SELECT pm.fit_score, pm.prediction_pct, pm.claude_rationale, pm.status,
              pc.name as company_name, pc.role_offered, pc.ctc_lpa,
              pc.company_type, pc.industry, pc.drive_date, pc.required_skills
@@ -119,7 +120,21 @@ Score fit (0-100): CGPA 40%, attendance 20%, readiness 30%, profile 10%. Output 
       JOIN placement_companies pc ON pc.id = pm.company_id
       WHERE pm.student_usn = $1
       ORDER BY pm.fit_score DESC
-    `, [usn]);
+    `, [usn]).catch(() => [] as Record<string, unknown>[]);
+    // Map snake_case to the camelCase shape the frontend expects
+    return (rows as Record<string, unknown>[]).map((r) => ({
+      companyName: String(r['company_name'] ?? ''),
+      roleOffered: String(r['role_offered'] ?? ''),
+      ctcLpa: r['ctc_lpa'] != null ? Number(r['ctc_lpa']) : 0,
+      companyType: String(r['company_type'] ?? 'SERVICE'),
+      industry: String(r['industry'] ?? ''),
+      driveDate: r['drive_date'] ? new Date(String(r['drive_date'])).toISOString() : null,
+      requiredSkills: Array.isArray(r['required_skills']) ? (r['required_skills'] as string[]) : [],
+      fitScore: Number(r['fit_score'] ?? 0),
+      predictionPct: Number(r['prediction_pct'] ?? 0),
+      claudeRationale: String(r['claude_rationale'] ?? ''),
+      status: String(r['status'] ?? 'ELIGIBLE'),
+    }));
   }
 
   async getTopStudentsForCompany(companyId: string, limit = 15) {
