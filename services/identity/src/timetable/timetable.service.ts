@@ -9,7 +9,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
-import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -321,7 +321,7 @@ export class TimetableService {
 
     let rawJson: string;
     try {
-      rawJson = await claudeGenerate(prompt, CLAUDE_SMART, 8192);
+      rawJson = await geminiGenerate(prompt, GEMINI_SMART, 8192);
     } catch (err) {
       this.logger.error(`[Timetable] Claude failed for ${configId}: ${err instanceof Error ? err.message : String(err)}`);
       throw new InternalServerErrorException('AI timetable generation failed');

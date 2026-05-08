@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { claudeGenerate, CLAUDE_FAST } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_FAST } from '../shared/gemini-ai';
 import { randomUUID } from 'node:crypto';
 
 function sanitize(v: unknown, maxLen = 300): string {
@@ -228,7 +228,7 @@ Return a JSON array ranked best-to-worst: [{"usn":"...", "rank":1, "fitScore":85
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       return parsed;
     } catch (err) {
@@ -259,7 +259,7 @@ Return JSON: {"title":"...","description":"2-3 paragraph JD","requirements":["re
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return {
@@ -287,7 +287,7 @@ Return JSON array: [{"question":"...","expectedAnswer":"brief answer","difficult
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return [{ question: `Explain your experience with ${params.requiredSkills[0] ?? 'programming'}`, expectedAnswer: 'Varies by candidate', difficulty: 'MEDIUM' }];
@@ -319,7 +319,7 @@ Return JSON: {"branch":"CSE","semester":8,"minCgpa":8.0,"minPlacementScore":null
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const filter = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       const { interpretation, ...candidateFilter } = filter as CandidateFilter & { interpretation: string };
       const candidates = await this.searchCandidates(institutionId, { ...candidateFilter, limit: 50 });
@@ -352,7 +352,7 @@ Return JSON array (top 10 max): [{"usn":"...","matchScore":85,"matchReasons":["r
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Semantic match failed', err);
@@ -394,7 +394,7 @@ Return JSON array (top 5): [{"usn":"...","similarityScore":88,"sharedTraits":["t
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Look-alike failed', err);
@@ -425,7 +425,7 @@ Signals could include: high placement score despite average CGPA, diverse skill 
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Hidden gems failed', err);
@@ -462,7 +462,7 @@ estimatedRampWeeks = weeks to get productive (2-16 range).
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Skill adjacency failed', err);
@@ -491,7 +491,7 @@ inclusiveScore: 0-100, higher is more inclusive language.
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('JD improve failed', err);
@@ -518,7 +518,7 @@ overallScore: 0-100, higher = more inclusive. If no issues found, return flagged
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Inclusive check failed', err);
@@ -545,7 +545,7 @@ Return JSON: {"suggestedMin":8,"suggestedMax":12,"median":10,"reasoning":"Based 
 Numbers in LPA (Lakhs Per Annum). Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Salary benchmark failed', err);
@@ -594,7 +594,7 @@ Return JSON array: [{"usn":"...","acceptProbability":75,"joiningProbability":60,
 suggestedCTC is the CTC in LPA to maximize acceptance. Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Offer prediction failed', err);
@@ -640,7 +640,7 @@ Return JSON: {"subject":"...email subject if EMAIL channel else null","body":"th
 Return ONLY the JSON, no markdown.`;
 
       try {
-        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+        const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
         const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { subject?: string; body: string };
         results.push({
           candidateUsn: candidate['studentId'] ?? candidate['student_id'] ?? candidate['usn'],
@@ -711,7 +711,7 @@ Return JSON: {
 overallBiasScore: 0-100, higher = more biased. flags = specific concerns. Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Bias audit failed', err);
@@ -750,7 +750,7 @@ Prioritize department diversity and avoid over-representation of any single bran
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { reorderedUsns: string[] };
       return parsed;
     } catch (err) {
@@ -826,7 +826,7 @@ Funnel data: ${totalApplied} applied, ${shortlisted} shortlisted, ${interview} i
 Top required skills: ${Object.keys(skillFreq).slice(0, 5).join(', ')}.
 Return JSON array of 3 strings: ["insight1","insight2","insight3"]
 Return ONLY the JSON array, no markdown.`;
-        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+        const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
         aiInsights = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       } catch {
         // keep default insights
@@ -851,7 +851,7 @@ Return JSON: {"answer":"...","table":[{"Column":"Value"}]|null}
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { answer: string; table?: Record<string, unknown>[] };
       return { answer: parsed.answer, table: parsed.table ?? undefined };
     } catch (err) {

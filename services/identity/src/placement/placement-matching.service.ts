@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -68,7 +68,7 @@ Score fit (0-100): CGPA 40%, attendance 20%, readiness 30%, profile 10%. Output 
     let matches: MatchResult[] = [];
 
     try {
-      const text = await claudeGenerate(prompt, CLAUDE_SMART);
+      const text = await geminiGenerate(prompt, GEMINI_SMART);
       const json = text.replace(/```json\n?|\n?```/g, '').trim();
       const parsed: unknown = JSON.parse(json);
 
