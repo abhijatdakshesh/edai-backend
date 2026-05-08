@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import type { User } from '../entities/user.entity';
 import { TokenBlocklistService } from './token-blocklist.service';
+import { UsersService } from '../users/users.service';
 
 export interface JwtPayload {
   sub: string;
@@ -63,20 +64,37 @@ const SEED_USERS: User[] = (() => {
 
 @Injectable()
 export class AuthService {
-  /** Phase 2: replace with `@InjectRepository(User) private userRepo: Repository<User>`. */
+  /** Legacy fallback seed — UsersService now owns the canonical mutable store. */
   private readonly users: User[] = SEED_USERS;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly blocklist: TokenBlocklistService,
+    private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * Look up a user across both stores so newly-created users (added via
+   * POST /api/users into UsersService.store) can authenticate.
+   */
+  private findUserByEmail(email: string): User | undefined {
+    const lower = email.toLowerCase();
+    const fromUsers = this.usersService.findByEmail(email)
+      ?? this.usersService.findByEmail(lower);
+    if (fromUsers) return fromUsers as User;
+    return this.users.find((u) => u.email.toLowerCase() === lower);
+  }
+
+  private findUserById(id: string): User | undefined {
+    const fromUsers = (this.usersService as unknown as { store: User[] }).store?.find?.((u) => u.id === id);
+    if (fromUsers) return fromUsers;
+    return this.users.find((u) => u.id === id);
+  }
 
   // ─── Login ────────────────────────────────────────────────────────────────
 
   async login(email: string, password: string): Promise<LoginResponse> {
-    const user = this.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase(),
-    );
+    const user = this.findUserByEmail(email);
 
     // Use consistent error to prevent email enumeration
     if (!user || !user.isActive) {
@@ -117,8 +135,8 @@ export class AuthService {
       throw new UnauthorizedException('Token has been revoked');
     }
 
-    const user = this.users.find((u) => u.id === payload.sub && u.isActive);
-    if (!user) {
+    const user = this.findUserById(payload.sub);
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
@@ -136,12 +154,12 @@ export class AuthService {
   // ─── Used by JwtStrategy.validate() ──────────────────────────────────────
 
   validatePayload(payload: JwtPayload): Omit<User, 'passwordHash'> | null {
-    let user = this.users.find((u) => u.id === payload.sub && u.isActive);
+    let user = this.findUserById(payload.sub);
     // Dev tokens use sub='dev-<role>' — fall back to email match
-    if (!user && payload.sub?.startsWith('dev-')) {
-      user = this.users.find((u) => u.email === payload.email && u.isActive);
+    if ((!user || !user.isActive) && payload.sub?.startsWith('dev-') && payload.email) {
+      user = this.findUserByEmail(payload.email);
     }
-    if (!user) return null;
+    if (!user || !user.isActive) return null;
     const { passwordHash: _ph, ...safe } = user;
     return safe;
   }
