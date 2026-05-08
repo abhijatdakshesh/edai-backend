@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
 import { NaacService, CriterionResult } from './naac.service';
 
 // ─── NAAC Criterion context for prompt grounding ─────────────────────────────
@@ -164,11 +164,11 @@ Return ONLY the paragraph text. No preamble, no labels.`;
   ): Promise<string> {
     const prompt = this.buildPrompt(criterion, institutionName, affiliation);
     try {
-      const text = await claudeGenerate(prompt, CLAUDE_SMART);
+      const text = await geminiGenerate(prompt, GEMINI_SMART, 1024);
       return text.trim() || this.fallbackParagraph(criterion);
     } catch (err) {
       this.logger.warn(
-        `[NAAC-SSR] Claude call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
+        `[NAAC-SSR] Gemini call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return this.fallbackParagraph(criterion);
     }
