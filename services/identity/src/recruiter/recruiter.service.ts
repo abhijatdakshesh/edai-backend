@@ -10,15 +10,16 @@ function sanitize(v: unknown, maxLen = 300): string {
 
 export interface PostJobDto {
   title: string;
-  description: string;
-  roleType: 'PRODUCT' | 'SERVICE' | 'STARTUP' | 'CORE';
-  ctcLpa: number;
-  minCgpa: number;
-  eligibleBranches: string[];
-  eligibleSemesters: number[];
-  requiredSkills: string[];
-  location: string;
-  applyDeadline: string;
+  description?: string;
+  companyName?: string;
+  roleType?: 'PRODUCT' | 'SERVICE' | 'STARTUP' | 'CORE';
+  ctcLpa?: number;
+  minCgpa?: number;
+  eligibleBranches?: string[];
+  eligibleSemesters?: number[];
+  requiredSkills?: string[];
+  location?: string;
+  applyDeadline?: string;
 }
 
 export interface CandidateFilter {
@@ -39,6 +40,17 @@ export class RecruiterService {
   // ── Job CRUD ──────────────────────────────────────────────────────────────
 
   async postJob(recruiterId: string, institutionId: string, dto: PostJobDto): Promise<{ id: string }> {
+    // Server-side defaults so the form posts even when optional fields are omitted
+    const description = (dto.description?.trim() || `${dto.title} role with ${dto.companyName ?? 'the company'}.`);
+    const roleType = dto.roleType ?? 'SERVICE';
+    const ctcLpa = dto.ctcLpa ?? 0;
+    const minCgpa = dto.minCgpa ?? 0;
+    const eligibleBranches = dto.eligibleBranches?.length ? dto.eligibleBranches : ['CSE', 'ISE', 'ECE'];
+    const eligibleSemesters = dto.eligibleSemesters?.length ? dto.eligibleSemesters : [7, 8];
+    const requiredSkills = dto.requiredSkills ?? [];
+    const location = dto.location ?? 'Bengaluru';
+    const applyDeadline = dto.applyDeadline ?? new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
     const [row] = await this.ds.query(`
       INSERT INTO recruiter_jobs
         (id, recruiter_id, institution_id, title, description, role_type,
@@ -48,9 +60,9 @@ export class RecruiterService {
       RETURNING id
     `, [
       randomUUID(), recruiterId, institutionId,
-      dto.title, dto.description, dto.roleType,
-      dto.ctcLpa, dto.minCgpa, dto.eligibleBranches, dto.eligibleSemesters,
-      dto.requiredSkills, dto.location, dto.applyDeadline,
+      dto.title, description, roleType,
+      ctcLpa, minCgpa, eligibleBranches, eligibleSemesters,
+      requiredSkills, location, applyDeadline,
     ]);
     this.logger.log(`Job posted id=${row.id} recruiter=${recruiterId}`);
     return row;
