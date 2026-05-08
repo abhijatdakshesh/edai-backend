@@ -118,16 +118,16 @@ export class FeesApiService implements OnModuleInit {
     });
   }
 
-  getFeeSummary(
-    usn: string,
-  ): { totalDue: number; totalPaid: number; nextDue: string; overdueCount: number } {
+  getFeeSummary(usn: string) {
     const items = this.feeItems.filter((f) => f.usn === usn);
     const totalDue = items.filter((f) => f.status !== 'PAID').reduce((s, f) => s + f.amount, 0);
     const totalPaid = items.filter((f) => f.status === 'PAID').reduce((s, f) => s + f.amount, 0);
     const overdueCount = items.filter((f) => f.status === 'OVERDUE').length;
     const nextDueItem = items.find((f) => f.status === 'PENDING');
     const nextDue = nextDueItem?.dueDate ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    return { totalDue, totalPaid, nextDue, overdueCount };
+    // items array lets the StudentFees page render per-component pending dues
+    // and stay consistent with the dashboard's PARTIAL/OVERDUE derivation
+    return { totalDue, totalPaid, nextDue, overdueCount, items };
   }
 
   /** Maps orderId → feeIds so verifyPayment can gate markPaid to the right IDs */
