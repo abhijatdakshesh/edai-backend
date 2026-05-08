@@ -71,26 +71,27 @@ ${JSON.stringify(graph, null, 2)}`;
     graph: KnowledgeGraph,
     onChunk: (text: string) => void,
   ): Promise<string> {
-    if (!this.db) {
-      const fallback = "I'm having trouble accessing data right now. Please try again.";
-      onChunk(fallback);
-      return fallback;
+    // Load last 10 messages — tolerate missing chat_messages table on
+    // partially-migrated environments. Empty history is acceptable.
+    const history = this.db
+      ? (await this.db.query(
+          `SELECT role, content FROM chat_messages
+           WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')
+           ORDER BY created_at ASC
+           OFFSET GREATEST(0, (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')) - 10)`,
+          [conversationId],
+        ).catch(() => [])) as Array<{ role: string; content: string }>
+      : [];
+
+    // Save user message — best-effort; never block the reply on a write failure.
+    if (this.db) {
+      await this.db.query(
+        `INSERT INTO chat_messages (conversation_id, role, content) VALUES ($1, 'USER', $2)`,
+        [conversationId, userMessage],
+      ).catch((err) => {
+        this.logger.warn(`chat_messages insert failed (will still reply): ${(err as Error).message}`);
+      });
     }
-
-    // Load last 10 messages
-    const history = await this.db.query(
-      `SELECT role, content FROM chat_messages
-       WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')
-       ORDER BY created_at ASC
-       OFFSET GREATEST(0, (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')) - 10)`,
-      [conversationId],
-    ) as Array<{ role: string; content: string }>;
-
-    // Save user message
-    await this.db.query(
-      `INSERT INTO chat_messages (conversation_id, role, content) VALUES ($1, 'USER', $2)`,
-      [conversationId, userMessage],
-    );
 
     const selectedModel = this.selectModel(userMessage);
     let fullText = '';
@@ -133,17 +134,20 @@ ${JSON.stringify(graph, null, 2)}`;
       onChunk(fullText);
     }
 
-    // Save assistant response
-    await this.db.query(
-      `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
-       VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
-      [conversationId, fullText, tokensUsed, selectedModel],
-    );
+    // Save assistant response — best-effort. Reply already streamed; persistence
+    // failures must not surface to the user.
+    if (this.db) {
+      await this.db.query(
+        `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
+         VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
+        [conversationId, fullText, tokensUsed, selectedModel],
+      ).catch(() => undefined);
 
-    await this.db.query(
-      `UPDATE chat_conversations SET last_message_at = now() WHERE id = $1`,
-      [conversationId],
-    );
+      await this.db.query(
+        `UPDATE chat_conversations SET last_message_at = now() WHERE id = $1`,
+        [conversationId],
+      ).catch(() => undefined);
+    }
 
     return fullText;
   }
@@ -154,33 +158,39 @@ ${JSON.stringify(graph, null, 2)}`;
     channel: 'WEB' | 'WHATSAPP',
     language = 'en',
   ): Promise<string> {
-    if (!this.db) throw new Error('No database');
+    // Synthetic ID lets the chat work even when chat_conversations table is
+    // missing (partial migrations) — history just won't persist.
+    const synthetic = () => `eph-${userIdentifier}-${Date.now()}`;
+    if (!this.db) return synthetic();
 
-    // Find active conversation < 2 hours old
-    const existing = await this.db.query(
-      `SELECT id FROM chat_conversations
-       WHERE user_identifier = $1 AND channel = $2 AND is_active = true
-         AND last_message_at > now() - INTERVAL '2 hours'
-       ORDER BY last_message_at DESC LIMIT 1`,
-      [userIdentifier, channel],
-    ) as Array<{ id: string }>;
+    try {
+      const existing = await this.db.query(
+        `SELECT id FROM chat_conversations
+         WHERE user_identifier = $1 AND channel = $2 AND is_active = true
+           AND last_message_at > now() - INTERVAL '2 hours'
+         ORDER BY last_message_at DESC LIMIT 1`,
+        [userIdentifier, channel],
+      ) as Array<{ id: string }>;
 
-    if (existing[0]) return existing[0].id;
+      if (existing[0]) return existing[0].id;
 
-    // Deactivate any stale active conversations first (handles unique index)
-    await this.db.query(
-      `UPDATE chat_conversations SET is_active = false
-       WHERE user_identifier = $1 AND channel = $2 AND is_active = true`,
-      [userIdentifier, channel],
-    );
+      await this.db.query(
+        `UPDATE chat_conversations SET is_active = false
+         WHERE user_identifier = $1 AND channel = $2 AND is_active = true`,
+        [userIdentifier, channel],
+      );
 
-    const created = await this.db.query(
-      `INSERT INTO chat_conversations (user_identifier, user_role, channel, language)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [userIdentifier, userRole, channel, language],
-    ) as Array<{ id: string }>;
+      const created = await this.db.query(
+        `INSERT INTO chat_conversations (user_identifier, user_role, channel, language)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [userIdentifier, userRole, channel, language],
+      ) as Array<{ id: string }>;
 
-    return created[0].id;
+      return created[0].id;
+    } catch (err) {
+      this.logger.warn(`chat_conversations unavailable, using ephemeral ID: ${(err as Error).message}`);
+      return synthetic();
+    }
   }
 
   async recordConsent(conversationId: string): Promise<void> {
