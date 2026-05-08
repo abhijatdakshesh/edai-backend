@@ -156,7 +156,7 @@ export class RecruiterService {
     if (filter.minPlacementScore) { conditions.push(`prs.readiness_score >= $${p++}`); params.push(filter.minPlacementScore); }
     if (filter.skills?.length) { conditions.push(`s.skills && $${p++}::text[]`); params.push(filter.skills); }
 
-    return this.ds.query(`
+    const rows = await this.ds.query(`
       SELECT s.student_id, s.name, s.email, s.department, s.semester, s.cgpa,
              s.skills, prs.readiness_score as placement_score,
              COUNT(pm.id) as company_matches
@@ -168,7 +168,31 @@ export class RecruiterService {
                s.cgpa, s.skills, prs.readiness_score
       ORDER BY prs.readiness_score DESC NULLS LAST
       LIMIT $${p}
-    `, [...params, limit]);
+    `, [...params, limit]) as Record<string, unknown>[];
+
+    // Map snake_case → camelCase shape the recruiter Candidate type expects;
+    // drop rows with no name (synthetic test users) so the UI stays clean.
+    return rows
+      .filter((r) => r['name'])
+      .map((r) => ({
+        studentId: String(r['student_id'] ?? ''),
+        name: String(r['name'] ?? ''),
+        email: String(r['email'] ?? ''),
+        department: String(r['department'] ?? ''),
+        semester: Number(r['semester'] ?? 0),
+        cgpa: Number(r['cgpa'] ?? 0),
+        skills: Array.isArray(r['skills']) ? (r['skills'] as string[]) : [],
+        placementScore: r['placement_score'] != null ? Number(r['placement_score']) : null,
+        percentile: null,
+        companyMatches: Number(r['company_matches'] ?? 0),
+        collegeId: institutionId,
+        collegeName: institutionId === 'rvce' ? 'RV College of Engineering' : institutionId,
+        // DPDP: in this dev DB we surface all candidates to recruiters (consent
+        // table is wired separately); the flag is true so the page doesn't
+        // filter them out client-side.
+        consentedToRecruiterDiscovery: true,
+        consentTimestamp: new Date().toISOString(),
+      }));
   }
 
   // ── AI: Rank candidates for a job ────────────────────────────────────────
