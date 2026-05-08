@@ -85,7 +85,7 @@ export class IaController {
         confirmedAt: s.status === 'CONFIRMED' ? s.submittedAt : undefined,
         // Demo defaults — wire to real attendance/marks counts later
         studentCount: 60,
-        marksEntered: s.status === 'NOT_STARTED' ? 0 : 60,
+        marksEntered: s.status === 'DRAFT' ? 30 : 60,
       };
     });
   }
