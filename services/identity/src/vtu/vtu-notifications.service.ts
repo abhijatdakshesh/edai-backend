@@ -94,16 +94,70 @@ export class VtuNotificationsService {
       this.logger.warn(`Home page fetch failed: ${(err as Error).message}`);
     }
 
-    // De-duplicate by link, cap at 30
+    // De-duplicate by link, normalise titles to English-only, cap at 30
     const seen = new Set<string>();
     const unique: VtuNotification[] = [];
     for (const item of items) {
       if (seen.has(item.link)) continue;
       seen.add(item.link);
-      unique.push(item);
+      const englishTitle = this.toEnglishOnly(item.title);
+      if (!englishTitle || englishTitle.length < 6) continue;
+      unique.push({ ...item, title: englishTitle });
       if (unique.length >= 30) break;
     }
     if (unique.length === 0) throw new Error('Empty result');
     return unique;
+  }
+
+  /**
+   * VTU posts many notifications bilingually (English / Kannada) or in
+   * Kannada only. Strip non-Latin chars; if the result is too short to be
+   * meaningful (i.e. the post was Kannada-only), translate via a fixed
+   * lookup of common Kannada admin terms. Anything we can't map is
+   * dropped — keeps the panel English-only as requested.
+   */
+  private toEnglishOnly(rawTitle: string): string {
+    const t = (rawTitle || '').trim();
+    if (!t) return '';
+
+    // Bilingual titles often use " / " or " | " or " - " to separate scripts
+    for (const sep of [' / ', '/', ' | ', '|', ' — ', '—']) {
+      if (t.includes(sep)) {
+        const parts = t.split(sep).map((p) => p.trim());
+        const englishPart = parts.find((p) => this.isMostlyLatin(p));
+        if (englishPart && englishPart.length >= 6) return englishPart;
+      }
+    }
+
+    // If already mostly Latin, strip residual non-Latin glyphs and return
+    if (this.isMostlyLatin(t)) {
+      const stripped = t.replace(/[-￿]/g, '').replace(/\s+/g, ' ').trim();
+      if (stripped.length >= 6) return stripped;
+    }
+
+    // Title was Kannada-only — try lookup of common admin phrases
+    const lookup: Record<string, string> = {
+      'ತಾತ್ಕಾಲಿಕ ಸಂಯೋಜನೆ': 'Temporary Affiliation',
+      'ಶಾಶ್ವತ ಸಂಯೋಜನೆ': 'Permanent Affiliation',
+      'ಎಮ್. ಪ್ಲ್ಯಾನ.': 'M.Plan Regulations',
+      'ಪಿಜಿ ಡಿಪ್ಲೊಮಾ': 'PG Diploma',
+      'ಸೂಚನೆ': 'Notification',
+      'ಸುತ್ತೋಲೆ': 'Circular',
+      'ಫಲಿತಾಂಶ': 'Result',
+      'ಪರೀಕ್ಷೆ': 'Examination',
+    };
+    for (const [kn, en] of Object.entries(lookup)) {
+      if (t.includes(kn)) return en;
+    }
+
+    // Pure-Kannada / unknown — skip
+    return '';
+  }
+
+  private isMostlyLatin(s: string): boolean {
+    const total = s.length;
+    if (total === 0) return false;
+    const latin = (s.match(/[A-Za-z0-9 ,.\-():&/]/g) || []).length;
+    return latin / total >= 0.7;
   }
 }
