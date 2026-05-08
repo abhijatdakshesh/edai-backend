@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { VtuService } from './vtu.service';
+import { VtuNotificationsService } from './vtu-notifications.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -17,8 +18,16 @@ import { EventsGateway } from '../events/events.gateway';
 export class VtuController {
   constructor(
     private readonly svc: VtuService,
+    private readonly notifications: VtuNotificationsService,
     private readonly events: EventsGateway,
   ) {}
+
+  // Live VTU notifications/circulars — surfaced on every portal dashboard
+  // (admin/principal/hod/teacher/student/parent). 30-min in-process cache.
+  @Get('vtu/notifications')
+  getVtuNotifications() {
+    return this.notifications.getNotifications();
+  }
 
   @Get('vtu/windows')
   getAllWindows() {
