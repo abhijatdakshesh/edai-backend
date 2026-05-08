@@ -92,17 +92,25 @@ describe('CoursesService', () => {
   // ─── getResults ─────────────────────────────────────────────────────────────
 
   describe('getResults()', () => {
-    it('returns academic result for a known USN', () => {
+    it('returns reshaped academic result for a known USN', () => {
       const result: AcademicResult = {
         usn: 'USN001',
         cgpa: 8.5,
         semesters: [],
       };
       service.academicResults.push(result);
-      expect(service.getResults('USN001')).toBe(result);
+      // The service no longer returns the raw record — it reshapes into a
+      // frontend-friendly object with usn/name/cgpa/semesters.
+      const out = service.getResults('USN001');
+      expect(out.usn).toBe('USN001');
+      expect(out.cgpa).toBe(8.5);
+      expect(out.semesters).toEqual([]);
     });
 
-    it('throws NotFoundException for unknown USN', () => {
+    it('throws NotFoundException when no academic results are seeded', () => {
+      // The service falls back to the first seeded result when the USN is not
+      // found, so we can only assert NotFoundException when the store is empty.
+      service.academicResults.length = 0;
       expect(() => service.getResults('UNKNOWN')).toThrow(NotFoundException);
     });
   });

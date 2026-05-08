@@ -164,10 +164,13 @@ describe('Full auth + user management workflow', () => {
       preferredLanguage: (rawPayload['preferredLanguage'] as string) ?? 'en',
     };
 
-    // validatePayload should return the user while active
+    // validatePayload should return the user while active. Note: AuthService's
+    // findUserById now consults UsersService.store first (which seeds the HOD
+    // with the canonical 'hod.cse@rvce.edu' email), then falls back to its
+    // own SEED_USERS. The UsersService entry wins by id 'u-hod-01'.
     const activeUser = authService.validatePayload(jwtPayload);
     expect(activeUser).not.toBeNull();
-    expect(activeUser!.email).toBe('hod@rvce.edu');
+    expect(activeUser!.email).toBe('hod.cse@rvce.edu');
     expect(activeUser!.isActive).toBe(true);
     expect((activeUser as any).passwordHash).toBeUndefined(); // safe user — no hash
 
@@ -201,18 +204,21 @@ describe('Full auth + user management workflow', () => {
       institutionId: 'rvce',
     });
 
-    // This user is NOT in AuthService's SEED_USERS, so login will fail (not found)
-    // This is correct Phase 1 behaviour — UsersService is decoupled from AuthService seed
-    await expect(authService.login(email, password)).rejects.toThrow(UnauthorizedException);
+    // Phase 2: AuthService now consults UsersService first, so a user created
+    // via UsersService CAN log in while active.
+    const loginOk = await authService.login(email, password);
+    expect(loginOk.user.email).toBe(email);
 
     // Verify the user exists in UsersService
     const found = usersService.findById(created.id);
     expect(found.isActive).toBe(true);
 
-    // Deactivate
+    // Deactivate via UsersService — AuthService.login now respects this and
+    // refuses subsequent logins.
     usersService.setStatus(created.id, false);
     const deactivated = usersService.findById(created.id);
     expect(deactivated.isActive).toBe(false);
+    await expect(authService.login(email, password)).rejects.toThrow(UnauthorizedException);
   });
 
   // ════════════════════════════════════════════════════════════════════════════

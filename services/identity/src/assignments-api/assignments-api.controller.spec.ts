@@ -79,15 +79,25 @@ describe('AssignmentsApiController', () => {
   });
 
   describe('createAssignment()', () => {
-    it('delegates to service with body and teacherId', () => {
+    it('delegates to service and reshapes the response for the frontend', () => {
       const body = { title: 'T', dueDate: '2026-05-01', subjectCode: 'CS101', description: 'd', maxMarks: 10 };
       const req = { user: { sub: 'teacher-1' } };
-      const mockResult = { id: 'asn-1', ...body, status: 'DRAFT', teacherId: 'teacher-1' };
-      mockAssignmentsService.createAssignment.mockReturnValue(mockResult);
+      const created = { id: 'asn-1', title: 'T', subjectCode: 'CS101', dueDate: '2026-05-01', maxMarks: 10, description: 'd' };
+      mockAssignmentsService.createAssignment.mockReturnValue(created);
 
       const result = controller.createAssignment(body, req);
-      expect(mockAssignmentsService.createAssignment).toHaveBeenCalledWith(body, 'teacher-1');
-      expect(result).toBe(mockResult);
+      // Service is called with the normalized body (defaults applied) and teacherId.
+      expect(mockAssignmentsService.createAssignment).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'T', subjectCode: 'CS101', maxMarks: 10 }),
+        'teacher-1',
+      );
+      // Controller reshapes to the frontend-friendly schema.
+      expect(result).toMatchObject({
+        id: 'asn-1', title: 'T', courseCode: 'CS101', courseName: 'CS101',
+        dueDate: '2026-05-01', maxMarks: 10, status: 'DRAFT',
+        submissionCount: 0, totalStudents: expect.any(Number),
+      });
+      expect(result.createdAt).toEqual(expect.any(String));
     });
   });
 

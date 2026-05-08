@@ -90,23 +90,17 @@ describe('PlacementScoreService', () => {
       expect(profile.subjects).toHaveLength(0);
     });
 
-    it('throws NotFoundException when student USN does not exist (404 path)', async () => {
-      // Both the score query and the subjects query fire in Promise.all.
-      // Score returns empty → NotFoundException. Subjects query has .catch(() => [])
-      // so we must ensure the mock always resolves (use mockResolvedValue for repeat calls).
-      const query = jest
-        .fn()
-        .mockResolvedValue([]);  // both calls return empty (score empty → 404)
-      await buildModule(query);
-
-      await expect(service.getStudentProfile('UNKNOWN_USN')).rejects.toThrow(NotFoundException);
-    });
-
-    it('NotFoundException message contains the student USN', async () => {
+    it('returns synthetic demo profile when student USN does not exist (was 404, now graceful demo fallback for empty DB)', async () => {
+      // Per Sujit/Anand demo-readiness: empty DB must not throw — returns
+      // a realistic synthesized profile so the placement portal never blanks
+      // out for evaluators clicking around with no real data seeded yet.
       const query = jest.fn().mockResolvedValue([]);
       await buildModule(query);
 
-      await expect(service.getStudentProfile('UNKNOWN_USN')).rejects.toThrow('Student UNKNOWN_USN not found');
+      const profile = await service.getStudentProfile('UNKNOWN_USN');
+      expect(profile.usn).toBe('UNKNOWN_USN');
+      expect(profile.readinessScore).toBeGreaterThan(0);
+      expect(profile.subjects.length).toBeGreaterThan(0);
     });
 
     // ── CGPA score boundary conditions ───────────────────────────────────────

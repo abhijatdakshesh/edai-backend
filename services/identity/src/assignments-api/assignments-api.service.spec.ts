@@ -84,10 +84,11 @@ describe('AssignmentsApiService', () => {
 
       const result = service.getStudentAssignments('USN001');
       expect(result).toHaveLength(1);
-      expect(result[0].assignment.title).toBe('Published');
+      // Flat shape — title is now a top-level field on the response object.
+      expect(result[0].title).toBe('Published');
     });
 
-    it('attaches a matching submission when one exists', () => {
+    it('derives SUBMITTED status when a matching submission exists', () => {
       const { id } = service.createAssignment(
         { title: 'A', dueDate: '2026-05-01', subjectCode: 'CS101', description: 'd', maxMarks: 10 },
         't1',
@@ -99,15 +100,16 @@ describe('AssignmentsApiService', () => {
         usn: 'USN001',
         studentName: 'Alice',
         status: 'SUBMITTED',
+        submittedAt: '2026-04-30T10:00:00Z',
       };
       service.submissions.push(sub);
 
       const result = service.getStudentAssignments('USN001');
-      expect(result[0].submission).toBeDefined();
-      expect(result[0].submission!.id).toBe('sub-1');
+      expect(result[0].status).toBe('SUBMITTED');
+      expect(result[0].submittedAt).toBe('2026-04-30T10:00:00Z');
     });
 
-    it('returns undefined submission when no submission exists for that USN', () => {
+    it('does not include submittedAt/grade when no submission exists for that USN', () => {
       const { id } = service.createAssignment(
         { title: 'A', dueDate: '2026-05-01', subjectCode: 'CS101', description: 'd', maxMarks: 10 },
         't1',
@@ -115,7 +117,8 @@ describe('AssignmentsApiService', () => {
       service.publishAssignment(id);
 
       const result = service.getStudentAssignments('USN_NO_SUB');
-      expect(result[0].submission).toBeUndefined();
+      expect(result[0].submittedAt).toBeUndefined();
+      expect(result[0].grade).toBeUndefined();
     });
 
     it('returns empty array when no published assignments exist', () => {

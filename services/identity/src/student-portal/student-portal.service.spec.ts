@@ -125,15 +125,18 @@ describe('StudentPortalService', () => {
     it('counts pending assignments correctly', () => {
       mockAttendanceSvc.getStudentAttendance.mockImplementation(() => { throw new Error(); });
       mockCoursesSvc.getResults.mockImplementation(() => { throw new Error(); });
+      // AssignmentsApiService now returns a flat shape with a derived status
+      // ('PENDING' | 'SUBMITTED' | 'GRADED' | 'LATE') as a top-level field.
       mockAssignmentsSvc.getStudentAssignments.mockReturnValue([
-        { assignment: { id: 'a1' }, submission: { status: 'PENDING' } },
-        { assignment: { id: 'a2' }, submission: { status: 'SUBMITTED' } },
-        { assignment: { id: 'a3' } }, // no submission
+        { id: 'a1', status: 'PENDING' },
+        { id: 'a2', status: 'SUBMITTED' },
+        { id: 'a3', status: 'LATE' },
       ]);
       mockFeesSvc.getStudentFees.mockImplementation(() => { throw new Error(); });
       mockCoursesSvc.getCourses.mockReturnValue([]);
 
       const result = service.getDashboard('USN001');
+      // PENDING + LATE both count as pending.
       expect(result.stats.pendingAssignments).toBe(2);
     });
 

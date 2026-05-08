@@ -7,12 +7,12 @@ import { PlacementScoreService } from './placement-score.service';
 // Mock Claude AI
 // ---------------------------------------------------------------------------
 
-jest.mock('../shared/claude-ai', () => ({
-  claudeGenerate: jest.fn(),
-  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
-  CLAUDE_SMART: 'claude-sonnet-4-6',
+jest.mock('../shared/gemini-ai', () => ({
+  geminiGenerate: jest.fn(),
+  GEMINI_FAST: 'gemini-2.5-flash',
+  GEMINI_SMART: 'gemini-2.5-pro',
 }));
-const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
+const mockClaudeGenerate = jest.requireMock('../shared/gemini-ai').geminiGenerate as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Mock PDFKit — we test PDF pipeline integration, but skip real rendering

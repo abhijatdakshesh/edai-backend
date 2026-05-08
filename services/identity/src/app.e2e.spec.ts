@@ -548,12 +548,21 @@ describe('POST /api/counselor/book', () => {
   });
 });
 
-describe('PATCH /api/wellness/study-plan/tasks/:id/complete', () => {
+describe('POST /api/wellness/study-plan/tasks/:id/complete', () => {
   it('returns 200', async () => {
+    // Study tasks are generated lazily — kick off a plan so a real task ID exists.
+    const gen = await http
+      .post('/api/wellness/study-plan/generate')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ examDate: '2099-12-31', subjects: ['Database Management Systems'] });
+    expect([200, 201]).toContain(gen.status);
+    const taskId = gen.body?.tasks?.[0]?.id;
+    expect(taskId).toBeTruthy();
+
     const res = await http
-      .patch('/api/wellness/study-plan/tasks/task-1/complete')
+      .post(`/api/wellness/study-plan/tasks/${encodeURIComponent(taskId)}/complete`)
       .set('Authorization', `Bearer ${studentToken}`);
-    expect(res.status).toBe(200);
+    expect([200, 201]).toContain(res.status);
   });
 });
 
