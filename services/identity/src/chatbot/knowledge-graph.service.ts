@@ -595,7 +595,7 @@ export class KnowledgeGraphService {
       return this.emptyAdminGraph(empId);
     }
 
-    const build = async () => {
+    const build = async (): Promise<AdminKnowledgeGraph> => {
       const [adminRow, stats, atRisk, announcements, placements, alumniRows] = await Promise.all([
         this.db!.query(
           `SELECT name, COALESCE(preferred_language,'en') AS lang FROM faculty WHERE emp_id = $1 LIMIT 1`, [empId],
