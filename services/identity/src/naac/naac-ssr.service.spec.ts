@@ -7,7 +7,7 @@ import { NaacService, CriterionResult, NaacDashboard } from './naac.service';
 jest.mock('../shared/gemini-ai', () => ({
   geminiGenerate: jest.fn(),
   GEMINI_FAST: 'gemini-2.5-flash',
-  GEMINI_SMART: 'gemini-2.5-pro',
+  GEMINI_SMART: 'gemini-2.5-flash',
 }));
 const mockClaudeGenerate = jest.requireMock('../shared/gemini-ai').geminiGenerate as jest.Mock;
 
@@ -340,7 +340,7 @@ describe('NaacSsrService', () => {
   // ── Claude model configuration ─────────────────────────────────────────────
 
   describe('Claude model configuration', () => {
-    it('uses gemini-2.5-pro model', async () => {
+    it('uses gemini-2.5-flash model (KAN-22)', async () => {
       const criterion = makeCriterion('C2');
       mockNaacService.getDashboard.mockResolvedValue(makeDashboard([criterion]));
       mockClaudeGenerate.mockResolvedValue('ok');
@@ -349,7 +349,7 @@ describe('NaacSsrService', () => {
 
       expect(mockClaudeGenerate).toHaveBeenCalledWith(
         expect.any(String),
-        'gemini-2.5-pro',
+        'gemini-2.5-flash',
         expect.any(Number),
       );
     });
