@@ -19,6 +19,6 @@ import { TwilioWebhookGuard } from './twilio-webhook.guard';
   ],
   controllers: [ChatbotController],
   providers: [ChatbotService, ChatbotGateway, KnowledgeGraphService, TwilioWebhookGuard],
-  exports: [ChatbotService],
+  exports: [ChatbotService, KnowledgeGraphService],
 })
 export class ChatbotModule {}

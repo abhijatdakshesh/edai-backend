@@ -3,7 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 
-export type ConsentChannel = 'ATTENDANCE_ALERTS' | 'FEES_ALERTS' | 'MARKS_ALERTS' | 'GENERAL';
+export type ConsentChannel = 'ATTENDANCE_ALERTS' | 'FEES_ALERTS' | 'MARKS_ALERTS' | 'GENERAL' | 'VOICE';
 
 export interface ConsentRecord {
   principalId: string;

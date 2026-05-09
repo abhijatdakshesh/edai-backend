@@ -2,8 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CommsService, AICallLog, Message } from './comms.service';
 import { EventsGateway } from '../events/events.gateway';
 import { ConsentService } from './consent.service';
+import { ConversationStateService } from './conversation-state.service';
+import { KnowledgeGraphService } from '../chatbot/knowledge-graph.service';
 
-const mockEvents = { emitAiCallCompleted: jest.fn() };
+const mockEvents = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
 
 const makeCall = (overrides: Partial<AICallLog> = {}): AICallLog => ({
   id: 'call-1',
@@ -25,6 +27,8 @@ describe('CommsService', () => {
       providers: [
         CommsService,
         ConsentService,
+        ConversationStateService,
+        { provide: KnowledgeGraphService, useValue: { buildStudentGraph: jest.fn().mockResolvedValue({}) } },
         { provide: EventsGateway, useValue: mockEvents },
       ],
     }).compile();
@@ -367,7 +371,7 @@ describe('CommsService', () => {
 
   describe('onModuleInit()', () => {
     it('skips hydration when no repos injected', async () => {
-      const mockEvts = { emitAiCallCompleted: jest.fn() };
+      const mockEvts = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
       const consent = new ConsentService(null);
       const svc = new CommsService(mockEvts as any, consent);
       await svc.onModuleInit();
@@ -379,7 +383,14 @@ describe('CommsService', () => {
       const mockRow = { id: 'call-db-1', studentUsn: 'USN001', studentName: 'Alice', parentId: 'p1', outcome: 'ANSWERED', duration: 60, transcript: null, summary: null, institutionId: 'rvce', classId: 'CS-A', calledAt: new Date('2026-04-01T10:00:00Z') };
       const mockCallRepo = { find: jest.fn().mockResolvedValue([mockRow]), order: {}, take: 500 };
       const consent = new ConsentService(null);
-      const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, mockCallRepo as any, undefined);
+      const svc = new CommsService(
+        { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() } as any,
+        consent,
+        undefined,
+        undefined,
+        mockCallRepo as any,
+        undefined,
+      );
       await svc.onModuleInit();
       expect(svc.callLogs).toHaveLength(1);
       expect(svc.callLogs[0].calledAt).toBe('2026-04-01T10:00:00.000Z');
@@ -389,7 +400,14 @@ describe('CommsService', () => {
       const mockRow = { id: 'ann-db-1', institutionId: 'rvce', title: 'Holiday', content: 'No class', audience: 'ALL', createdAt: new Date('2026-04-10T09:00:00Z') };
       const mockAnnRepo = { find: jest.fn().mockResolvedValue([mockRow]) };
       const consent = new ConsentService(null);
-      const svc = new CommsService({ emitAiCallCompleted: jest.fn() } as any, consent, undefined, mockAnnRepo as any);
+      const svc = new CommsService(
+        { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() } as any,
+        consent,
+        undefined,
+        undefined,
+        undefined,
+        mockAnnRepo as any,
+      );
       await svc.onModuleInit();
       expect(svc.announcements).toHaveLength(1);
       expect(svc.announcements[0].title).toBe('Holiday');
@@ -501,6 +519,134 @@ describe('CommsService', () => {
       delete process.env['TWILIO_ACCOUNT_SID'];
       delete process.env['TWILIO_AUTH_TOKEN'];
       delete process.env['TWILIO_PHONE_NUMBER'];
+    });
+  });
+
+  // ─── Interactive turn handling ──────────────────────────────────────────────
+
+  describe('handleTurn() — interactive', () => {
+    let conv: ConversationStateService;
+    let svc: CommsService;
+    const events = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      conv = new ConversationStateService();
+      const consent = new ConsentService(null);
+      svc = new CommsService(events as any, consent, conv, undefined);
+      // Pre-populate state for "call-X"
+      conv.init('call-X', { usn: 'USN1', language: 'en', callType: 'ABSENT_CALL', institutionId: 'rvce' });
+      conv.pushTurn('call-X', 'AI', 'Hello, this is EdAI', 'en');
+    });
+
+    it('returns hangup TwiML when call session is missing', async () => {
+      const xml = await svc.handleTurn('missing-call', 'hi');
+      expect(xml).toContain('<Hangup');
+    });
+
+    it('hangs up gracefully on stop intent', async () => {
+      const xml = await svc.handleTurn('call-X', 'please stop calling');
+      expect(xml).toContain('<Hangup');
+      expect(events.emitAiCallTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'PARENT', text: 'please stop calling' }),
+      );
+    });
+
+    it('hangs up after MAX_TURNS reached', async () => {
+      // 12 turns already pushed (MAX_TURNS*2). Should goodbye.
+      for (let i = 0; i < 11; i++) conv.pushTurn('call-X', i % 2 === 0 ? 'PARENT' : 'AI', `t${i}`, 'en');
+      const xml = await svc.handleTurn('call-X', 'tell me more');
+      expect(xml).toContain('<Hangup');
+    });
+
+    it('emits PARENT then AI turns and returns Gather TwiML on normal turn', async () => {
+      // Mock geminiGenerate to return a short reply.
+      const gem = require('../shared/gemini-ai');
+      const spy = jest.spyOn(gem, 'geminiGenerate').mockResolvedValue('Thank you. Is there anything else?');
+      const xml = await svc.handleTurn('call-X', 'My son was sick yesterday');
+      expect(spy).toHaveBeenCalled();
+      expect(xml).toContain('<Gather');
+      expect(xml).toContain('<Say');
+      // PARENT first, AI second
+      const calls = events.emitAiCallTurn.mock.calls.map(c => c[0]);
+      expect(calls.find(c => c.role === 'PARENT')).toBeTruthy();
+      expect(calls.find(c => c.role === 'AI' && c.text.includes('Thank you'))).toBeTruthy();
+      spy.mockRestore();
+    });
+
+    it('respects 25-word cap on AI reply', async () => {
+      const gem = require('../shared/gemini-ai');
+      const long = 'word '.repeat(60).trim();
+      const spy = jest.spyOn(gem, 'geminiGenerate').mockResolvedValue(long);
+      await svc.handleTurn('call-X', 'tell me a story');
+      const aiTurn = events.emitAiCallTurn.mock.calls
+        .map(c => c[0])
+        .find(c => c.role === 'AI' && c.text.startsWith('word'));
+      expect(aiTurn).toBeDefined();
+      expect(aiTurn.text.split(/\s+/).length).toBeLessThanOrEqual(25);
+      spy.mockRestore();
+    });
+
+    it('hangs up when consent record exists but VOICE channel is missing', async () => {
+      const consent = new ConsentService(null);
+      const conv2 = new ConversationStateService();
+      const svc2 = new CommsService(events as any, consent, conv2, undefined);
+      consent.grant('USN2', ['ATTENDANCE_ALERTS'], 'rvce'); // no VOICE
+      conv2.init('call-Y', { usn: 'USN2', language: 'en', callType: 'ABSENT_CALL', institutionId: 'rvce' });
+      const xml = await svc2.handleTurn('call-Y', 'hello');
+      expect(xml).toContain('<Hangup');
+    });
+  });
+
+  describe('finalizeCall()', () => {
+    it('writes transcript+summary, emits ai-call:completed, evicts state', async () => {
+      const events = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
+      const consent = new ConsentService(null);
+      const conv = new ConversationStateService();
+      const svc = new CommsService(events as any, consent, conv, undefined);
+      conv.init('call-Z', { usn: 'USN-Z', language: 'en', callType: 'ABSENT_CALL', institutionId: 'rvce' });
+      conv.pushTurn('call-Z', 'AI', 'Hi', 'en');
+      conv.pushTurn('call-Z', 'PARENT', 'Hello', 'en');
+      svc.callLogs.push({
+        id: 'call-Z', studentUsn: 'USN-Z', studentName: 'X', parentId: '',
+        outcome: 'NO_ANSWER', duration: 0, calledAt: new Date().toISOString(),
+        institutionId: 'rvce',
+      });
+
+      const gem = require('../shared/gemini-ai');
+      const spy = jest.spyOn(gem, 'geminiGenerate').mockResolvedValue('Parent acknowledged.');
+
+      await svc.finalizeCall('call-Z', 'completed');
+      const log = svc.callLogs.find(c => c.id === 'call-Z')!;
+      expect(log.outcome).toBe('ANSWERED');
+      expect(log.transcript).toBeDefined();
+      expect(JSON.parse(log.transcript!)).toHaveLength(2);
+      expect(log.summary).toBe('Parent acknowledged.');
+      expect(events.emitAiCallCompleted).toHaveBeenCalledWith(
+        expect.objectContaining({ callId: 'call-Z', studentUsn: 'USN-Z' }),
+      );
+      expect(conv.get('call-Z')).toBeUndefined();
+      spy.mockRestore();
+    });
+
+    it('does NOT persist transcript when consent record exists without VOICE', async () => {
+      const events = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
+      const consent = new ConsentService(null);
+      const conv = new ConversationStateService();
+      const svc = new CommsService(events as any, consent, conv, undefined);
+      consent.grant('USN-NV', ['ATTENDANCE_ALERTS'], 'rvce');
+      conv.init('call-NV', { usn: 'USN-NV', language: 'en', callType: 'ABSENT_CALL', institutionId: 'rvce' });
+      conv.pushTurn('call-NV', 'AI', 'Hi', 'en');
+      svc.callLogs.push({
+        id: 'call-NV', studentUsn: 'USN-NV', studentName: 'X', parentId: '',
+        outcome: 'NO_ANSWER', duration: 0, calledAt: new Date().toISOString(),
+        institutionId: 'rvce',
+      });
+
+      await svc.finalizeCall('call-NV', 'completed');
+      const log = svc.callLogs.find(c => c.id === 'call-NV')!;
+      expect(log.transcript).toBeUndefined();
+      expect(log.summary).toBeUndefined();
     });
   });
 });

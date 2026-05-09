@@ -1,27 +1,92 @@
-import { BadRequestException, ForbiddenException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards, HttpCode } from '@nestjs/common';
 import type { Response } from 'express';
 import { CommsService } from './comms.service';
 import { ConsentService, ConsentChannel } from './consent.service';
+import { ConversationStateService } from './conversation-state.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StudentPortalService } from '../student-portal/student-portal.service';
 
+const BCP47_LANG: Record<string, string> = {
+  en: 'en-IN', kn: 'kn-IN', hi: 'hi-IN', ta: 'ta-IN', te: 'te-IN',
+};
+const POLLY_VOICE_EN = 'Polly.Aditi-Neural';
+
+function escXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 @Controller()
 class PublicCommsController {
-  constructor(private readonly svc: CommsService) {}
+  constructor(
+    private readonly svc: CommsService,
+    private readonly conversation: ConversationStateService,
+  ) {}
 
-  /** TwiML webhook — Twilio fetches this when call connects */
+  /** TwiML webhook — Twilio fetches this when call connects.
+   * Returns greeting + first <Gather>. Greeting playback uses Sarvam pre-gen
+   * audio (regional) or Polly.Aditi-Neural <Say> (English). */
   @ Get('comms/twiml/:callId')
   serveTwiml(@Param('callId') callId: string, @Res() res: Response) {
     const baseUrl = process.env['TWILIO_WEBHOOK_BASE_URL'] ?? process.env['APP_URL'] ?? 'http://localhost:3001';
-    const audioUrl = `${baseUrl}/api/comms/audio/${callId}`;
+    const state = this.conversation.get(callId);
+    const language = state?.language ?? 'en';
+    const langTag = BCP47_LANG[language] ?? 'en-IN';
+
+    let speakXml: string;
+    if (language === 'en') {
+      const greeting = state?.turns?.[0]?.text ?? 'Hello, this is EdAI calling from RVCE.';
+      speakXml = `<Say voice="${POLLY_VOICE_EN}" language="en-IN">${escXml(greeting)}</Say>`;
+    } else {
+      // Regional: greeting audio cached under the bare callId
+      speakXml = `<Play>${baseUrl}/api/comms/audio/${callId}</Play>`;
+    }
+
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<Response>${speakXml}` +
+      `<Gather input="speech" speechTimeout="auto" timeout="6" language="${langTag}" ` +
+      `action="${baseUrl}/api/comms/twiml/${callId}/turn" method="POST"></Gather></Response>`;
+
     res.type('text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Play>${audioUrl}</Play><Pause length="2"/><Hangup/></Response>`);
+    res.send(xml);
   }
 
-  /** Audio file endpoint — serves Sarvam AI generated WAV */
-  @ Get('comms/audio/:callId')
-  serveAudio(@Param('callId') callId: string, @Res() res: Response) {
-    const buf = this.svc.getAudio(callId);
+  /** Per-turn webhook — Twilio posts SpeechResult here after each <Gather>. */
+  @ Post('comms/twiml/:callId/turn')
+  async serveTurn(
+    @Param('callId') callId: string,
+    @Body() body: { SpeechResult?: string; CallStatus?: string; Digits?: string },
+    @Res() res: Response,
+  ) {
+    const speech = body?.SpeechResult ?? body?.Digits ?? '';
+    const xml = await this.svc.handleTurn(callId, speech, body?.CallStatus);
+    res.type('text/xml');
+    res.send(xml);
+  }
+
+  /** Twilio status callback — fires on completed/failed/no-answer/busy. */
+  @ Post('comms/twiml/:callId/status')
+  @ HttpCode(204)
+  async serveStatusCallback(
+    @Param('callId') callId: string,
+    @Body() body: { CallStatus?: string },
+  ) {
+    const status = body?.CallStatus;
+    if (status && ['completed', 'failed', 'no-answer', 'busy'].includes(status)) {
+      await this.svc.finalizeCall(callId, status);
+    }
+  }
+
+  /** Audio file endpoint — serves Sarvam AI generated WAV. Accepts `${callId}` (greeting)
+   * or `${callId}:${turnIdx}` (per-turn AI replies). */
+  @ Get('comms/audio/:key')
+  serveAudio(@Param('key') key: string, @Res() res: Response) {
+    const buf = this.svc.getAudio(key);
     if (!buf) { res.status(404).send('Audio not found'); return; }
     res.setHeader('Content-Type', 'audio/wav');
     res.setHeader('Content-Length', buf.length);

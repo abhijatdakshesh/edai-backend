@@ -348,36 +348,85 @@ describe('CommsController', () => {
 describe('PublicCommsController', () => {
   let publicController: PublicCommsController;
   const mockGetAudio = jest.fn();
+  const mockHandleTurn = jest.fn();
+  const mockFinalizeCall = jest.fn();
+  const mockConvGet = jest.fn();
 
   beforeEach(async () => {
     jest.clearAllMocks();
     const module = await Test.createTestingModule({
       controllers: [PublicCommsController],
-      providers: [{ provide: CommsService, useValue: { getAudio: mockGetAudio } }],
+      providers: [
+        { provide: CommsService, useValue: {
+          getAudio: mockGetAudio,
+          handleTurn: mockHandleTurn,
+          finalizeCall: mockFinalizeCall,
+        } },
+        { provide: require('./conversation-state.service').ConversationStateService, useValue: {
+          get: mockConvGet,
+        } },
+      ],
     }).compile();
     publicController = module.get(PublicCommsController);
   });
 
-  describe('serveTwiml()', () => {
-    it('returns text/xml with <Play> containing the callId audio URL', () => {
+  describe('serveTwiml() — interactive', () => {
+    it('returns regional TwiML with <Play> + <Gather> when language is kn', () => {
       process.env['TWILIO_WEBHOOK_BASE_URL'] = 'https://test.example.com';
+      mockConvGet.mockReturnValue({ language: 'kn', turns: [{ role: 'AI', text: 'ನಮಸ್ಕಾರ' }] });
       const res = { type: jest.fn(), send: jest.fn() } as any;
       publicController.serveTwiml('call-abc', res);
-      expect(res.type).toHaveBeenCalledWith('text/xml');
       const xml: string = res.send.mock.calls[0][0];
       expect(xml).toContain('<Play>');
       expect(xml).toContain('/api/comms/audio/call-abc');
-      expect(xml).toContain('<Hangup/>');
+      expect(xml).toContain('<Gather');
+      expect(xml).toContain('language="kn-IN"');
+      expect(xml).toContain('/api/comms/twiml/call-abc/turn');
       delete process.env['TWILIO_WEBHOOK_BASE_URL'];
+    });
+
+    it('returns English TwiML with <Say> + <Gather> when language is en', () => {
+      mockConvGet.mockReturnValue({ language: 'en', turns: [{ role: 'AI', text: 'Hello there' }] });
+      const res = { type: jest.fn(), send: jest.fn() } as any;
+      publicController.serveTwiml('call-en', res);
+      const xml: string = res.send.mock.calls[0][0];
+      expect(xml).toContain('<Say voice="Polly.Aditi-Neural"');
+      expect(xml).toContain('Hello there');
+      expect(xml).toContain('language="en-IN"');
+      expect(xml).toContain('<Gather');
     });
 
     it('falls back to APP_URL when TWILIO_WEBHOOK_BASE_URL absent', () => {
       delete process.env['TWILIO_WEBHOOK_BASE_URL'];
       process.env['APP_URL'] = 'https://app.example.com';
+      mockConvGet.mockReturnValue({ language: 'kn', turns: [] });
       const res = { type: jest.fn(), send: jest.fn() } as any;
       publicController.serveTwiml('call-xyz', res);
       expect(res.send.mock.calls[0][0]).toContain('https://app.example.com');
       delete process.env['APP_URL'];
+    });
+  });
+
+  describe('serveTurn()', () => {
+    it('forwards SpeechResult to svc.handleTurn and returns TwiML xml', async () => {
+      mockHandleTurn.mockResolvedValue('<Response><Say>ok</Say></Response>');
+      const res = { type: jest.fn(), send: jest.fn() } as any;
+      await publicController.serveTurn('call-1', { SpeechResult: 'hello' }, res);
+      expect(mockHandleTurn).toHaveBeenCalledWith('call-1', 'hello', undefined);
+      expect(res.type).toHaveBeenCalledWith('text/xml');
+      expect(res.send).toHaveBeenCalledWith('<Response><Say>ok</Say></Response>');
+    });
+  });
+
+  describe('serveStatusCallback()', () => {
+    it('invokes finalizeCall on terminal status', async () => {
+      await publicController.serveStatusCallback('call-1', { CallStatus: 'completed' });
+      expect(mockFinalizeCall).toHaveBeenCalledWith('call-1', 'completed');
+    });
+
+    it('ignores intermediate status events', async () => {
+      await publicController.serveStatusCallback('call-1', { CallStatus: 'ringing' });
+      expect(mockFinalizeCall).not.toHaveBeenCalled();
     });
   });
 
