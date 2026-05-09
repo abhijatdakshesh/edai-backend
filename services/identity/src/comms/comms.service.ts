@@ -43,18 +43,28 @@ export interface Message {
 }
 
 // ── Interactive-call defaults ────────────────────────────────────────────────
+// BCP47 tag used for Twilio <Gather language="..."> speech-to-text.
 const BCP47: Record<string, string> = {
   en: 'en-IN', kn: 'kn-IN', hi: 'hi-IN', ta: 'ta-IN', te: 'te-IN',
+  mr: 'mr-IN', bn: 'bn-IN', gu: 'gu-IN', ml: 'ml-IN', pa: 'pa-IN', or: 'or-IN',
 };
+// Sarvam target_language_code. NOTE: Odia is `od-IN` in Sarvam (not `or-IN`).
 const SARVAM_LANG: Record<string, string> = {
   hi: 'hi-IN', kn: 'kn-IN', ta: 'ta-IN', te: 'te-IN',
+  mr: 'mr-IN', bn: 'bn-IN', gu: 'gu-IN', ml: 'ml-IN', pa: 'pa-IN', or: 'od-IN',
 };
 const POLLY_VOICE_EN = 'Polly.Aditi-Neural';
 const MAX_TURNS = 6;
 const MAX_DURATION_MS = 4 * 60 * 1000;
-const STOP_INTENTS = /(stop|unsubscribe|cancel|no thanks|ಸಾಕು|बंद|रोको|நிறுத்து|ஆபు|ఆపు|वापस)/i;
+const STOP_INTENTS = /(stop|unsubscribe|cancel|no thanks|थांबा|বন্ধ|બંધ|നിർത്തുക|ਬੰਦ|ବନ୍ଦ|ಸಾಕು|बंद|रोको|நிறுத்து|ஆபు|ఆపు|वापस)/i;
 const GOODBYE_BY_LANG: Record<string, string> = {
   en: 'Thank you for your time. Goodbye.',
+  mr: 'तुमच्या वेळेबद्दल धन्यवाद. नमस्कार.',
+  bn: 'আপনার সময়ের জন্য ধন্যবাদ। নমস্কার।',
+  gu: 'તમારા સમય માટે આભાર. નમસ્તે.',
+  ml: 'നിങ്ങളുടെ സമയത്തിന് നന്ദി. നമസ്കാരം.',
+  pa: 'ਤੁਹਾਡੇ ਸਮੇਂ ਲਈ ਧੰਨਵਾਦ। ਨਮਸਤੇ।',
+  or: 'ଆପଣଙ୍କ ସମୟ ପାଇଁ ଧନ୍ୟବାଦ। ନମସ୍କାର।',
   hi: 'आपके समय के लिए धन्यवाद। नमस्ते।',
   kn: 'ಸಮಯಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.',
   ta: 'நேரத்திற்கு நன்றி. வணக்கம்.',
@@ -407,14 +417,15 @@ export class CommsService implements OnModuleInit {
   private buildSystemPrompt(recentTurns: Turn[], parentText: string, state: { usn: string; language: string; callType: string; knowledgeGraph?: unknown }): string {
     const kgJson = state.knowledgeGraph ? JSON.stringify(state.knowledgeGraph).slice(0, 1500) : '{}';
     const transcript = recentTurns.map(t => `${t.role}: ${t.text}`).join('\n');
+    const bcp47 = BCP47[state.language] ?? 'en-IN';
     return [
       `You are EdAI, calling on behalf of RV College of Engineering, Bengaluru.`,
-      `Speak in language code: ${state.language}.`,
+      `Speak in language: ${state.language} (BCP-47: ${bcp47}). Always reply ONLY in this language's native script.`,
       `Student USN: ${state.usn}. Reason for call: ${state.callType}.`,
       `Context (knowledge graph JSON): ${kgJson}`,
       `Recent transcript:\n${transcript}`,
       `Parent just said: ${parentText || '(no input)'}`,
-      `Reply in ${state.language}, ≤25 words. Always end with a question or polite goodbye.`,
+      `Reply in ${state.language} (${bcp47}), ≤25 words. Always end with a question or polite goodbye.`,
       `Never mention you are an AI unless asked. If parent says stop/no/unsubscribe, say goodbye and end.`,
     ].join('\n\n');
   }

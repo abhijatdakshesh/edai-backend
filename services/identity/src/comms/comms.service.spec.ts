@@ -267,6 +267,47 @@ describe('CommsService', () => {
       const result = await service.triggerCall('1RV21CS001', 'UNKNOWN_TYPE', 'rvce', 'en');
       expect(result.status).toBe('QUEUED');
     });
+
+    // ── Multi-language coverage (KAN-voice-multi-lang) ────────────────────────
+    // Verify that all 11 supported Indian languages can trigger a call without
+    // crashing, persist the language on the call log, and the regional path
+    // (non-`en`) attempts Sarvam audio generation with the correct
+    // target_language_code (od-IN for Odia, mr-IN/bn-IN/gu-IN/ml-IN/pa-IN otherwise).
+    describe.each([
+      { lang: 'mr', sarvam: 'mr-IN' },
+      { lang: 'bn', sarvam: 'bn-IN' },
+      { lang: 'gu', sarvam: 'gu-IN' },
+      { lang: 'ml', sarvam: 'ml-IN' },
+      { lang: 'pa', sarvam: 'pa-IN' },
+      { lang: 'or', sarvam: 'od-IN' },
+    ])('regional language: $lang', ({ lang, sarvam }) => {
+      it(`persists callLog.language=${lang} and calls Sarvam with target_language_code=${sarvam}`, async () => {
+        process.env['SARVAM_API_KEY'] = 'test-key';
+        const fetchSpy = jest.fn().mockResolvedValue({
+          json: () => Promise.resolve({ audios: [Buffer.from('fake').toString('base64')] }),
+        });
+        global.fetch = fetchSpy as never;
+
+        const before = service.callLogs.length;
+        await service.triggerCall('1RV21CS001', 'ABSENT_CALL', 'rvce', lang);
+
+        // Allow the fire-and-forget Sarvam → Twilio chain to flush.
+        await new Promise((r) => setImmediate(r));
+
+        expect(service.callLogs.length).toBe(before + 1);
+        const log = service.callLogs[service.callLogs.length - 1];
+        expect(log.language).toBe(lang);
+
+        const sarvamCall = fetchSpy.mock.calls.find(
+          (c) => typeof c[0] === 'string' && (c[0] as string).includes('sarvam.ai'),
+        );
+        expect(sarvamCall).toBeDefined();
+        const body = JSON.parse((sarvamCall![1] as { body: string }).body);
+        expect(body.target_language_code).toBe(sarvam);
+
+        delete process.env['SARVAM_API_KEY'];
+      });
+    });
   });
 
   // ─── sendSms ────────────────────────────────────────────────────────────────
@@ -585,6 +626,45 @@ describe('CommsService', () => {
       expect(aiTurn).toBeDefined();
       expect(aiTurn.text.split(/\s+/).length).toBeLessThanOrEqual(25);
       spy.mockRestore();
+    });
+
+    // ── BCP47 Gather tag for all new regional languages ───────────────────────
+    describe.each([
+      { lang: 'mr', tag: 'mr-IN' },
+      { lang: 'bn', tag: 'bn-IN' },
+      { lang: 'gu', tag: 'gu-IN' },
+      { lang: 'ml', tag: 'ml-IN' },
+      { lang: 'pa', tag: 'pa-IN' },
+      { lang: 'or', tag: 'or-IN' },
+    ])('handleTurn for $lang emits <Gather language="$tag">', ({ lang, tag }) => {
+      it(`returns <Gather language="${tag}"> for ${lang}`, async () => {
+        process.env['SARVAM_API_KEY'] = 'test-key';
+        // Sarvam returns a fake base64 audio so the regional Play branch executes.
+        global.fetch = jest.fn().mockResolvedValue({
+          json: () => Promise.resolve({ audios: [Buffer.from('fake').toString('base64')] }),
+        }) as never;
+
+        const conv2 = new ConversationStateService();
+        const consent2 = new ConsentService(null);
+        const svc2 = new CommsService(events as any, consent2, conv2, undefined);
+        conv2.init(`call-${lang}`, { usn: 'USNX', language: lang, callType: 'ABSENT_CALL', institutionId: 'rvce' });
+        conv2.pushTurn(`call-${lang}`, 'AI', 'greet', lang);
+
+        const gem = require('../shared/gemini-ai');
+        const spy = jest.spyOn(gem, 'geminiGenerate').mockResolvedValue('Reply.');
+
+        const xml = await svc2.handleTurn(`call-${lang}`, 'parent input');
+        expect(xml).toContain(`<Gather`);
+        expect(xml).toContain(`language="${tag}"`);
+
+        // Transcript: PARENT and AI turn both pushed.
+        const turns = conv2.get(`call-${lang}`)!.turns;
+        expect(turns.find(t => t.role === 'PARENT' && t.text === 'parent input')).toBeDefined();
+        expect(turns.find(t => t.role === 'AI' && t.text === 'Reply.')).toBeDefined();
+
+        spy.mockRestore();
+        delete process.env['SARVAM_API_KEY'];
+      });
     });
 
     it('hangs up when consent record exists but VOICE channel is missing', async () => {
