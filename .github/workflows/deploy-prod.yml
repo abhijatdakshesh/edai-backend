@@ -13,7 +13,7 @@ on:
 
 jobs:
   gate-check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.DEPLOY_RUNNER_LABEL || 'self-hosted' }}
     if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Validate confirmation
@@ -25,7 +25,7 @@ jobs:
   build-and-deploy:
     needs: [gate-check]
     if: always() && (needs.gate-check.result == 'success' || github.event_name == 'push')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.DEPLOY_RUNNER_LABEL || 'self-hosted' }}
     environment: production
 
     steps:
