@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
+import { geminiGenerate, GEMINI_FAST } from '../shared/gemini-ai';
 import { NaacService, CriterionResult } from './naac.service';
 
 // ─── NAAC Criterion context for prompt grounding ─────────────────────────────
@@ -164,8 +164,16 @@ Return ONLY the paragraph text. No preamble, no labels.`;
   ): Promise<string> {
     const prompt = this.buildPrompt(criterion, institutionName, affiliation);
     try {
-      const text = await geminiGenerate(prompt, GEMINI_SMART, 1024);
-      return text.trim() || this.fallbackParagraph(criterion);
+      // Switched to GEMINI_FAST + larger token cap. SSR paragraphs are
+      // 200-300 words — flash handles them in ~3-4s vs pro hitting empty
+      // responses or long latency under tight budgets (KAN-22).
+      const text = await geminiGenerate(prompt, GEMINI_FAST, 2048);
+      const trimmed = text.trim();
+      if (!trimmed) {
+        this.logger.warn(`[NAAC-SSR] Gemini returned empty paragraph for ${criterion.id}; using fallback`);
+        return this.fallbackParagraph(criterion);
+      }
+      return trimmed;
     } catch (err) {
       this.logger.warn(
         `[NAAC-SSR] Gemini call failed for ${criterion.id}: ${err instanceof Error ? err.message : String(err)}`,
