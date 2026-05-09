@@ -221,57 +221,53 @@ describe('ReportGeneratorService', () => {
       );
     });
 
-    it('when fetch to report-engine returns non-ok → updates FAILED row and re-throws', async () => {
+    it('when fetch to report-engine returns non-ok → falls back to raw XLSX (engine errors are swallowed)', async () => {
+      // Production now treats report-engine 5xx as "engine unreachable" and
+      // returns the raw XLSX so the user still gets a working file. The
+      // FAILED row is NOT written, and DONE is recorded as normal.
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-007' }])
         .mockResolvedValueOnce([studentRowWithSubject])
-        // UPDATE FAILED
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]); // UPDATE DONE
 
       mockFetchText.mockResolvedValueOnce('Bad Gateway');
       mockFetch.mockResolvedValueOnce(makeFetchResponse(false, 502));
 
-      await expect(
-        svc.generate('ATTENDANCE', {}, 'user-7'),
-      ).rejects.toThrow(InternalServerErrorException);
-
-      // UPDATE FAILED must be called with the genId
-      expect(mockQuery).toHaveBeenCalledWith(
+      const result = await svc.generate('ATTENDANCE', {}, 'user-7');
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(result.length).toBeGreaterThan(0);
+      expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
-        ['gen-007', expect.stringContaining('502')],
+        expect.anything(),
       );
     });
 
-    it('when fetch itself throws (network error) → updates FAILED row and re-throws', async () => {
+    it('when fetch itself throws (network error) → falls back to raw XLSX', async () => {
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-008' }])
         .mockResolvedValueOnce([])
-        // UPDATE FAILED
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]); // UPDATE DONE
 
       mockFetch.mockRejectedValueOnce(new Error('network timeout'));
 
-      await expect(
-        svc.generate('ATTENDANCE', {}, 'user-8'),
-      ).rejects.toThrow('network timeout');
-
-      expect(mockQuery).toHaveBeenCalledWith(
+      const result = await svc.generate('ATTENDANCE', {}, 'user-8');
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
-        ['gen-008', 'network timeout'],
+        expect.anything(),
       );
     });
 
-    it('when fetch returns non-ok and res.text() throws → .catch returns empty string, error still contains status', async () => {
-      // Covers the `.catch(() => '')` on line 271 of the service.
-      // text() rejects — the catch swallows it and txt becomes '', but the
-      // InternalServerErrorException still includes the status code.
+    it('when fetch returns non-ok and res.text() throws → still falls back to raw XLSX (engine errors swallowed)', async () => {
+      // The .catch(() => '') on res.text() still runs, but the resulting
+      // InternalServerErrorException is swallowed by the outer try/catch so
+      // the user gets a raw XLSX rather than a 500.
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-textfail' }])
         .mockResolvedValueOnce([])
-        // UPDATE FAILED
         .mockResolvedValueOnce([]);
 
       const textThrowingResponse = {
@@ -282,14 +278,16 @@ describe('ReportGeneratorService', () => {
       };
       mockFetch.mockResolvedValueOnce(textThrowingResponse);
 
-      await expect(svc.generate('ATTENDANCE', {}, 'user-textfail')).rejects.toThrow(
-        InternalServerErrorException,
-      );
+      const result = await svc.generate('ATTENDANCE', {}, 'user-textfail');
+      expect(Buffer.isBuffer(result)).toBe(true);
     });
 
-    it('when fetch returns non-ok and res.text() throws → error message contains 503 status code', async () => {
-      // Separate assertion so the second generate() call has its own fresh mocks.
+    it('when fetch returns non-ok and res.text() throws → engine error message includes 503', async () => {
+      // Even though the response is swallowed by callReportEngine, we can
+      // assert that the engine error path was taken by verifying the warn
+      // logger received a message with the status code.
       const svc = makeService();
+      const warnSpy = jest.spyOn((svc as any).logger, 'warn');
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-textfail2' }])
         .mockResolvedValueOnce([])
@@ -303,32 +301,32 @@ describe('ReportGeneratorService', () => {
       };
       mockFetch.mockResolvedValueOnce(textThrowingResponse2);
 
-      await expect(svc.generate('ATTENDANCE', {}, 'user-textfail2')).rejects.toThrow('503');
+      await svc.generate('ATTENDANCE', {}, 'user-textfail2');
+      const calls = warnSpy.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((m) => m.includes('503'))).toBe(true);
     });
 
     // -----------------------------------------------------------------------
     // AbortController — fetch receives the abort signal and rejects.
     // -----------------------------------------------------------------------
-    it('when AbortController timeout fires → fetch rejects with AbortError, FAILED row updated', async () => {
+    it('when AbortController timeout fires → fetch rejects with AbortError, falls back to raw XLSX', async () => {
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-abort' }])
         .mockResolvedValueOnce([])
-        // UPDATE FAILED
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]); // UPDATE DONE
 
-      // Simulate fetch that respects the AbortSignal — immediately rejects so
-      // the test does not wait 30 seconds.
       const abortError = new DOMException('The operation was aborted.', 'AbortError');
       mockFetch.mockImplementationOnce((_url: string, _opts: { signal: AbortSignal }) => {
         return Promise.reject(abortError);
       });
 
-      await expect(svc.generate('ATTENDANCE', {}, 'user-abort')).rejects.toThrow();
-
-      expect(mockQuery).toHaveBeenCalledWith(
+      // Engine errors are now swallowed — generate resolves with raw XLSX.
+      const result = await svc.generate('ATTENDANCE', {}, 'user-abort');
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
-        ['gen-abort', expect.any(String)],
+        expect.anything(),
       );
     });
 
@@ -340,17 +338,16 @@ describe('ReportGeneratorService', () => {
     // IMPORTANT: attach .catch before runAllTimersAsync to avoid an
     // unhandled-rejection warning from the interim rejection propagation.
     // -----------------------------------------------------------------------
-    it('setTimeout abort callback (line 261) fires → controller.abort() is called', async () => {
+    it('setTimeout abort callback (line 261) fires → controller.abort() is called and result falls back to raw XLSX', async () => {
       jest.useFakeTimers();
 
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-cb-abort' }])
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]); // UPDATE FAILED
+        .mockResolvedValueOnce([]); // UPDATE DONE
 
       // fetch returns a Promise that rejects as soon as the AbortSignal fires.
-      // controller.abort() dispatches the 'abort' event synchronously.
       mockFetch.mockImplementationOnce((_url: string, opts: { signal: AbortSignal }) => {
         return new Promise<never>((_res, rej) => {
           opts.signal.addEventListener('abort', () =>
@@ -359,21 +356,14 @@ describe('ReportGeneratorService', () => {
         });
       });
 
-      // Start generate — attach catch immediately to prevent unhandled rejection.
       const generatePromise = svc.generate('ATTENDANCE', {}, 'user-cb-abort');
-      // Suppress the unhandled rejection during timer execution
-      const safePromise = generatePromise.catch(() => {});
 
       // Fire the 30-second timeout and flush all resulting microtasks.
       await jest.runAllTimersAsync();
-      await safePromise;
 
-      // Now verify the outcome
-      await expect(generatePromise).rejects.toThrow();
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("'FAILED'"),
-        ['gen-cb-abort', expect.any(String)],
-      );
+      // Engine errors are swallowed — generate resolves with a Buffer.
+      const result = await generatePromise;
+      expect(Buffer.isBuffer(result)).toBe(true);
 
       jest.useRealTimers();
     }, 15_000);
@@ -392,20 +382,25 @@ describe('ReportGeneratorService', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1);
     });
 
-    it('when UPDATE FAILED itself throws → error is swallowed, primary error propagates', async () => {
-      // The primary fetch failure triggers the catch block which calls UPDATE FAILED.
-      // That UPDATE FAILED query itself rejects — the `.catch(() => {})` swallows it.
-      // The original primary error must still propagate to the caller.
+    it('when UPDATE DONE itself throws after engine fallback → DB error propagates and FAILED-update is best-effort', async () => {
+      // Engine errors are swallowed (raw XLSX returned), then UPDATE DONE
+      // runs. If UPDATE DONE rejects, the error propagates to the outer
+      // catch which calls UPDATE FAILED with .catch(...). Stub all four
+      // queries so the .catch chain has a real Promise to attach to.
       const svc = makeService();
       mockQuery
         .mockResolvedValueOnce([{ id: 'gen-010' }])
-        .mockResolvedValueOnce([])           // buildAttendanceExcel rows
-        .mockRejectedValueOnce(new Error('update failed — swallowed')); // UPDATE FAILED throws
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('update done — propagates'))
+        .mockResolvedValueOnce([]); // UPDATE FAILED (best-effort)
 
       mockFetch.mockRejectedValueOnce(new Error('primary error'));
 
-      // The primary error must propagate; the FAILED-update error is swallowed.
-      await expect(svc.generate('ATTENDANCE', {}, 'user-10')).rejects.toThrow('primary error');
+      await expect(svc.generate('ATTENDANCE', {}, 'user-10')).rejects.toThrow('update done — propagates');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("'FAILED'"),
+        ['gen-010', expect.stringContaining('update done')],
+      );
     });
 
     it('student with a second subject not in subjectNames triggers dataRow fallback branch', async () => {

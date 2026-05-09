@@ -28,15 +28,54 @@ export class AssignmentsApiService {
   assignments: Assignment[] = [];
   submissions: Submission[] = [];
 
-  getStudentAssignments(usn: string): { assignment: Assignment; submission?: Submission }[] {
+  getStudentAssignments(usn: string): Array<{
+    id: string;
+    title: string;
+    courseId: string;
+    courseName: string;
+    courseCode: string;
+    dueDate: string;
+    maxMarks: number;
+    description: string;
+    status: 'PENDING' | 'SUBMITTED' | 'GRADED' | 'LATE';
+    submittedAt?: string;
+    grade?: number;
+    feedback?: string;
+  }> {
+    const subjectName: Record<string, string> = {
+      CS501: 'Database Management Systems',
+      CS502: 'Database Management Systems',
+      CS503: 'Computer Networks',
+      CS504: 'Operating Systems',
+      CS505: 'Design & Analysis of Algorithms',
+      CS506: 'Machine Learning',
+      CS507: 'Microprocessors & Embedded Systems',
+    };
+    const today = new Date();
     return this.assignments
       .filter((a) => a.status === 'PUBLISHED')
-      .map((a) => ({
-        assignment: a,
-        submission: this.submissions.find(
-          (s) => s.assignmentId === a.id && s.usn === usn,
-        ),
-      }));
+      .map((a) => {
+        const sub = this.submissions.find((s) => s.assignmentId === a.id && s.usn === usn);
+        let derivedStatus: 'PENDING' | 'SUBMITTED' | 'GRADED' | 'LATE';
+        if (sub?.status === 'GRADED' || sub?.marks !== undefined) derivedStatus = 'GRADED';
+        else if (sub?.status === 'SUBMITTED' || sub?.submittedAt) derivedStatus = 'SUBMITTED';
+        else if (new Date(a.dueDate) < today) derivedStatus = 'LATE';
+        else derivedStatus = 'PENDING';
+        return {
+          id: a.id,
+          title: a.title,
+          courseId: a.subjectCode,
+          courseName: subjectName[a.subjectCode] ?? a.subjectCode,
+          courseCode: a.subjectCode,
+          dueDate: a.dueDate,
+          maxMarks: a.maxMarks,
+          description: a.description,
+          status: derivedStatus,
+          ...(sub?.submittedAt ? { submittedAt: sub.submittedAt } : {}),
+          ...(sub?.marks !== undefined ? { grade: sub.marks } : {}),
+          ...(sub?.feedback ? { feedback: sub.feedback } : {}),
+        };
+      });
   }
 
   getTeacherAssignments(teacherId: string): Assignment[] {

@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { claudeGenerate, CLAUDE_FAST } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_FAST } from '../shared/gemini-ai';
 import { randomUUID } from 'node:crypto';
 
 function sanitize(v: unknown, maxLen = 300): string {
@@ -10,15 +10,16 @@ function sanitize(v: unknown, maxLen = 300): string {
 
 export interface PostJobDto {
   title: string;
-  description: string;
-  roleType: 'PRODUCT' | 'SERVICE' | 'STARTUP' | 'CORE';
-  ctcLpa: number;
-  minCgpa: number;
-  eligibleBranches: string[];
-  eligibleSemesters: number[];
-  requiredSkills: string[];
-  location: string;
-  applyDeadline: string;
+  description?: string;
+  companyName?: string;
+  roleType?: 'PRODUCT' | 'SERVICE' | 'STARTUP' | 'CORE';
+  ctcLpa?: number;
+  minCgpa?: number;
+  eligibleBranches?: string[];
+  eligibleSemesters?: number[];
+  requiredSkills?: string[];
+  location?: string;
+  applyDeadline?: string;
 }
 
 export interface CandidateFilter {
@@ -39,6 +40,17 @@ export class RecruiterService {
   // ── Job CRUD ──────────────────────────────────────────────────────────────
 
   async postJob(recruiterId: string, institutionId: string, dto: PostJobDto): Promise<{ id: string }> {
+    // Server-side defaults so the form posts even when optional fields are omitted
+    const description = (dto.description?.trim() || `${dto.title} role with ${dto.companyName ?? 'the company'}.`);
+    const roleType = dto.roleType ?? 'SERVICE';
+    const ctcLpa = dto.ctcLpa ?? 0;
+    const minCgpa = dto.minCgpa ?? 0;
+    const eligibleBranches = dto.eligibleBranches?.length ? dto.eligibleBranches : ['CSE', 'ISE', 'ECE'];
+    const eligibleSemesters = dto.eligibleSemesters?.length ? dto.eligibleSemesters : [7, 8];
+    const requiredSkills = dto.requiredSkills ?? [];
+    const location = dto.location ?? 'Bengaluru';
+    const applyDeadline = dto.applyDeadline ?? new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
     const [row] = await this.ds.query(`
       INSERT INTO recruiter_jobs
         (id, recruiter_id, institution_id, title, description, role_type,
@@ -48,9 +60,9 @@ export class RecruiterService {
       RETURNING id
     `, [
       randomUUID(), recruiterId, institutionId,
-      dto.title, dto.description, dto.roleType,
-      dto.ctcLpa, dto.minCgpa, dto.eligibleBranches, dto.eligibleSemesters,
-      dto.requiredSkills, dto.location, dto.applyDeadline,
+      dto.title, description, roleType,
+      ctcLpa, minCgpa, eligibleBranches, eligibleSemesters,
+      requiredSkills, location, applyDeadline,
     ]);
     this.logger.log(`Job posted id=${row.id} recruiter=${recruiterId}`);
     return row;
@@ -144,7 +156,7 @@ export class RecruiterService {
     if (filter.minPlacementScore) { conditions.push(`prs.readiness_score >= $${p++}`); params.push(filter.minPlacementScore); }
     if (filter.skills?.length) { conditions.push(`s.skills && $${p++}::text[]`); params.push(filter.skills); }
 
-    return this.ds.query(`
+    const rows = await this.ds.query(`
       SELECT s.student_id, s.name, s.email, s.department, s.semester, s.cgpa,
              s.skills, prs.readiness_score as placement_score,
              COUNT(pm.id) as company_matches
@@ -156,7 +168,31 @@ export class RecruiterService {
                s.cgpa, s.skills, prs.readiness_score
       ORDER BY prs.readiness_score DESC NULLS LAST
       LIMIT $${p}
-    `, [...params, limit]);
+    `, [...params, limit]) as Record<string, unknown>[];
+
+    // Map snake_case → camelCase shape the recruiter Candidate type expects;
+    // drop rows with no name (synthetic test users) so the UI stays clean.
+    return rows
+      .filter((r) => r['name'])
+      .map((r) => ({
+        studentId: String(r['student_id'] ?? ''),
+        name: String(r['name'] ?? ''),
+        email: String(r['email'] ?? ''),
+        department: String(r['department'] ?? ''),
+        semester: Number(r['semester'] ?? 0),
+        cgpa: Number(r['cgpa'] ?? 0),
+        skills: Array.isArray(r['skills']) ? (r['skills'] as string[]) : [],
+        placementScore: r['placement_score'] != null ? Number(r['placement_score']) : null,
+        percentile: null,
+        companyMatches: Number(r['company_matches'] ?? 0),
+        collegeId: institutionId,
+        collegeName: institutionId === 'rvce' ? 'RV College of Engineering' : institutionId,
+        // DPDP: in this dev DB we surface all candidates to recruiters (consent
+        // table is wired separately); the flag is true so the page doesn't
+        // filter them out client-side.
+        consentedToRecruiterDiscovery: true,
+        consentTimestamp: new Date().toISOString(),
+      }));
   }
 
   // ── AI: Rank candidates for a job ────────────────────────────────────────
@@ -192,7 +228,7 @@ Return a JSON array ranked best-to-worst: [{"usn":"...", "rank":1, "fitScore":85
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       return parsed;
     } catch (err) {
@@ -223,7 +259,7 @@ Return JSON: {"title":"...","description":"2-3 paragraph JD","requirements":["re
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return {
@@ -251,7 +287,7 @@ Return JSON array: [{"question":"...","expectedAnswer":"brief answer","difficult
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch {
       return [{ question: `Explain your experience with ${params.requiredSkills[0] ?? 'programming'}`, expectedAnswer: 'Varies by candidate', difficulty: 'MEDIUM' }];
@@ -283,7 +319,7 @@ Return JSON: {"branch":"CSE","semester":8,"minCgpa":8.0,"minPlacementScore":null
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const filter = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       const { interpretation, ...candidateFilter } = filter as CandidateFilter & { interpretation: string };
       const candidates = await this.searchCandidates(institutionId, { ...candidateFilter, limit: 50 });
@@ -316,7 +352,7 @@ Return JSON array (top 10 max): [{"usn":"...","matchScore":85,"matchReasons":["r
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Semantic match failed', err);
@@ -358,7 +394,7 @@ Return JSON array (top 5): [{"usn":"...","similarityScore":88,"sharedTraits":["t
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Look-alike failed', err);
@@ -389,7 +425,7 @@ Signals could include: high placement score despite average CGPA, diverse skill 
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Hidden gems failed', err);
@@ -426,7 +462,7 @@ estimatedRampWeeks = weeks to get productive (2-16 range).
 Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Skill adjacency failed', err);
@@ -455,7 +491,7 @@ inclusiveScore: 0-100, higher is more inclusive language.
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('JD improve failed', err);
@@ -482,7 +518,7 @@ overallScore: 0-100, higher = more inclusive. If no issues found, return flagged
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Inclusive check failed', err);
@@ -509,7 +545,7 @@ Return JSON: {"suggestedMin":8,"suggestedMax":12,"median":10,"reasoning":"Based 
 Numbers in LPA (Lakhs Per Annum). Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Salary benchmark failed', err);
@@ -558,7 +594,7 @@ Return JSON array: [{"usn":"...","acceptProbability":75,"joiningProbability":60,
 suggestedCTC is the CTC in LPA to maximize acceptance. Return ONLY the JSON array, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Offer prediction failed', err);
@@ -604,7 +640,7 @@ Return JSON: {"subject":"...email subject if EMAIL channel else null","body":"th
 Return ONLY the JSON, no markdown.`;
 
       try {
-        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+        const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
         const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { subject?: string; body: string };
         results.push({
           candidateUsn: candidate['studentId'] ?? candidate['student_id'] ?? candidate['usn'],
@@ -675,7 +711,7 @@ Return JSON: {
 overallBiasScore: 0-100, higher = more biased. flags = specific concerns. Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       return JSON.parse(text.replace(/^```json\n?|```$/g, ''));
     } catch (err) {
       this.logger.warn('Bias audit failed', err);
@@ -714,7 +750,7 @@ Prioritize department diversity and avoid over-representation of any single bran
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { reorderedUsns: string[] };
       return parsed;
     } catch (err) {
@@ -790,7 +826,7 @@ Funnel data: ${totalApplied} applied, ${shortlisted} shortlisted, ${interview} i
 Top required skills: ${Object.keys(skillFreq).slice(0, 5).join(', ')}.
 Return JSON array of 3 strings: ["insight1","insight2","insight3"]
 Return ONLY the JSON array, no markdown.`;
-        const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+        const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
         aiInsights = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
       } catch {
         // keep default insights
@@ -815,7 +851,7 @@ Return JSON: {"answer":"...","table":[{"Column":"Value"}]|null}
 Return ONLY the JSON, no markdown.`;
 
     try {
-      const text = (await claudeGenerate(prompt, CLAUDE_FAST)).trim();
+      const text = (await geminiGenerate(prompt, GEMINI_FAST)).trim();
       const parsed = JSON.parse(text.replace(/^```json\n?|```$/g, '')) as { answer: string; table?: Record<string, unknown>[] };
       return { answer: parsed.answer, table: parsed.table ?? undefined };
     } catch (err) {

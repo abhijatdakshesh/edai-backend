@@ -80,7 +80,7 @@ export class StudentPortalService {
     try {
       const asnData = this.assignmentsSvc.getStudentAssignments(usn);
       pendingAssignments = asnData.filter(
-        (a) => !a.submission || a.submission.status === 'PENDING',
+        (a) => a.status === 'PENDING' || a.status === 'LATE',
       ).length;
     } catch {
       pendingAssignments = 0;

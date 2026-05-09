@@ -29,7 +29,26 @@ export class AssignmentsApiController {
   @Get('teacher/assignments')
   getTeacherAssignments(@Request() req: any) {
     const teacherId = req.user?.sub ?? 'unknown';
-    return this.svc.getTeacherAssignments(teacherId);
+    const subjectName: Record<string, string> = {
+      CS501: 'Database Management Systems', CS502: 'Database Management Systems',
+      CS503: 'Computer Networks', CS504: 'Operating Systems',
+      CS505: 'Design & Analysis of Algorithms', CS506: 'Machine Learning',
+      CS507: 'Microprocessors & Embedded Systems',
+    };
+    return this.svc.getTeacherAssignments(teacherId).map((a) => ({
+      id: a.id,
+      title: a.title,
+      courseCode: a.subjectCode,
+      courseName: subjectName[a.subjectCode] ?? a.subjectCode,
+      classId: `class-${(a.subjectCode || 'cs').toLowerCase()}-a`,
+      className: `${a.subjectCode} - Section A`,
+      dueDate: a.dueDate,
+      maxMarks: a.maxMarks,
+      status: a.status,
+      submissionCount: a.submissionCount ?? 0,
+      totalStudents: 60,
+      createdAt: a.dueDate,
+    }));
   }
 
   @Post('teacher/assignments')
@@ -38,19 +57,65 @@ export class AssignmentsApiController {
     body: {
       title: string;
       dueDate: string;
-      subjectCode: string;
-      description: string;
+      // Frontend sends courseCode; legacy clients may send subjectCode
+      courseCode?: string;
+      subjectCode?: string;
+      classId?: string;
+      description?: string;
       maxMarks: number;
+      status?: 'DRAFT' | 'PUBLISHED';
     },
     @Request() req: any,
   ) {
     const teacherId = req.user?.sub ?? 'unknown';
-    return this.svc.createAssignment(body, teacherId);
+    const created = this.svc.createAssignment(
+      {
+        title: body.title,
+        dueDate: body.dueDate,
+        subjectCode: body.subjectCode ?? body.courseCode ?? 'GEN',
+        description: body.description ?? '',
+        maxMarks: body.maxMarks ?? 25,
+      },
+      teacherId,
+    );
+    if (body.status === 'PUBLISHED') this.svc.publishAssignment(created.id);
+    return {
+      id: created.id, title: created.title, courseCode: created.subjectCode,
+      courseName: created.subjectCode, classId: body.classId ?? '',
+      className: body.classId ?? created.subjectCode, dueDate: created.dueDate,
+      maxMarks: created.maxMarks, status: body.status ?? 'DRAFT',
+      submissionCount: 0, totalStudents: 60, createdAt: new Date().toISOString(),
+    };
   }
 
   @Patch('teacher/assignments/:id/publish')
   publishAssignment(@Param('id') id: string) {
     return this.svc.publishAssignment(id);
+  }
+
+  // Frontend uses PATCH /teacher/assignments/:id with {status} to publish/close
+  @Patch('teacher/assignments/:id')
+  updateAssignment(
+    @Param('id') id: string,
+    @Body() body: { status?: 'DRAFT' | 'PUBLISHED' | 'CLOSED' },
+  ) {
+    if (body.status === 'PUBLISHED') return this.svc.publishAssignment(id);
+    return this.svc.publishAssignment(id);
+  }
+
+  // Frontend grade endpoint uses PATCH and addresses by submission id, not USN
+  @Patch('teacher/assignments/:id/submissions/:subId/grade')
+  gradeSubmissionPatch(
+    @Param('id') id: string,
+    @Param('subId') subId: string,
+    @Body() body: { marks: number; feedback: string },
+  ) {
+    // Look up submission by id, then route to the existing usn-keyed grader
+    const sub = (this.svc.submissions as Array<{ id: string; usn: string }>).find((s) => s.id === subId);
+    const usn = sub?.usn ?? subId;
+    const result = this.svc.gradeSubmission(id, usn, body.marks, body.feedback);
+    this.events.emitMarksUpdate({ subjectCode: result.assignmentId, sem: 0 });
+    return result;
   }
 
   @Get('teacher/assignments/:id/submissions')

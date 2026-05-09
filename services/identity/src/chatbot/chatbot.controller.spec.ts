@@ -12,6 +12,7 @@ const mockChatbotSvc = {
   getSessions: jest.fn(),
   recordConsent: jest.fn(),
   getHistory: jest.fn(),
+  askPublic: jest.fn(),
 };
 
 const mockKgSvc = {
@@ -134,13 +135,15 @@ describe('ChatbotController', () => {
       expect(res.message).toBe('Admin response');
     });
 
-    it('throws for unsupported role', async () => {
-      await expect(
-        controller.restChat(
-          { user: { sub: 'GUEST001', role: 'GUEST' } },
-          { message: 'Hi' },
-        ),
-      ).rejects.toThrow('Unsupported role');
+    it('falls back to public askPublic for unsupported role', async () => {
+      mockChatbotSvc.askPublic.mockResolvedValue('Public reply');
+      const res = await controller.restChat(
+        { user: { sub: 'GUEST001', role: 'GUEST' } },
+        { message: 'Hi' },
+      );
+      expect(mockChatbotSvc.askPublic).toHaveBeenCalledWith('Hi');
+      expect(res.message).toBe('Public reply');
+      expect(res.conversationId).toMatch(/^public-/);
     });
 
     it('includes timestamp in response', async () => {

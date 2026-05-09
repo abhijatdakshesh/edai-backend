@@ -73,22 +73,40 @@ export class ChatbotController {
   @UseGuards(JwtAuthGuard)
   @Post('message')
   async restChat(
-    @Req() req: { user: { sub: string; role?: string } },
+    @Req() req: { user: { sub: string; role?: string; sapId?: string; phone?: string; email?: string; empCode?: string } },
     @Body() body: { message: string; conversationId?: string },
   ): Promise<{ conversationId: string; message: string; timestamp: string }> {
-    const { sub: identifier, role = 'STUDENT' } = req.user;
-
+    const { sub, role = 'STUDENT', sapId, phone, email, empCode } = req.user;
+    // Resolve the right identifier per role — student/teacher graphs key on
+    // domain identifiers (USN/empCode/phone), NOT the auth UUID `sub`.
+    let identifier = sub;
     let graph;
-    if (role === 'STUDENT') {
-      graph = await this.kgService.buildStudentGraph(identifier);
-    } else if (role === 'TEACHER' || role === 'FACULTY' || role === 'HOD') {
-      graph = await this.kgService.buildTeacherGraph(identifier);
-    } else if (role === 'PARENT') {
-      graph = await this.kgService.buildParentGraph(identifier);
-    } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
-      graph = await this.kgService.buildAdminGraph(identifier);
-    } else {
-      throw new Error('Unsupported role for chatbot');
+    try {
+      if (role === 'STUDENT') {
+        identifier = sapId || sub;
+        graph = await this.kgService.buildStudentGraph(identifier);
+      } else if (role === 'TEACHER' || role === 'FACULTY' || role === 'HOD') {
+        identifier = empCode || email || sub;
+        graph = await this.kgService.buildTeacherGraph(identifier);
+      } else if (role === 'PARENT') {
+        identifier = (phone || '').replace(/\D/g, '') || sub;
+        graph = await this.kgService.buildParentGraph(identifier);
+      } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
+        graph = await this.kgService.buildAdminGraph(sub);
+      } else {
+        throw new Error('Unsupported role for chatbot');
+      }
+    } catch (err) {
+      // Graph build failed (e.g. demo user missing in students table) — fall
+      // back to a minimal graph so the user still gets a personalised reply
+      // rather than a public-mode answer.
+      graph = role === 'STUDENT'
+        ? await this.kgService.buildStudentGraph(sapId || sub).catch(() => null)
+        : null;
+      if (!graph) {
+        const reply = await this.chatbotService.askPublic(body.message);
+        return { conversationId: 'public-' + Date.now(), message: reply, timestamp: new Date().toISOString() };
+      }
     }
 
     const conversationId = body.conversationId
@@ -100,6 +118,18 @@ export class ChatbotController {
     });
 
     return { conversationId, message: fullResponse, timestamp: new Date().toISOString() };
+  }
+
+  // PUBLIC — anonymous chatbot for pre-login visitors. Returns college-info-only
+  // answers (no student PII, no DB lookups). Rate-limit at gateway / WAF.
+  @Post('public/ask')
+  async publicAsk(
+    @Body() body: { message: string },
+  ): Promise<{ message: string; timestamp: string }> {
+    const message = (body?.message ?? '').toString().trim();
+    if (!message) return { message: 'Please ask a question.', timestamp: new Date().toISOString() };
+    const reply = await this.chatbotService.askPublic(message);
+    return { message: reply, timestamp: new Date().toISOString() };
   }
 
   // Admin: list chat sessions

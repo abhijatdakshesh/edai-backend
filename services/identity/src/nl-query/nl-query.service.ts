@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, InternalServerErrorException, Optional, Inject } from '@nestjs/common';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
 
 const SCHEMA_CONTEXT = `
 You are a PostgreSQL expert for EdAI, an Indian college ERP (RVCE, Bangalore).
@@ -100,7 +100,7 @@ export class NlQueryService {
   private async generateSql(question: string): Promise<string> {
     try {
       const combined = `${SCHEMA_CONTEXT}\n\nQuestion: ${question}`;
-      const raw = await claudeGenerate(combined, CLAUDE_SMART);
+      const raw = await geminiGenerate(combined, GEMINI_SMART);
       const text = raw;
       if (!text?.trim()) throw new InternalServerErrorException('No SQL generated');
       return text.trim().replace(/^```(?:sql)?\n?/i, '').replace(/\n?```$/i, '').trim();

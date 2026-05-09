@@ -83,8 +83,36 @@ export class WellnessService {
     );
   }
 
-  getStudyPlan(usn: string): { tasks: StudyTask[] } {
-    return { tasks: this.studyTasks.filter((t) => t.usn === usn) };
+  getStudyPlan(usn: string): {
+    id: string;
+    studentUsn: string;
+    generatedAt: string;
+    streakDays: number;
+    totalTasks: number;
+    completedTasks: number;
+    tasks: Array<{
+      id: string; subjectId: string; subjectName: string; topic: string;
+      scheduledDate: string; durationMins: number; completed: boolean; completedAt?: string;
+    }>;
+  } {
+    const tasks = this.studyTasks.filter((t) => t.usn === usn);
+    return {
+      id: `plan-${usn}`,
+      studentUsn: usn,
+      generatedAt: new Date().toISOString(),
+      streakDays: 0,
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((t) => t.done).length,
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        subjectId: t.subject.toLowerCase().replace(/\s+/g, '-'),
+        subjectName: t.subject,
+        topic: t.title,
+        scheduledDate: t.dueDate,
+        durationMins: 60,
+        completed: t.done,
+      })),
+    };
   }
 
   updateTask(taskId: string, done: boolean): StudyTask {
@@ -117,9 +145,47 @@ export class WellnessService {
 
   generateStudyPlan(
     usn: string,
-    examDate: string,
-    subjects: string[],
-  ): { tasks: StudyTask[] } {
+    examDate?: string,
+    subjects?: string[],
+  ) {
+    // Wipe any prior plan for this student so "Generate New Plan" feels fresh
+    this.studyTasks = this.studyTasks.filter((t) => t.usn !== usn);
+
+    const subjectList = subjects && subjects.length
+      ? subjects
+      : ['Database Management Systems', 'Operating Systems', 'Computer Networks', 'Design & Analysis of Algorithms', 'Machine Learning'];
+
+    const now = new Date();
+    const target = examDate ? new Date(examDate) : new Date(now.getTime() + 14 * 86_400_000);
+    const dayMs = 86_400_000;
+    const totalDays = Math.max(7, Math.min(21, Math.ceil((target.getTime() - now.getTime()) / dayMs)));
+
+    const topics: Record<string, string[]> = {
+      'Database Management Systems': ['Normalization revision', 'SQL joins practice', 'Transactions & locking'],
+      'Operating Systems': ['Process scheduling', 'Page replacement algorithms', 'Deadlock handling'],
+      'Computer Networks': ['TCP/IP stack revision', 'Routing protocols', 'Network security basics'],
+      'Design & Analysis of Algorithms': ['Dynamic programming patterns', 'Greedy algorithms', 'Graph traversal problems'],
+      'Machine Learning': ['Linear regression refresher', 'Decision trees', 'Confusion matrix & metrics'],
+    };
+
+    let i = 0;
+    for (const subject of subjectList) {
+      const subjectTopics = topics[subject] ?? ['General revision', 'Past paper practice', 'Mock test'];
+      for (const topic of subjectTopics) {
+        const day = i % totalDays;
+        const scheduled = new Date(now.getTime() + day * dayMs).toISOString().slice(0, 10);
+        this.studyTasks.push({
+          id: `task-${usn}-${i}`,
+          usn,
+          subject,
+          title: topic,
+          done: false,
+          dueDate: scheduled,
+        });
+        i++;
+      }
+    }
+
     return this.getStudyPlan(usn);
   }
 }

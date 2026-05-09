@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VtuController } from './vtu.controller';
 import { VtuService } from './vtu.service';
 import { EventsGateway } from '../events/events.gateway';
+import { VtuNotificationsService } from './vtu-notifications.service';
 
 const mockSvc = {
   getAllWindows: jest.fn(),
@@ -17,6 +18,13 @@ const mockSvc = {
 
 const mockEvents = { emitVtuWindowOpened: jest.fn() };
 
+const mockNotifications = {
+  notifyWindowOpened: jest.fn(),
+  notifyEligibilityResults: jest.fn(),
+  sendReminder: jest.fn(),
+  sendBulkReminders: jest.fn(),
+};
+
 describe('VtuController', () => {
   let controller: VtuController;
 
@@ -27,6 +35,7 @@ describe('VtuController', () => {
       providers: [
         { provide: VtuService, useValue: mockSvc },
         { provide: EventsGateway, useValue: mockEvents },
+        { provide: VtuNotificationsService, useValue: mockNotifications },
       ],
     })
       .overrideGuard(require('../auth/jwt-auth.guard').JwtAuthGuard)

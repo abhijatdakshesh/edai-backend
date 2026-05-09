@@ -264,9 +264,10 @@ describe('ChatbotService', () => {
       expect(id).toBe('conv-new');
     });
 
-    it('throws when db is null', async () => {
+    it('returns synthetic ephemeral ID when db is null', async () => {
       const svcNoDb = new ChatbotService(null);
-      await expect(svcNoDb.getOrCreateConversation('USN001', 'STUDENT', 'WEB')).rejects.toThrow('No database');
+      const id = await svcNoDb.getOrCreateConversation('USN001', 'STUDENT', 'WEB');
+      expect(id).toMatch(/^eph-USN001-\d+$/);
     });
   });
 

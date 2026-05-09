@@ -54,7 +54,40 @@ export class IaController {
 
   @Get('ia/submissions')
   getAllSubmissions() {
-    return this.svc.getAllSubmissions();
+    const teacherMeta: Record<string, { name: string; dept: string }> = {
+      'u-faculty-01': { name: 'Rajesh Kumar', dept: 'CSE' },
+      'teacher-002':  { name: 'Dr. Lakshmi Devi', dept: 'CSE' },
+      'teacher-003':  { name: 'Prof. Suresh Kumar', dept: 'CSE' },
+      'teacher-004':  { name: 'Dr. Meena Iyer', dept: 'CSE' },
+      'teacher-005':  { name: 'Dr. Raj Patel', dept: 'CSE' },
+    };
+    const subjectName: Record<string, string> = {
+      CS501: 'Data Structures & Algorithms',
+      CS502: 'Database Management Systems',
+      CS503: 'Computer Networks',
+      CS504: 'Operating Systems',
+      CS505: 'Software Engineering',
+      CS506: 'Machine Learning',
+      CS507: 'Microprocessors & Embedded Systems',
+    };
+    return this.svc.getAllSubmissions().map((s) => {
+      const meta = teacherMeta[s.teacherId] ?? { name: s.teacherId, dept: '—' };
+      return {
+        id: s.id,
+        teacherId: s.teacherId,
+        teacherName: meta.name,
+        subjectId: s.subjectCode,
+        subjectCode: s.subjectCode,
+        subjectName: subjectName[s.subjectCode] ?? s.subjectCode,
+        dept: meta.dept,
+        status: s.status === 'DRAFT' ? 'DRAFT' : s.status,
+        submittedAt: s.submittedAt,
+        confirmedAt: s.status === 'CONFIRMED' ? s.submittedAt : undefined,
+        // Demo defaults — wire to real attendance/marks counts later
+        studentCount: 60,
+        marksEntered: s.status === 'DRAFT' ? 30 : 60,
+      };
+    });
   }
 
   @Post('ia/submissions/:id/confirm')

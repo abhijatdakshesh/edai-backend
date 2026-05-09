@@ -87,6 +87,16 @@ export class SeedService implements OnModuleInit {
       { id: 'course-7', name: 'Circuit Theory', code: 'EC501', credits: 4, department: 'Electronics', instructorName: 'Dr. Vinod Hegde', instructorId: 'teacher-006', enrolled: 85 },
       { id: 'course-8', name: 'Thermodynamics', code: 'ME501', credits: 4, department: 'Mechanical', instructorName: 'Dr. Prakash Nair', instructorId: 'teacher-007', enrolled: 78 },
     ];
+
+    // Seed enrollments for the demo students so the My Courses page shows
+    // realistic "Enrolled" badges out-of-the-box.
+    const seededEnrollments = ['1RV21CS001', 'u-student-01'].flatMap((usn) => [
+      { courseId: 'course-1', studentUsn: usn },
+      { courseId: 'course-2', studentUsn: usn },
+      { courseId: 'course-3', studentUsn: usn },
+      { courseId: 'course-4', studentUsn: usn },
+    ]);
+    this.coursesSvc.enrollments = seededEnrollments;
   }
 
   private seedClasses(): void {
@@ -171,6 +181,50 @@ export class SeedService implements OnModuleInit {
         teacherId: 'teacher-003',
         submissionCount: 1,
       },
+      {
+        id: 'asn-4',
+        title: 'Operating Systems Lab Report — Process Scheduling',
+        dueDate: '2026-05-12',
+        subjectCode: 'CS504',
+        description: 'Submit a 5-page lab report comparing FCFS, SJF and Round-Robin scheduling with a runnable simulation.',
+        maxMarks: 50,
+        status: 'PUBLISHED' as const,
+        teacherId: 'teacher-002',
+        submissionCount: 0,
+      },
+      {
+        id: 'asn-5',
+        title: 'Dynamic Programming Problem Set',
+        dueDate: '2026-05-18',
+        subjectCode: 'CS505',
+        description: 'Solve LIS, edit distance and matrix-chain multiplication. Submit code + complexity analysis.',
+        maxMarks: 40,
+        status: 'PUBLISHED' as const,
+        teacherId: TEACHER_ID,
+        submissionCount: 0,
+      },
+      {
+        id: 'asn-6',
+        title: 'CNN Image Classifier on CIFAR-10',
+        dueDate: '2026-05-25',
+        subjectCode: 'CS506',
+        description: 'Build a convolutional neural network and report training/validation accuracy with plots.',
+        maxMarks: 60,
+        status: 'PUBLISHED' as const,
+        teacherId: 'teacher-004',
+        submissionCount: 0,
+      },
+      {
+        id: 'asn-7',
+        title: 'Embedded Systems — LED Pattern via Timer Interrupts',
+        dueDate: '2026-04-30',
+        subjectCode: 'CS507',
+        description: 'Use ARM Cortex-M timer interrupts to drive an LED pattern. Submit schematic + code.',
+        maxMarks: 30,
+        status: 'PUBLISHED' as const,
+        teacherId: 'teacher-005',
+        submissionCount: 1,
+      },
     ];
     this.assignmentsSvc.assignments = assignments;
 
@@ -180,6 +234,9 @@ export class SeedService implements OnModuleInit {
       { id: 'sub-3', assignmentId: 'asn-2', usn: '1RV21CS001', studentName: 'Arjun Kumar', submittedAt: '2026-04-22T14:00:00Z', status: 'SUBMITTED' as const },
       { id: 'sub-4', assignmentId: 'asn-1', usn: '1RV21CS003', studentName: 'Priya Sharma', status: 'PENDING' as const },
       { id: 'sub-5', assignmentId: 'asn-1', usn: '1RV21CS004', studentName: 'Karan Joshi', submittedAt: '2026-04-20T16:00:00Z', status: 'SUBMITTED' as const },
+      // Demo student (1RV21CS001) — mixed statuses across the new assignments for a realistic My Assignments view
+      { id: 'sub-6', assignmentId: 'asn-3', usn: '1RV21CS001', studentName: 'Arjun Kumar', submittedAt: '2026-04-30T11:00:00Z', marks: 22, feedback: 'Good — minor TCP teardown issues.', status: 'GRADED' as const },
+      { id: 'sub-7', assignmentId: 'asn-7', usn: '1RV21CS001', studentName: 'Arjun Kumar', submittedAt: '2026-04-29T17:30:00Z', status: 'SUBMITTED' as const },
     ];
     this.assignmentsSvc.submissions = submissions;
   }

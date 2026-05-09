@@ -4,6 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AuthService, type JwtPayload, type LoginResponse, type TokenPair } from './auth.service';
 import { TokenBlocklistService } from './token-blocklist.service';
+import { UsersService } from '../users/users.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,14 @@ describe('AuthService', () => {
     isBlocked: jest.fn().mockResolvedValue(false),
   };
 
+  // UsersService is consulted first by findUserByEmail/findUserById, then the
+  // service falls back to SEED_USERS. An empty store + findByEmail → undefined
+  // makes the seed users authoritative for these tests.
+  const mockUsersService = {
+    findByEmail: jest.fn().mockReturnValue(undefined),
+    store: [] as unknown[],
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     mockBlocklist.isBlocked.mockResolvedValue(false);
@@ -50,6 +59,7 @@ describe('AuthService', () => {
             }),
         },
         { provide: TokenBlocklistService, useValue: mockBlocklist },
+        { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
 

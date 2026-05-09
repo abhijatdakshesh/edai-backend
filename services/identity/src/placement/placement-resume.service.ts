@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { claudeGenerate, CLAUDE_SMART } from '../shared/claude-ai';
+import { geminiGenerate, GEMINI_SMART } from '../shared/gemini-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import * as PDFDocument from 'pdfkit';
@@ -23,7 +23,12 @@ export class PlacementResumeService {
 
   async generateResume(usn: string, companyType: 'PRODUCT' | 'SERVICE' | 'STARTUP' | 'CORE'): Promise<Buffer> {
     const profile = await this.scoreService.getStudentProfile(usn);
-    const student = await this.dataSource.query(`SELECT phone, email FROM students WHERE usn = $1`, [usn]);
+    // Contact lookup is best-effort — students.phone may not exist in dev DBs
+    const student = this.dataSource
+      ? await this.dataSource
+          .query(`SELECT email FROM students WHERE student_id = $1`, [usn])
+          .catch(() => [] as Record<string, unknown>[])
+      : ([] as Record<string, unknown>[]);
     const contact = (student[0] ?? {}) as Record<string, unknown>;
 
     const subjectSummary = profile.subjects
@@ -46,17 +51,22 @@ Format as clean plain text, section headers in CAPS, no markdown, no asterisks. 
 
     let resumeText = '';
     try {
-      resumeText = await claudeGenerate(claudePrompt, CLAUDE_SMART, 4096);
+      resumeText = await geminiGenerate(claudePrompt, GEMINI_SMART, 4096);
     } catch (err) {
-      this.logger.error('Claude resume error', err);
+      this.logger.error('Gemini resume error', err);
       resumeText = `OBJECTIVE\nSeeking a ${companyType.toLowerCase()} role.\n\nEDUCATION\nBE in ${profile.department}, RVITM Bengaluru — CGPA: ${profile.cgpa}/10`;
     }
 
-    await this.dataSource.query(`
-      INSERT INTO placement_resumes (student_usn, company_type, resume_text, version)
-      VALUES ($1, $2, $3,
-        COALESCE((SELECT MAX(version) + 1 FROM placement_resumes WHERE student_usn = $1 AND company_type = $2), 1))
-    `, [usn, companyType, resumeText]);
+    // Best-effort persist — placement_resumes may be missing/FK-broken in dev
+    if (this.dataSource) {
+      await this.dataSource
+        .query(`
+          INSERT INTO placement_resumes (student_usn, company_type, resume_text, version)
+          VALUES ($1, $2, $3,
+            COALESCE((SELECT MAX(version) + 1 FROM placement_resumes WHERE student_usn = $1 AND company_type = $2), 1))
+        `, [usn, companyType, resumeText])
+        .catch((err) => this.logger?.warn?.('Skipping placement_resumes persist', err));
+    }
 
     return this.buildResumePDF(profile, contact, resumeText, companyType);
   }

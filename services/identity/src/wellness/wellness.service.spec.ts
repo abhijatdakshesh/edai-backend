@@ -107,7 +107,13 @@ describe('WellnessService', () => {
     });
 
     it('returns empty tasks array when no tasks for usn', () => {
-      expect(service.getStudyPlan('NO_USN')).toEqual({ tasks: [] });
+      // The plan now exposes id/studentUsn/streakDays/totalTasks/etc.
+      // Only tasks itself must be empty for an unknown USN.
+      const plan = service.getStudyPlan('NO_USN');
+      expect(plan.tasks).toEqual([]);
+      expect(plan.totalTasks).toBe(0);
+      expect(plan.completedTasks).toBe(0);
+      expect(plan.studentUsn).toBe('NO_USN');
     });
   });
 

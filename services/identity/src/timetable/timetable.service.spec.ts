@@ -16,14 +16,15 @@ import {
   TimetableSlot,
 } from './timetable.service';
 
-// ─── Mock Claude AI ──────────────────────────────────────────────────────────
+// ─── Mock Gemini AI ──────────────────────────────────────────────────────────
 
-jest.mock('../shared/claude-ai', () => ({
-  claudeGenerate: jest.fn(),
-  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
-  CLAUDE_SMART: 'claude-sonnet-4-6',
+jest.mock('../shared/gemini-ai', () => ({
+  geminiGenerate: jest.fn(),
+  GEMINI_FAST: 'gemini-2.5-flash',
+  GEMINI_SMART: 'gemini-2.5-pro',
+  getGeminiClient: jest.fn(),
 }));
-const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
+const mockClaudeGenerate = jest.requireMock('../shared/gemini-ai').geminiGenerate as jest.Mock;
 
 // ─── Mock DataSource ──────────────────────────────────────────────────────────
 
@@ -609,7 +610,7 @@ describe('TimetableService', () => {
       expect(prompt).toContain('no markdown');
     });
 
-    it('uses claude-sonnet-4-6 model', async () => {
+    it('uses gemini-2.5-pro model', async () => {
       setupHappyPathMocks();
       mockClaudeGenerate.mockResolvedValueOnce(minimalGeminiJson);
 
@@ -617,7 +618,7 @@ describe('TimetableService', () => {
 
       expect(mockClaudeGenerate).toHaveBeenCalledWith(
         expect.any(String),
-        'claude-sonnet-4-6',
+        'gemini-2.5-pro',
         8192,
       );
     });

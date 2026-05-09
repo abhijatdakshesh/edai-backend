@@ -6,12 +6,12 @@ import { PlacementMatchingService } from './placement-matching.service';
 // Mock Claude AI
 // ---------------------------------------------------------------------------
 
-jest.mock('../shared/claude-ai', () => ({
-  claudeGenerate: jest.fn(),
-  CLAUDE_FAST: 'claude-haiku-4-5-20251001',
-  CLAUDE_SMART: 'claude-sonnet-4-6',
+jest.mock('../shared/gemini-ai', () => ({
+  geminiGenerate: jest.fn(),
+  GEMINI_FAST: 'gemini-2.5-flash',
+  GEMINI_SMART: 'gemini-2.5-pro',
 }));
-const mockClaudeGenerate = jest.requireMock('../shared/claude-ai').claudeGenerate as jest.Mock;
+const mockClaudeGenerate = jest.requireMock('../shared/gemini-ai').geminiGenerate as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -407,13 +407,15 @@ describe('PlacementMatchingService', () => {
   // ── getMatchesForStudent ───────────────────────────────────────────────────
 
   describe('getMatchesForStudent()', () => {
-    it('returns matches ordered by fit_score descending', async () => {
+    it('returns matches ordered by fit_score descending (camelCase mapping)', async () => {
       const rows = [makeMatchRow({ fit_score: 90 }), makeMatchRow({ fit_score: 70 })];
       const query = jest.fn().mockResolvedValue(rows);
       await buildModule(query);
 
       const result = await service.getMatchesForStudent('1RV21CS001');
-      expect(result).toBe(rows);
+      expect(result).toHaveLength(2);
+      expect(result[0]?.fitScore).toBe(90);
+      expect(result[1]?.fitScore).toBe(70);
       const [, params] = query.mock.calls[0] as [string, unknown[]];
       expect(params).toEqual(['1RV21CS001']);
     });

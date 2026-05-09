@@ -42,6 +42,15 @@ const mockDataSource = { query: mockQuery };
 
 const mockEvents = { emitDocumentStatusChanged: jest.fn() };
 
+// Production now uses the geminiGenerate helper instead of an Anthropic client.
+const mockGeminiGenerate = jest.fn();
+jest.mock('../shared/gemini-ai', () => ({
+  getGeminiClient: jest.fn(),
+  geminiGenerate: (...args: unknown[]) => mockGeminiGenerate(...args),
+  GEMINI_FAST: 'gemini-2.5-flash',
+  GEMINI_SMART: 'gemini-2.5-pro',
+}));
+
 async function buildService(): Promise<DocumentsService> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -407,22 +416,20 @@ describe('DocumentsService', () => {
 
   describe('generateAiBody', () => {
     it('returns template when AI throws', async () => {
-      jest.spyOn(service['anthropic'].messages, 'create').mockRejectedValueOnce(new Error('API error'));
+      mockGeminiGenerate.mockRejectedValueOnce(new Error('API error'));
       const result = await service.generateAiBody('BONAFIDE', '1RV21CS001', 'Arjun Sharma', 'Bank loan', null);
       expect(result).toContain('Arjun Sharma');
       expect(result).toContain('1RV21CS001');
     });
 
     it('returns template text when AI returns empty', async () => {
-      jest.spyOn(service['anthropic'].messages, 'create').mockResolvedValueOnce({
-        content: [{ type: 'text', text: '' }],
-      } as never);
+      mockGeminiGenerate.mockResolvedValueOnce('');
       const result = await service.generateAiBody('BONAFIDE', '1RV21CS001', 'Arjun Sharma', 'Bank loan', null);
       expect(result).toContain('Arjun Sharma');
     });
 
     it('handles all doc types', async () => {
-      jest.spyOn(service['anthropic'].messages, 'create').mockRejectedValue(new Error('no ai'));
+      mockGeminiGenerate.mockRejectedValue(new Error('no ai'));
       for (const docType of ['BONAFIDE', 'ATTENDANCE_CERT', 'FEE_RECEIPT', 'COURSE_COMPLETION'] as DocType[]) {
         const result = await service.generateAiBody(docType, '1RV21CS001', 'Arjun Sharma', 'purpose', null);
         expect(typeof result).toBe('string');
@@ -479,15 +486,13 @@ describe('DocumentsService', () => {
 
   describe('generateAiBody() — edge cases', () => {
     it('handles non-Error thrown value (string) in AI call', async () => {
-      jest.spyOn(service['anthropic'].messages, 'create').mockRejectedValueOnce('string-error');
+      mockGeminiGenerate.mockRejectedValueOnce('string-error');
       const result = await service.generateAiBody('BONAFIDE', 'USN001', 'Test Student', 'Bank loan', null);
       expect(result).toContain('Test Student');
     });
 
-    it('returns template when AI returns non-text content type', async () => {
-      jest.spyOn(service['anthropic'].messages, 'create').mockResolvedValueOnce({
-        content: [{ type: 'tool_use', id: 'tu1', name: 'fn', input: {} }],
-      } as never);
+    it('returns template when AI returns whitespace-only content', async () => {
+      mockGeminiGenerate.mockResolvedValueOnce('   ');
       const result = await service.generateAiBody('BONAFIDE', 'USN001', 'Arjun Kumar', 'Bank loan', null);
       expect(result).toContain('Arjun Kumar');
     });

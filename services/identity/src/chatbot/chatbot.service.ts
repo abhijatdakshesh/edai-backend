@@ -42,7 +42,7 @@ export class ChatbotService {
       : graph.role === 'PARENT'
       ? `You are EdAI, a trusted academic companion for parents at RV College of Engineering, Bengaluru. You are talking to the parent of ${(graph as ParentKnowledgeGraph).child.name} (USN: ${(graph as ParentKnowledgeGraph).child.usn}).`
       : graph.role === 'ADMIN'
-      ? `You are EdAI, an institutional intelligence assistant at ${(graph as AdminKnowledgeGraph).collegeName}. You are talking to ${(graph as AdminKnowledgeGraph).name}, an administrator. You have full visibility into student performance, risk scores, fee collection, placements, and announcements.`
+      ? `You are EdAI, an institutional intelligence assistant at ${(graph as AdminKnowledgeGraph).collegeName}. You are talking to ${(graph as AdminKnowledgeGraph).name}, an administrator. You have full visibility into: today's & weekly campus class schedule (todaySchedule, weekSchedule), student performance, risk scores (atRiskStudents), fee collection (feeCollectionSummary), exam windows (examWindow), placements, and announcements. When asked "my schedule", show today's college-wide class schedule.`
       : `You are EdAI, a professional assistant for faculty at RV College of Engineering, Bengaluru. You are talking to ${(graph as TeacherKnowledgeGraph).name} from the ${(graph as TeacherKnowledgeGraph).department} department.`;
 
     return `${roleIntro}
@@ -71,26 +71,27 @@ ${JSON.stringify(graph, null, 2)}`;
     graph: KnowledgeGraph,
     onChunk: (text: string) => void,
   ): Promise<string> {
-    if (!this.db) {
-      const fallback = "I'm having trouble accessing data right now. Please try again.";
-      onChunk(fallback);
-      return fallback;
+    // Load last 10 messages — tolerate missing chat_messages table on
+    // partially-migrated environments. Empty history is acceptable.
+    const history = this.db
+      ? (await this.db.query(
+          `SELECT role, content FROM chat_messages
+           WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')
+           ORDER BY created_at ASC
+           OFFSET GREATEST(0, (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')) - 10)`,
+          [conversationId],
+        ).catch(() => [])) as Array<{ role: string; content: string }>
+      : [];
+
+    // Save user message — best-effort; never block the reply on a write failure.
+    if (this.db) {
+      await this.db.query(
+        `INSERT INTO chat_messages (conversation_id, role, content) VALUES ($1, 'USER', $2)`,
+        [conversationId, userMessage],
+      ).catch((err) => {
+        this.logger.warn(`chat_messages insert failed (will still reply): ${(err as Error).message}`);
+      });
     }
-
-    // Load last 10 messages
-    const history = await this.db.query(
-      `SELECT role, content FROM chat_messages
-       WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')
-       ORDER BY created_at ASC
-       OFFSET GREATEST(0, (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1 AND role IN ('USER','ASSISTANT')) - 10)`,
-      [conversationId],
-    ) as Array<{ role: string; content: string }>;
-
-    // Save user message
-    await this.db.query(
-      `INSERT INTO chat_messages (conversation_id, role, content) VALUES ($1, 'USER', $2)`,
-      [conversationId, userMessage],
-    );
 
     const selectedModel = this.selectModel(userMessage);
     let fullText = '';
@@ -133,17 +134,20 @@ ${JSON.stringify(graph, null, 2)}`;
       onChunk(fullText);
     }
 
-    // Save assistant response
-    await this.db.query(
-      `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
-       VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
-      [conversationId, fullText, tokensUsed, selectedModel],
-    );
+    // Save assistant response — best-effort. Reply already streamed; persistence
+    // failures must not surface to the user.
+    if (this.db) {
+      await this.db.query(
+        `INSERT INTO chat_messages (conversation_id, role, content, tokens_used, model_used)
+         VALUES ($1, 'ASSISTANT', $2, $3, $4)`,
+        [conversationId, fullText, tokensUsed, selectedModel],
+      ).catch(() => undefined);
 
-    await this.db.query(
-      `UPDATE chat_conversations SET last_message_at = now() WHERE id = $1`,
-      [conversationId],
-    );
+      await this.db.query(
+        `UPDATE chat_conversations SET last_message_at = now() WHERE id = $1`,
+        [conversationId],
+      ).catch(() => undefined);
+    }
 
     return fullText;
   }
@@ -154,33 +158,39 @@ ${JSON.stringify(graph, null, 2)}`;
     channel: 'WEB' | 'WHATSAPP',
     language = 'en',
   ): Promise<string> {
-    if (!this.db) throw new Error('No database');
+    // Synthetic ID lets the chat work even when chat_conversations table is
+    // missing (partial migrations) — history just won't persist.
+    const synthetic = () => `eph-${userIdentifier}-${Date.now()}`;
+    if (!this.db) return synthetic();
 
-    // Find active conversation < 2 hours old
-    const existing = await this.db.query(
-      `SELECT id FROM chat_conversations
-       WHERE user_identifier = $1 AND channel = $2 AND is_active = true
-         AND last_message_at > now() - INTERVAL '2 hours'
-       ORDER BY last_message_at DESC LIMIT 1`,
-      [userIdentifier, channel],
-    ) as Array<{ id: string }>;
+    try {
+      const existing = await this.db.query(
+        `SELECT id FROM chat_conversations
+         WHERE user_identifier = $1 AND channel = $2 AND is_active = true
+           AND last_message_at > now() - INTERVAL '2 hours'
+         ORDER BY last_message_at DESC LIMIT 1`,
+        [userIdentifier, channel],
+      ) as Array<{ id: string }>;
 
-    if (existing[0]) return existing[0].id;
+      if (existing[0]) return existing[0].id;
 
-    // Deactivate any stale active conversations first (handles unique index)
-    await this.db.query(
-      `UPDATE chat_conversations SET is_active = false
-       WHERE user_identifier = $1 AND channel = $2 AND is_active = true`,
-      [userIdentifier, channel],
-    );
+      await this.db.query(
+        `UPDATE chat_conversations SET is_active = false
+         WHERE user_identifier = $1 AND channel = $2 AND is_active = true`,
+        [userIdentifier, channel],
+      );
 
-    const created = await this.db.query(
-      `INSERT INTO chat_conversations (user_identifier, user_role, channel, language)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [userIdentifier, userRole, channel, language],
-    ) as Array<{ id: string }>;
+      const created = await this.db.query(
+        `INSERT INTO chat_conversations (user_identifier, user_role, channel, language)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [userIdentifier, userRole, channel, language],
+      ) as Array<{ id: string }>;
 
-    return created[0].id;
+      return created[0].id;
+    } catch (err) {
+      this.logger.warn(`chat_conversations unavailable, using ephemeral ID: ${(err as Error).message}`);
+      return synthetic();
+    }
   }
 
   async recordConsent(conversationId: string): Promise<void> {
@@ -210,5 +220,45 @@ ${JSON.stringify(graph, null, 2)}`;
       `SELECT id, user_identifier, user_role, channel, language, is_active, created_at, last_message_at
        FROM chat_conversations ORDER BY last_message_at DESC LIMIT 100`,
     ) as Promise<unknown[]>;
+  }
+
+  /**
+   * Public (pre-login) Q&A about the college. No DB, no PII, no conversation
+   * persistence. Single-shot Gemini call with a tight system prompt that
+   * limits answers to institutional information only.
+   */
+  async askPublic(userMessage: string): Promise<string> {
+    const systemInstruction = `You are EdAI, the public assistant on the EdAI / RV College of Engineering website.
+You are talking to an anonymous visitor who has NOT logged in.
+
+WHAT YOU CAN ANSWER:
+- General college information: programs offered (B.E., M.Tech, MBA, MCA), departments (CSE, ECE, EEE, ME, CV, IS, Biotech, IEM, ETE, Aerospace), affiliation (VTU), accreditation (NAAC A+, NBA), location (Mysuru Road, Bengaluru-560059).
+- Admissions process at a high level: VTU CET / COMEDK / Management quota. Direct visitors to https://rvce.edu.in/admissions for specifics.
+- Placement reputation (top recruiters: Google, Microsoft, Amazon, Goldman Sachs, etc.) at a high level.
+- Campus facilities, hostels, libraries, sports, clubs at a general level.
+- How to use EdAI as a student/parent/faculty after they log in.
+
+WHAT YOU MUST REFUSE:
+- ANY question about a specific student's attendance, marks, fees, schedule, or personal data.
+- ANY question requiring a USN, employee ID, or login.
+- If asked for personal data, reply: "Please log in to your EdAI account to see your personal academic information."
+
+STYLE:
+- Friendly, concise (2-4 sentences).
+- If unsure, say "Please visit https://rvce.edu.in or contact the admissions office for the latest details."
+- Never invent specific numbers (cut-offs, fees, ranks). If asked, redirect to the official website.
+- Always respond in English unless the visitor writes in another language.`;
+
+    try {
+      const res = await this.gemini.models.generateContent({
+        model: GEMINI_FAST,
+        contents: userMessage,
+        config: { maxOutputTokens: 512, systemInstruction },
+      });
+      return (res.text ?? '').trim() || "I'm not sure about that. Please visit https://rvce.edu.in for details.";
+    } catch (err) {
+      this.logger.error('Public chatbot error', err);
+      return "I'm having trouble right now. Please try again in a moment, or visit https://rvce.edu.in.";
+    }
   }
 }

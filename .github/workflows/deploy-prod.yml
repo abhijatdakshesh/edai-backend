@@ -50,15 +50,15 @@ jobs:
       - name: Deploy to Container Apps
         run: |
           az containerapp update \
-            --name edai-identity \
-            --resource-group edai-prod-rg \
+            --name aca-identity \
+            --resource-group rg-edai-prod-cin \
             --image edaiacrprod.azurecr.io/identity:${{ github.sha }}
 
       - name: Health check
         run: |
           sleep 20
           FQDN=$(az containerapp show \
-            --name edai-identity \
-            --resource-group edai-prod-rg \
+            --name aca-identity \
+            --resource-group rg-edai-prod-cin \
             --query properties.configuration.ingress.fqdn -o tsv)
           curl --fail "https://${FQDN}/health" || (echo "Health check failed" && exit 1)
