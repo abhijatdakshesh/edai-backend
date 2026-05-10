@@ -39,13 +39,12 @@ jobs:
       - name: Build and push to ACR
         run: |
           az acr login --name edaiacrprod
-          docker build \
+          docker buildx create --use --name edaibuilder 2>/dev/null || true
+          docker buildx build --platform linux/amd64 --push \
             -t edaiacrprod.azurecr.io/identity:${{ github.sha }} \
             -t edaiacrprod.azurecr.io/identity:latest \
             -f services/identity/Dockerfile \
             services/identity
-          docker push edaiacrprod.azurecr.io/identity:${{ github.sha }}
-          docker push edaiacrprod.azurecr.io/identity:latest
 
       - name: Deploy to Container Apps
         run: |
