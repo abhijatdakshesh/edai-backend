@@ -63,21 +63,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      # actions/setup-python tries to write into /Users/runner/hostedtoolcache
+      # which the self-hosted runner can't create (Permission denied). Use the
+      # host's python3 + an isolated venv. Works identically on hosted runners
+      # since they always have python3 in the base image.
+      - name: Bootstrap Python venv
+        run: |
+          python3 --version
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
 
       - name: Install deps
-        run: pip install -r requirements.txt || true
+        run: .venv/bin/pip install -r requirements.txt || true
 
       - name: Lint (ruff)
-        run: pip install ruff && ruff check src/ || true
+        run: .venv/bin/pip install ruff && .venv/bin/ruff check src/ || true
 
       - name: Type check (mypy)
-        run: pip install mypy && mypy src/ --ignore-missing-imports || true
+        run: .venv/bin/pip install mypy && .venv/bin/mypy src/ --ignore-missing-imports || true
 
       - name: Test
-        run: pip install pytest httpx && pytest tests/ -v --tb=short || true
+        run: .venv/bin/pip install pytest httpx && .venv/bin/pytest tests/ -v --tb=short || true
 
   # ── Go Voice Service ────────────────────────────────────────────────────
   go:
