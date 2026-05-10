@@ -10,7 +10,7 @@ jobs:
   # ── Node.js / NestJS services ──────────────────────────────────────────
   node:
     name: Node — ${{ matrix.service }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +55,7 @@ jobs:
   # ── Python AI Engine ────────────────────────────────────────────────────
   python:
     name: Python — ai-engine
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     defaults:
       run:
         working-directory: services/ai-engine
@@ -82,7 +82,7 @@ jobs:
   # ── Go Voice Service ────────────────────────────────────────────────────
   go:
     name: Go — voice
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     defaults:
       run:
         working-directory: services/voice
