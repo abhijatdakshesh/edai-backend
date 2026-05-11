@@ -10,7 +10,7 @@ jobs:
   # ── Node.js / NestJS services ──────────────────────────────────────────
   node:
     name: Node — ${{ matrix.service }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +35,13 @@ jobs:
           cache-dependency-path: package-lock.json   # root workspace lock file
 
       - name: Install deps (root workspace)
-        run: npm ci --legacy-peer-deps
+        # Force a clean install on self-hosted runners — partial caches
+        # have caused intermittent "Cannot find module 'jest-util'" on
+        # the identity job. Hosted runners always start clean so this is
+        # a no-op there.
+        run: |
+          rm -rf node_modules services/${{ matrix.service }}/node_modules
+          npm ci --legacy-peer-deps
 
       - name: Lint
         run: npm run lint || true
@@ -46,7 +52,15 @@ jobs:
         working-directory: services/${{ matrix.service }}
 
       - name: Test
-        run: ../../node_modules/.bin/jest --passWithNoTests --forceExit
+        # Self-hosted runners cache node_modules across runs; jest-util can
+        # go missing when the cache is partially stale. Use the workspace's
+        # local jest binary so npm/pnpm resolution finds hoisted transitives.
+        run: |
+          if [ -x ./node_modules/.bin/jest ]; then
+            ./node_modules/.bin/jest --passWithNoTests --forceExit
+          else
+            ../../node_modules/.bin/jest --passWithNoTests --forceExit
+          fi
         working-directory: services/${{ matrix.service }}
 
       - name: Audit
@@ -55,7 +69,7 @@ jobs:
   # ── Python AI Engine ────────────────────────────────────────────────────
   python:
     name: Python — ai-engine
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     defaults:
       run:
         working-directory: services/ai-engine
@@ -63,26 +77,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      # actions/setup-python tries to write into /Users/runner/hostedtoolcache
+      # which the self-hosted runner can't create (Permission denied). Use the
+      # host's python3 + an isolated venv. Works identically on hosted runners
+      # since they always have python3 in the base image.
+      - name: Bootstrap Python venv
+        run: |
+          python3 --version
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
 
       - name: Install deps
-        run: pip install -r requirements.txt || true
+        run: .venv/bin/pip install -r requirements.txt || true
 
       - name: Lint (ruff)
-        run: pip install ruff && ruff check src/ || true
+        # Lint failures must fail the job — Daniel review.
+        run: .venv/bin/pip install ruff && .venv/bin/ruff check src/
 
       - name: Type check (mypy)
-        run: pip install mypy && mypy src/ --ignore-missing-imports || true
+        # mypy is still in warm-up — keep `|| true` until the codebase is annotated.
+        run: .venv/bin/pip install mypy && .venv/bin/mypy src/ --ignore-missing-imports || true
 
       - name: Test
-        run: pip install pytest httpx && pytest tests/ -v --tb=short || true
+        # Test failures must fail the job — Daniel review.
+        run: .venv/bin/pip install pytest httpx && .venv/bin/pytest tests/ -v --tb=short
 
   # ── Go Voice Service ────────────────────────────────────────────────────
   go:
     name: Go — voice
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
     defaults:
       run:
         working-directory: services/voice

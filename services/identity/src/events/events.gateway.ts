@@ -71,6 +71,18 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.emitToInstitution(payload.institutionId ?? 'default', 'ai-call:completed', payload);
   }
 
+  emitAiCallTurn(payload: {
+    callId: string;
+    turn: number;
+    role: 'AI' | 'PARENT';
+    text: string;
+    language: string;
+    ts: string;
+    institutionId?: string;
+  }): void {
+    this.emitToInstitution(payload.institutionId ?? 'default', 'ai-call:turn', payload);
+  }
+
   emitVtuWindowOpened(payload: { windowId: string; title: string; institutionId?: string }): void {
     this.emitToInstitution(payload.institutionId ?? 'default', 'vtu:window-opened', payload);
   }
