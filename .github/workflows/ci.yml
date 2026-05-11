@@ -35,7 +35,13 @@ jobs:
           cache-dependency-path: package-lock.json   # root workspace lock file
 
       - name: Install deps (root workspace)
-        run: npm ci --legacy-peer-deps
+        # Force a clean install on self-hosted runners — partial caches
+        # have caused intermittent "Cannot find module 'jest-util'" on
+        # the identity job. Hosted runners always start clean so this is
+        # a no-op there.
+        run: |
+          rm -rf node_modules services/${{ matrix.service }}/node_modules
+          npm ci --legacy-peer-deps
 
       - name: Lint
         run: npm run lint || true
@@ -46,7 +52,15 @@ jobs:
         working-directory: services/${{ matrix.service }}
 
       - name: Test
-        run: ../../node_modules/.bin/jest --passWithNoTests --forceExit
+        # Self-hosted runners cache node_modules across runs; jest-util can
+        # go missing when the cache is partially stale. Use the workspace's
+        # local jest binary so npm/pnpm resolution finds hoisted transitives.
+        run: |
+          if [ -x ./node_modules/.bin/jest ]; then
+            ./node_modules/.bin/jest --passWithNoTests --forceExit
+          else
+            ../../node_modules/.bin/jest --passWithNoTests --forceExit
+          fi
         working-directory: services/${{ matrix.service }}
 
       - name: Audit
