@@ -537,4 +537,418 @@ describe('KnowledgeGraphService', () => {
       expect(graph.recentAbsenceCount).toBe(0);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // .catch(() => []) arrow bodies on every Promise.all query — must fire when
+  // an individual query rejects. Each rejection covers one of the lines in
+  // the 192-282 range (student) and 440-495 (teacher) and 594-684 (admin).
+  // ---------------------------------------------------------------------------
+  describe('buildStudentGraph() — per-query .catch fallbacks (lines 192-282)', () => {
+    it('every query rejects → falls back to demo profile + demo data without throwing', async () => {
+      // All 14 queries reject → each .catch(() => []) body executes.
+      mockQuery.mockRejectedValue(new Error('db down'));
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+
+      // Production synthesizes a Demo Student profile when student row is empty.
+      expect(graph.name).toBe('Demo Student');
+      // Demo fallbacks kick in for empty arrays.
+      expect(graph.todaySchedule.length).toBeGreaterThan(0);
+      expect(graph.attendanceSummary.length).toBeGreaterThan(0);
+      expect(graph.feeStatus.totalFee).toBeGreaterThan(0);
+      expect(graph.upcomingPlacements.length).toBeGreaterThan(0);
+      expect(graph.announcements.length).toBeGreaterThan(0);
+    });
+
+    it('per-query rejection: only the timetable + attendance queries fail (mixed shape)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([studentRow])               // 1. students OK
+        .mockRejectedValueOnce(new Error('slots fail'))    // 2. todaySlots reject
+        .mockRejectedValueOnce(new Error('week fail'))     // 3. weekSlots reject
+        .mockRejectedValueOnce(new Error('att fail'))      // 4. attendance reject
+        .mockResolvedValueOnce([marksRow])                  // 5. marks
+        .mockResolvedValueOnce([feeRow])                    // 6. fees
+        .mockResolvedValueOnce([])                          // 7. feeItems
+        .mockResolvedValueOnce([riskRow])                   // 8. risk
+        .mockResolvedValueOnce([{ cnt: 2 }])                // 9. absences
+        .mockResolvedValueOnce([])                          // 10. announcements
+        .mockResolvedValueOnce([])                          // 11. placements
+        .mockResolvedValueOnce([])                          // 12. vtuWindows
+        .mockResolvedValueOnce([])                          // 13. vtuElig
+        .mockResolvedValueOnce([]);                         // 14. vtuReg
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.name).toBe('Alice');
+      expect(graph.marksSummary[0].subject).toBe('DBMS');
+      // Empty attendance array → DEMO_ATTENDANCE substituted.
+      expect(graph.attendanceSummary.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('buildStudentGraph() — VTU window + eligibility + registrations + announcements + placements branches', () => {
+    it('returns vtuWindow, vtuEligibility (with registered subjects), live announcements + placements', async () => {
+      const vtuWin = { title: 'Sem 5 Reg', semester: 5, open_date: '2026-04-01', close_date: '2026-04-15', is_active: true };
+      const eligRow = { eligible_subjects: ['18CS51', '18CS52'], is_eligible: true, category: 'REGULAR', window_title: 'Sem 5 Reg', open_date: '2026-04-01', close_date: '2026-04-15' };
+      const regRow = { subject_codes: ['18CS51'] };
+      const placeRow = { company: 'Goog', status: 'OPEN', scheduled_date: '2026-06-01', min_cgpa: 8.0, rounds: ['A','B'], venue: 'Online', eligible_depts: ['CSE'] };
+      const annRow = { title: 'Holiday', content: 'Friday off' };
+      const feeItemRow = { component: 'Tuition', amount: 50000, status: 'PAID', due_date: null };
+
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])              // todaySlots
+        .mockResolvedValueOnce([])              // weekSlots
+        .mockResolvedValueOnce([attRow])        // attendance
+        .mockResolvedValueOnce([marksRow])      // marks
+        .mockResolvedValueOnce([feeRow])        // fees
+        .mockResolvedValueOnce([feeItemRow])    // feeItems live
+        .mockResolvedValueOnce([riskRow])       // risk
+        .mockResolvedValueOnce([{ cnt: 0 }])    // absences
+        .mockResolvedValueOnce([annRow])        // announcements live
+        .mockResolvedValueOnce([placeRow])      // placements live
+        .mockResolvedValueOnce([vtuWin])        // vtuWindows live
+        .mockResolvedValueOnce([eligRow])       // vtuElig live
+        .mockResolvedValueOnce([regRow]);       // vtuReg live
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+
+      expect(graph.vtuWindow).not.toBeNull();
+      expect(graph.vtuWindow!.title).toBe('Sem 5 Reg');
+      expect(graph.vtuWindow!.isActive).toBe(true);
+      expect(graph.vtuEligibility).not.toBeNull();
+      expect(graph.vtuEligibility!.windowTitle).toBe('Sem 5 Reg');
+      expect(graph.vtuEligibility!.eligibleSubjects).toEqual(['18CS51', '18CS52']);
+      expect(graph.vtuEligibility!.registeredSubjects).toEqual(['18CS51']);
+      expect(graph.upcomingPlacements[0].company).toBe('Goog');
+      expect(graph.upcomingPlacements[0].rounds).toEqual(['A', 'B']);
+      expect(graph.upcomingPlacements[0].eligibleDepts).toEqual(['CSE']);
+      expect(graph.announcements[0].title).toBe('Holiday');
+      expect(graph.feeBreakdown[0].component).toBe('Tuition');
+    });
+
+    it('vtuEligibility: when eligibility row present but registration missing, registeredSubjects is empty', async () => {
+      const eligRow = { eligible_subjects: null, is_eligible: false, category: 'BACKLOG', window_title: 'Sem 5', open_date: '2026-04-01', close_date: '2026-04-15' };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{ cnt: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([eligRow])
+        .mockResolvedValueOnce([]);            // no registration
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.vtuEligibility!.eligibleSubjects).toEqual([]);
+      expect(graph.vtuEligibility!.registeredSubjects).toEqual([]);
+      expect(graph.vtuEligibility!.isEligible).toBe(false);
+    });
+
+    it('placements: rounds and eligibleDepts default to empty arrays when DB returns null', async () => {
+      const placeRow = { company: 'NullDeptCo', status: 'OPEN', scheduled_date: '2026-06-01', min_cgpa: 7.0, rounds: null, venue: 'Campus', eligible_depts: null };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{ cnt: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([placeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(graph.upcomingPlacements[0].rounds).toEqual([]);
+      expect(graph.upcomingPlacements[0].eligibleDepts).toEqual([]);
+    });
+
+    it('weekSchedule: builds keyed map across multiple days (lines 306-308 truthy + falsy branches)', async () => {
+      const monSlot = { ...slotRow, day: 'MON' };
+      const monSlot2 = { slot_index: 1, subject_name: 'OS', faculty_name: 'Dr. Rao', room_number: 'LH-102', is_lab: false, day: 'MON' };
+      const tueSlot = { slot_index: 0, subject_name: 'CN', faculty_name: 'Dr. Nair', room_number: 'LH-103', is_lab: false, day: 'TUE' };
+      mockQuery
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([monSlot, monSlot2, tueSlot])  // weekSlots covers both branches
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{ cnt: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildStudentGraph('1RV21CS001');
+      expect(Object.keys(graph.weekSchedule)).toEqual(expect.arrayContaining(['MON', 'TUE']));
+      expect(graph.weekSchedule.MON).toHaveLength(2);
+      expect(graph.weekSchedule.TUE).toHaveLength(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // buildParentGraph: lines 409, 414, 421 — language-from-DB, parent
+  // announcements query, and the announcement mapper.
+  // ---------------------------------------------------------------------------
+  describe('buildParentGraph() — language detection + parent announcements', () => {
+    it('uses parent preferred_language from DB and returns parent-targeted announcements', async () => {
+      const parentAnn = { title: 'PTM Notice', content: 'PTM on Saturday 10AM' };
+      mockQuery
+        .mockResolvedValueOnce([{ student_id: '1RV21CS001', lang: 'hi' }])  // parent lookup, hindi
+        // buildStudentGraph child queries (1-14)
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{ cnt: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        // parent announcements (15)
+        .mockResolvedValueOnce([parentAnn]);
+
+      const graph = await svc.buildParentGraph('+919845012345');
+      expect(graph.preferredLanguage).toBe('hi');
+      expect(graph.announcements[0].title).toBe('PTM Notice');
+      // child.role is stripped (set to undefined as any) so it is no longer 'STUDENT'.
+      expect((graph.child as any).role).toBeUndefined();
+    });
+
+    it('parent announcements query rejection is swallowed (line 414 .catch)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([{ student_id: '1RV21CS001', lang: 'en' }])
+        .mockResolvedValueOnce([studentRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([attRow])
+        .mockResolvedValueOnce([marksRow])
+        .mockResolvedValueOnce([feeRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([riskRow])
+        .mockResolvedValueOnce([{ cnt: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('ann fail'));     // parent announcements rejects
+
+      const graph = await svc.buildParentGraph('+919845012345');
+      expect(graph.announcements).toEqual([]);
+    });
+
+    it('parent lookup query rejection: returns [] → throws "Parent not found" (line 409 .catch)', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('lookup fail'));
+      await expect(svc.buildParentGraph('+9100')).rejects.toThrow('Parent not found');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // buildTeacherGraph extra coverage — every per-query .catch (lines 440-495),
+  // the week-schedule branch (511-513), and the announcements mapper (538).
+  // ---------------------------------------------------------------------------
+  describe('buildTeacherGraph() — per-query .catch + multi-day weekSchedule + announcements', () => {
+    it('every teacher query rejects → returns empty teacher graph (no throw)', async () => {
+      mockQuery.mockRejectedValue(new Error('db unreachable'));
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(graph.role).toBe('TEACHER');
+      expect(graph.name).toBe('Unknown'); // empty fallback
+    });
+
+    it('builds multi-day teacher week schedule (covers if-branch on lines 511-513)', async () => {
+      const wMon1 = { ...teacherSlot, day: 'MON' };
+      const wMon2 = { slot_index: 2, subject_name: 'OS', section: 'B', room_number: 'LH-102', semester: 5, day: 'MON' };
+      const wTue = { slot_index: 0, subject_name: 'CN', section: 'A', room_number: 'LH-103', semester: 5, day: 'TUE' };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([wMon1, wMon2, wTue])    // weekSlots
+        .mockResolvedValueOnce([])                       // subjects
+        .mockResolvedValueOnce([])                       // atRisk
+        .mockResolvedValueOnce([]);                      // announcements
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(Object.keys(graph.weekSchedule)).toEqual(expect.arrayContaining(['MON', 'TUE']));
+      expect(graph.weekSchedule.MON).toHaveLength(2);
+      expect(graph.weekSchedule.TUE).toHaveLength(1);
+    });
+
+    it('teacher announcements mapped to {title,content} (line 538)', async () => {
+      const annRow = { title: 'Faculty Meet', content: 'IQAC review on Monday' };
+      mockQuery
+        .mockResolvedValueOnce([teacherRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([annRow]);
+
+      const graph = await svc.buildTeacherGraph('FAC001');
+      expect(graph.announcements[0]).toEqual({ title: 'Faculty Meet', content: 'IQAC review on Monday' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // buildAdminGraph — completely uncovered range 594-684. Tests:
+  //  - happy path with live admin row, stats, atRisk, announcements,
+  //    placements, alumniStats
+  //  - empty/missing-row fallbacks for every defaulted field
+  //  - DB-null branch
+  //  - per-query .catch fallback (every query rejects)
+  // ---------------------------------------------------------------------------
+  describe('buildAdminGraph()', () => {
+    const adminRow = { name: 'Dr. Principal', lang: 'kn' };
+    const statsRow = {
+      total_students: 1500, total_faculty: 120, high_risk_count: 87,
+      fee_defaulter_count: 45, active_conversations: 23,
+    };
+    const adminAtRisk = { usn: '1RV21CS003', name: 'Karthik', risk_score: 0.78, risk_level: 'HIGH', primary_concern: 'Fees + attendance' };
+    const adminAnn = { title: 'Senate Notice', content: 'Convocation 25 May' };
+    const adminPlace = { company: 'Amazon', status: 'OPEN', scheduled_date: '2026-07-01', min_cgpa: 7.5, rounds: ['OA','HR'], venue: 'Online' };
+    const alumniRow = { dept: 'CSE', avg_pkg: 18.5, max_pkg: 56.0, total: 230 };
+
+    it('returns empty admin graph when db is null (line 594-596 branch)', async () => {
+      const noDb = new KnowledgeGraphService(null);
+      const graph = await noDb.buildAdminGraph('ADMIN1');
+      expect(graph.role).toBe('ADMIN');
+      expect(graph.name).toBe('Administrator');
+      expect(graph.empId).toBe('ADMIN1');
+      expect(graph.atRiskStudents).toEqual([]);
+      expect(graph.alumniStats).toEqual([]);
+      expect(graph.todaySchedule.length).toBeGreaterThan(0);
+    });
+
+    it('happy path: live admin, stats, atRisk, announcements, placements, alumniStats', async () => {
+      mockQuery
+        .mockResolvedValueOnce([adminRow])
+        .mockResolvedValueOnce([statsRow])
+        .mockResolvedValueOnce([adminAtRisk])
+        .mockResolvedValueOnce([adminAnn])
+        .mockResolvedValueOnce([adminPlace])
+        .mockResolvedValueOnce([alumniRow]);
+
+      const graph = await svc.buildAdminGraph('PRINCIPAL01');
+      expect(graph.role).toBe('ADMIN');
+      expect(graph.name).toBe('Dr. Principal');
+      expect(graph.preferredLanguage).toBe('kn');
+      expect(graph.stats.totalStudents).toBe(1500);
+      expect(graph.stats.totalFaculty).toBe(120);
+      expect(graph.stats.highRiskCount).toBe(87);
+      expect(graph.stats.feeDefaulterCount).toBe(45);
+      expect(graph.stats.activeConversations).toBe(23);
+      expect(graph.atRiskStudents).toHaveLength(1);
+      expect(graph.atRiskStudents[0].usn).toBe('1RV21CS003');
+      expect(graph.atRiskStudents[0].riskScore).toBe(0.78);
+      expect(graph.announcements[0].title).toBe('Senate Notice');
+      expect(graph.upcomingPlacements[0].company).toBe('Amazon');
+      expect(graph.upcomingPlacements[0].rounds).toEqual(['OA', 'HR']);
+      expect(graph.alumniStats[0].dept).toBe('CSE');
+      expect(graph.alumniStats[0].avgPackageLpa).toBe(18.5);
+      expect(graph.alumniStats[0].maxPackageLpa).toBe(56);
+      expect(graph.alumniStats[0].totalAlumni).toBe(230);
+    });
+
+    it('empty admin row → defaults to "Administrator" / "en" + demo fallbacks for risk/announcements/placements', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])              // adminRow empty
+        .mockResolvedValueOnce([{}])            // stats empty fields
+        .mockResolvedValueOnce([])              // atRisk empty
+        .mockResolvedValueOnce([])              // announcements empty
+        .mockResolvedValueOnce([])              // placements empty
+        .mockResolvedValueOnce([]);             // alumni empty
+
+      const graph = await svc.buildAdminGraph('UNKNOWN_ADMIN');
+      expect(graph.name).toBe('Administrator');
+      expect(graph.preferredLanguage).toBe('en');
+      // Empty stats fields default to seeded numbers.
+      expect(graph.stats.totalStudents).toBe(450);
+      expect(graph.stats.totalFaculty).toBe(35);
+      expect(graph.stats.highRiskCount).toBe(47);
+      expect(graph.stats.feeDefaulterCount).toBe(23);
+      expect(graph.stats.activeConversations).toBe(12);
+      // Empty atRisk → fallback to seeded 3 risk students.
+      expect(graph.atRiskStudents).toHaveLength(3);
+      expect(graph.atRiskStudents[0].usn).toBe('1RV21CS003');
+      // Empty announcements & placements → DEMO_ANNOUNCEMENTS + DEMO_PLACEMENTS.
+      expect(graph.announcements.length).toBeGreaterThan(0);
+      expect(graph.upcomingPlacements.length).toBeGreaterThan(0);
+      // Alumni stays empty (no demo fallback for alumni).
+      expect(graph.alumniStats).toEqual([]);
+    });
+
+    it('admin placement row with null rounds → defaults to []', async () => {
+      const placeNoRounds = { company: 'Infy', status: 'OPEN', scheduled_date: '2026-07-15', min_cgpa: 6.5, rounds: null, venue: 'Campus' };
+      mockQuery
+        .mockResolvedValueOnce([adminRow])
+        .mockResolvedValueOnce([statsRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([placeNoRounds])
+        .mockResolvedValueOnce([]);
+
+      const graph = await svc.buildAdminGraph('PRINCIPAL01');
+      expect(graph.upcomingPlacements[0].rounds).toEqual([]);
+    });
+
+    it('alumni row with falsy avg_pkg / max_pkg → maps to 0', async () => {
+      const alumniNullPkg = { dept: 'EEE', avg_pkg: null, max_pkg: null, total: 80 };
+      mockQuery
+        .mockResolvedValueOnce([adminRow])
+        .mockResolvedValueOnce([statsRow])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([alumniNullPkg]);
+
+      const graph = await svc.buildAdminGraph('PRINCIPAL01');
+      expect(graph.alumniStats[0].avgPackageLpa).toBe(0);
+      expect(graph.alumniStats[0].maxPackageLpa).toBe(0);
+      expect(graph.alumniStats[0].totalAlumni).toBe(80);
+    });
+
+    it('every admin query rejects → returns the synthesized fallback (per-query .catch fires)', async () => {
+      mockQuery.mockRejectedValue(new Error('db down'));
+      const graph = await svc.buildAdminGraph('PRINCIPAL01');
+      // Every query falls back; admin row missing → name=Administrator,
+      // empty stats → seeded defaults, empty atRisk → seeded fallback.
+      expect(graph.name).toBe('Administrator');
+      expect(graph.stats.totalStudents).toBe(450);
+      expect(graph.atRiskStudents).toHaveLength(3);
+    });
+
+    it('admin timeout fallback returns the empty admin graph', async () => {
+      jest.useFakeTimers();
+      try {
+        mockQuery.mockReturnValue(new Promise(() => {})); // never resolves
+        const p = svc.buildAdminGraph('PRINCIPAL01');
+        jest.advanceTimersByTime(5001);
+        const graph = await p;
+        expect(graph.role).toBe('ADMIN');
+        expect(graph.name).toBe('Administrator');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
 });
