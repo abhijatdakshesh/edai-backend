@@ -77,13 +77,16 @@ jobs:
         run: .venv/bin/pip install -r requirements.txt || true
 
       - name: Lint (ruff)
-        run: .venv/bin/pip install ruff && .venv/bin/ruff check src/ || true
+        # Lint failures must fail the job — Daniel review.
+        run: .venv/bin/pip install ruff && .venv/bin/ruff check src/
 
       - name: Type check (mypy)
+        # mypy is still in warm-up — keep `|| true` until the codebase is annotated.
         run: .venv/bin/pip install mypy && .venv/bin/mypy src/ --ignore-missing-imports || true
 
       - name: Test
-        run: .venv/bin/pip install pytest httpx && .venv/bin/pytest tests/ -v --tb=short || true
+        # Test failures must fail the job — Daniel review.
+        run: .venv/bin/pip install pytest httpx && .venv/bin/pytest tests/ -v --tb=short
 
   # ── Go Voice Service ────────────────────────────────────────────────────
   go:
