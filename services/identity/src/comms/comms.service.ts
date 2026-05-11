@@ -274,7 +274,19 @@ export class CommsService implements OnModuleInit {
   }
 
   async triggerCall(usn: string, type: string, institutionId = 'default', language = 'en'): Promise<{ callId: string; status: string; scheduledAt: string }> {
-    try { this.consent.assertConsent(usn, 'ATTENDANCE_ALERTS', institutionId); } catch { /* allow in dev */ }
+    // DPDP gate: voice calls require explicit VOICE consent.
+    // - In production we propagate the ForbiddenException so the controller
+    //   returns 403 to the caller. Silent bypass is the bug Daniel called out.
+    // - In non-prod (NODE_ENV !== 'production') we WARN and continue so demos
+    //   and tests can run without seeded consent records.
+    // Channel is now 'VOICE' (matches the mid-call check at handleTurn() and
+    // the persistence gate at finalizeCall()).
+    try {
+      this.consent.assertConsent(usn, 'VOICE', institutionId);
+    } catch (err) {
+      if (process.env['NODE_ENV'] === 'production') throw err;
+      this.logger.warn(`[DPDP] VOICE consent missing for ${usn}@${institutionId} — allowing in non-prod (NODE_ENV=${process.env['NODE_ENV'] ?? 'undefined'})`);
+    }
 
     const parentPhone = this.parentPhoneMap[usn] ?? process.env['DEFAULT_PARENT_PHONE'];
     // Use a UUIDv4 so callIds are unguessable — the audio endpoint uses callId as a
