@@ -1,13 +1,17 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import type { Language, User, UserRole } from '../entities/user.entity';
 import type { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
 import { AUTH_SEED_USERS } from '../auth/auth-seed-users';
+import { ParentPortalService } from '../parent-portal/parent-portal.service';
 
 export interface UsersListResult {
   data: Omit<User, 'passwordHash'>[];
@@ -26,6 +30,19 @@ export interface UsersFilter {
 
 @Injectable()
 export class UsersService {
+  /**
+   * KAN-26: ParentPortalService is injected @Optional() (and via forwardRef
+   * because both modules will eventually share the same TypeORM repos). When
+   * present, create({ role: 'PARENT', parentStudentUsn }) registers an
+   * explicit parent → student link instead of relying on the previous
+   * implicit fallback to '1RV21CS001'.
+   */
+  constructor(
+    @Optional()
+    @Inject(forwardRef(() => ParentPortalService))
+    private readonly parentPortal?: ParentPortalService,
+  ) {}
+
   /** In-memory store. Phase 2: replace with TypeORM UserRepository. */
   private readonly store: User[] = [
     this.seed('u-admin-01', 'Admin User', 'admin@rvce.edu', 'Admin@123', 'ADMIN', 'en'),
@@ -159,6 +176,19 @@ export class UsersService {
     if (this.store.find((u) => u.email === dto.email)) {
       throw new BadRequestException('Email already in use');
     }
+
+    // KAN-26: PARENT accounts must carry an explicit student USN. Without it
+    // the previous code would silently fall through to '1RV21CS001', so the
+    // admin saw a parent magically linked to a random student.
+    if (dto.role === 'PARENT') {
+      const usn = (dto.parentStudentUsn ?? '').trim();
+      if (!usn) {
+        throw new BadRequestException(
+          'parentStudentUsn is required when role is PARENT — pick the student this parent should access.',
+        );
+      }
+    }
+
     const user: User = {
       id: randomUUID(),
       name: dto.name,
@@ -174,6 +204,12 @@ export class UsersService {
       updatedAt: new Date().toISOString(),
     };
     this.store.push(user);
+
+    // KAN-26: register the explicit parent → student link.
+    if (dto.role === 'PARENT' && dto.parentStudentUsn && this.parentPortal) {
+      this.parentPortal.link(user.id, dto.parentStudentUsn.trim());
+    }
+
     return this.safe(user);
   }
 

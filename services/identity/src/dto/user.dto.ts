@@ -36,6 +36,16 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(['kn', 'en', 'hi', 'ta', 'te', 'ml'])
   preferredLanguage?: Language;
+
+  /**
+   * KAN-26: required when role=PARENT. The admin must pick which student
+   * this parent is linked to; the backend never auto-picks. Validation that
+   * this is non-empty for PARENT lives in UsersService.create() so we can
+   * surface a friendly BadRequest instead of a generic class-validator error.
+   */
+  @IsOptional()
+  @IsString()
+  parentStudentUsn?: string;
 }
 
 export class UpdateUserDto {

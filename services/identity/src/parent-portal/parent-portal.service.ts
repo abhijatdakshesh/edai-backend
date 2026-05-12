@@ -23,15 +23,26 @@ export class ParentPortalService {
   parentChildMap: Map<string, string[]> = new Map();
   childProfiles: Map<string, ChildInfo> = new Map();
 
+  /**
+   * Register an explicit parent → student link.
+   *
+   * KAN-26: previously, if no mapping existed for a parent we silently
+   * granted access to the seed student '1RV21CS001'. Admins creating a new
+   * parent therefore appeared to auto-link to a random student. The link is
+   * now explicit only — UsersService.create() calls this when role=PARENT
+   * with the admin-supplied parentStudentUsn. No mapping → no access.
+   */
+  link(parentId: string, usn: string): void {
+    if (!parentId || !usn) return;
+    const existing = this.parentChildMap.get(parentId) ?? [];
+    if (!existing.includes(usn)) existing.push(usn);
+    this.parentChildMap.set(parentId, existing);
+  }
+
   /** Returns true if parentId is linked to the given student USN */
   isParentOf(parentId: string, usn: string): boolean {
     const linked = this.parentChildMap.get(parentId);
-    if (!linked) {
-      // Dev-only fallback: allow access to the seed student when no mapping exists
-      // In production, no mapping = no access
-      if (process.env['NODE_ENV'] === 'production') return false;
-      return usn === '1RV21CS001';
-    }
+    if (!linked) return false; // KAN-26: no implicit dev fallback
     return linked.includes(usn);
   }
 
@@ -42,7 +53,10 @@ export class ParentPortalService {
   ) {}
 
   getChildren(parentId: string): ChildInfo[] {
-    const usns = this.parentChildMap.get(parentId) ?? ['1RV21CS001'];
+    // KAN-26: no implicit fallback. If admin never linked a student, the
+    // dashboard correctly shows "no children" instead of leaking another
+    // student's data.
+    const usns = this.parentChildMap.get(parentId) ?? [];
     return usns.map((usn) => this.childProfiles.get(usn) ?? {
       usn,
       name: `Student ${usn}`,

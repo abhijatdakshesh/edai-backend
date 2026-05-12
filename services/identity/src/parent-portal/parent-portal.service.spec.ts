@@ -34,10 +34,12 @@ describe('ParentPortalService', () => {
   // ─── getChildren ────────────────────────────────────────────────────────────
 
   describe('getChildren()', () => {
-    it('returns a default child when parentChildMap has no entry', () => {
+    // KAN-26: previously, an unknown parent silently returned the seed
+    // student '1RV21CS001'. That auto-link is the bug — admins creating a
+    // parent saw a random student attached. Unknown parents now get [].
+    it('returns an empty list when parentChildMap has no entry (KAN-26)', () => {
       const result = service.getChildren('unknown-parent');
-      expect(result).toHaveLength(1);
-      expect(result[0].usn).toBe('1RV21CS001');
+      expect(result).toHaveLength(0);
     });
 
     it('returns mapped profile when childProfiles has an entry', () => {
@@ -174,10 +176,12 @@ describe('ParentPortalService', () => {
   // ─── isParentOf ─────────────────────────────────────────────────────────────
 
   describe('isParentOf()', () => {
-    it('returns true for the dev seed USN when no mapping exists and NODE_ENV != production', () => {
+    // KAN-26: no implicit dev fallback. Unknown parents are denied access
+    // regardless of NODE_ENV — the admin must explicitly link the student
+    // at user-create time via UsersService.create({ parentStudentUsn }).
+    it('returns false for any USN when no mapping exists (dev) (KAN-26)', () => {
       delete process.env['NODE_ENV'];
-      const result = service.isParentOf('unknown-parent', '1RV21CS001');
-      expect(result).toBe(true);
+      expect(service.isParentOf('unknown-parent', '1RV21CS001')).toBe(false);
     });
 
     it('returns false for non-seed USN when no mapping exists', () => {
@@ -201,6 +205,30 @@ describe('ParentPortalService', () => {
     it('returns false when explicit mapping does NOT contain the USN', () => {
       service.parentChildMap.set('parent-explicit', ['USN100']);
       expect(service.isParentOf('parent-explicit', 'USN999')).toBe(false);
+    });
+
+    // KAN-26: link() is the only sanctioned way to wire up a parent → student.
+    it('link() registers an explicit parent → student association', () => {
+      service.link('parent-new', 'USN555');
+      expect(service.isParentOf('parent-new', 'USN555')).toBe(true);
+      // and getChildren returns that mapped child
+      expect(service.getChildren('parent-new').map((c) => c.usn)).toEqual(['USN555']);
+    });
+
+    it('link() is idempotent — repeated calls do not duplicate the USN', () => {
+      service.link('parent-dup', 'USN777');
+      service.link('parent-dup', 'USN777');
+      service.link('parent-dup', 'USN777');
+      const children = service.getChildren('parent-dup');
+      expect(children).toHaveLength(1);
+      expect(children[0]!.usn).toBe('USN777');
+    });
+
+    it('link() ignores empty parentId or empty usn', () => {
+      service.link('', 'USN111');
+      service.link('parent-empty-usn', '');
+      expect(service.isParentOf('', 'USN111')).toBe(false);
+      expect(service.getChildren('parent-empty-usn')).toHaveLength(0);
     });
   });
 
