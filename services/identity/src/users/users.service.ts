@@ -1,12 +1,17 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import type { Language, User, UserRole } from '../entities/user.entity';
 import type { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
+import { AUTH_SEED_USERS } from '../auth/auth-seed-users';
+import { ParentPortalService } from '../parent-portal/parent-portal.service';
 
 export interface UsersListResult {
   data: Omit<User, 'passwordHash'>[];
@@ -25,6 +30,19 @@ export interface UsersFilter {
 
 @Injectable()
 export class UsersService {
+  /**
+   * KAN-26: ParentPortalService is injected @Optional() (and via forwardRef
+   * because both modules will eventually share the same TypeORM repos). When
+   * present, create({ role: 'PARENT', parentStudentUsn }) registers an
+   * explicit parent → student link instead of relying on the previous
+   * implicit fallback to '1RV21CS001'.
+   */
+  constructor(
+    @Optional()
+    @Inject(forwardRef(() => ParentPortalService))
+    private readonly parentPortal?: ParentPortalService,
+  ) {}
+
   /** In-memory store. Phase 2: replace with TypeORM UserRepository. */
   private readonly store: User[] = [
     this.seed('u-admin-01', 'Admin User', 'admin@rvce.edu', 'Admin@123', 'ADMIN', 'en'),
@@ -70,12 +88,41 @@ export class UsersService {
     return rest;
   }
 
+  /**
+   * Build the canonical merged user list.
+   *
+   * Sources:
+   *   1. {@link UsersService.store}      — mutable, authoritative (admin CRUD)
+   *   2. {@link AUTH_SEED_USERS}         — bootstrap accounts the AuthService
+   *      can authenticate even if no admin has touched them
+   *
+   * KAN-25: previously findAll only read `store`, while AuthService had its
+   * own SEED_USERS. The two stores drifted, so the admin Users table flickered
+   * between counts depending on which entry won the race (e.g. parent@rvce.edu
+   * exists in both stores under different ids). Dedupe is by lowercased email;
+   * the mutable `store` entry always wins because it carries admin edits.
+   * Output is ordered by createdAt desc for a deterministic display.
+   */
+  private mergedUsers(): User[] {
+    const byEmail = new Map<string, User>();
+    for (const u of AUTH_SEED_USERS) {
+      byEmail.set(u.email.toLowerCase(), u);
+    }
+    // store wins on conflict — admin edits/creations override seeds
+    for (const u of this.store) {
+      byEmail.set(u.email.toLowerCase(), u);
+    }
+    return Array.from(byEmail.values()).sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+  }
+
   /** GET /api/users — paginated, filtered */
   findAll(filters: UsersFilter): UsersListResult {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
 
-    let results = [...this.store];
+    let results = this.mergedUsers();
 
     if (filters.role) {
       results = results.filter(
@@ -129,6 +176,19 @@ export class UsersService {
     if (this.store.find((u) => u.email === dto.email)) {
       throw new BadRequestException('Email already in use');
     }
+
+    // KAN-26: PARENT accounts must carry an explicit student USN. Without it
+    // the previous code would silently fall through to '1RV21CS001', so the
+    // admin saw a parent magically linked to a random student.
+    if (dto.role === 'PARENT') {
+      const usn = (dto.parentStudentUsn ?? '').trim();
+      if (!usn) {
+        throw new BadRequestException(
+          'parentStudentUsn is required when role is PARENT — pick the student this parent should access.',
+        );
+      }
+    }
+
     const user: User = {
       id: randomUUID(),
       name: dto.name,
@@ -144,6 +204,12 @@ export class UsersService {
       updatedAt: new Date().toISOString(),
     };
     this.store.push(user);
+
+    // KAN-26: register the explicit parent → student link.
+    if (dto.role === 'PARENT' && dto.parentStudentUsn && this.parentPortal) {
+      this.parentPortal.link(user.id, dto.parentStudentUsn.trim());
+    }
+
     return this.safe(user);
   }
 
@@ -193,7 +259,9 @@ export class UsersService {
   /** GET /api/users/export — returns CSV string */
   exportCsv(): string {
     const header = 'id,name,email,role,sapId,departmentCode,isActive,createdAt';
-    const rows = this.store.map((u) =>
+    // Use the merged + deduped list so the CSV row count matches the
+    // admin Users table (KAN-25).
+    const rows = this.mergedUsers().map((u) =>
       [u.id, u.name, u.email, u.role, u.sapId ?? '', u.departmentCode ?? '', u.isActive, u.createdAt].join(','),
     );
     return [header, ...rows].join('\n');

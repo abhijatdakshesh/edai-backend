@@ -562,6 +562,107 @@ describe('UsersService', () => {
     });
   });
 
+  // ─── KAN-26: PARENT creation requires explicit student USN ─────────────────
+
+  describe('create() — KAN-26 PARENT must carry explicit parentStudentUsn', () => {
+    const baseParent: CreateUserDto = {
+      name: 'New Parent',
+      email: 'newparent.unique@rvce.edu',
+      password: 'Parent@456',
+      role: 'PARENT',
+      institutionId: 'rvce',
+    };
+
+    it('throws BadRequestException when role=PARENT and parentStudentUsn missing', () => {
+      expect(() => service.create({ ...baseParent })).toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when parentStudentUsn is whitespace-only', () => {
+      expect(() =>
+        service.create({ ...baseParent, parentStudentUsn: '   ' }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('error message names parentStudentUsn so the admin knows what to fix', () => {
+      let err!: BadRequestException;
+      try {
+        service.create({ ...baseParent });
+      } catch (e) {
+        err = e as BadRequestException;
+      }
+      expect(err.message).toMatch(/parentStudentUsn/);
+    });
+
+    it('succeeds when parentStudentUsn is provided', () => {
+      const u = service.create({ ...baseParent, parentStudentUsn: '1RV21CS001' });
+      expect(u.role).toBe('PARENT');
+      expect(u.email).toBe(baseParent.email);
+    });
+
+    it('does NOT auto-link a random student — without ParentPortalService, no map is touched', () => {
+      // service is built without ParentPortalService here; create should still
+      // succeed but produce no implicit student association. The unit test
+      // surface is just absence-of-throw + the explicit error case above.
+      const u = service.create({ ...baseParent, parentStudentUsn: '1RV21CS099' });
+      expect(u.id).toBeTruthy();
+    });
+
+    it('non-PARENT roles do not require parentStudentUsn', () => {
+      const teacher = service.create({
+        ...baseParent,
+        email: 'teacher.kan26@rvce.edu',
+        role: 'FACULTY',
+      });
+      expect(teacher.role).toBe('FACULTY');
+    });
+  });
+
+  // ─── KAN-25: dedupe-merge of UsersService.store + AUTH_SEED_USERS ─────────
+
+  describe('findAll() — KAN-25 deterministic merged listing', () => {
+    it('total is stable across repeated calls (no flicker)', () => {
+      const calls = Array.from({ length: 8 }, () => service.findAll({}));
+      const totals = new Set(calls.map((c) => c.total));
+      // The Admin Users page should never see the count flip between requests.
+      expect(totals.size).toBe(1);
+    });
+
+    it('merges AuthService seeds (e.g. principal/recruiter) into the listing', () => {
+      const result = service.findAll({ limit: 100 });
+      const emails = result.data.map((u) => u.email.toLowerCase());
+      // principal@rvce.edu only exists in AUTH_SEED_USERS, not in the
+      // UsersService.store seed list — it must still appear.
+      expect(emails).toContain('principal@rvce.edu');
+      expect(emails).toContain('recruiter@demo.com');
+    });
+
+    it('dedupes by lowercased email — store entry wins on conflict', () => {
+      const result = service.findAll({ limit: 100 });
+      const adminMatches = result.data.filter(
+        (u) => u.email.toLowerCase() === 'admin@rvce.edu',
+      );
+      // Both AUTH_SEED_USERS and UsersService.store seed admin@rvce.edu.
+      // After dedupe we must see exactly one admin row.
+      expect(adminMatches).toHaveLength(1);
+      // The store entry's name is "Admin User"; the AUTH_SEED entry is also
+      // "Admin User" — identity check by id confirms store-wins.
+      expect(adminMatches[0]!.id).toBe('u-admin-01');
+    });
+
+    it('orders results by createdAt desc (newest first)', () => {
+      // Create a fresh user — its createdAt is later than every seed.
+      const created = service.create({
+        name: 'Newest User',
+        email: 'newest@rvce.edu',
+        password: 'NewPass@123',
+        role: 'FACULTY',
+        institutionId: 'rvce',
+      });
+      const result = service.findAll({ limit: 100 });
+      expect(result.data[0]!.id).toBe(created.id);
+    });
+  });
+
   // ─── findByEmail ──────────────────────────────────────────────────────────
 
   describe('findByEmail()', () => {
