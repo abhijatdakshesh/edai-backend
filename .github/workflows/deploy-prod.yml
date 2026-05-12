@@ -48,10 +48,17 @@ jobs:
 
       - name: Deploy to Container Apps
         run: |
+          # KAN-25/26 + earlier HORIZONTAL_SCALE_GAP: in-memory user store +
+          # in-memory voice conversation state both break across replicas.
+          # Pin to a single replica until the user/conversation state moves
+          # to a shared store (Redis/Postgres). Without this cap, GET /api/users
+          # count flickers and PARENT validation can be skipped on a stale pod.
           az containerapp update \
             --name aca-identity \
             --resource-group rg-edai-prod-cin \
-            --image edaiacrprod.azurecr.io/identity:${{ github.sha }}
+            --image edaiacrprod.azurecr.io/identity:${{ github.sha }} \
+            --min-replicas 1 \
+            --max-replicas 1
 
       - name: Health check
         run: |
@@ -60,4 +67,5 @@ jobs:
             --name aca-identity \
             --resource-group rg-edai-prod-cin \
             --query properties.configuration.ingress.fqdn -o tsv)
-          curl --fail "https://${FQDN}/health" || (echo "Health check failed" && exit 1)
+          # Hit /api/health (the actual route); old check on /health 404'd.
+          curl --fail "https://${FQDN}/api/health" || (echo "Health check failed" && exit 1)
