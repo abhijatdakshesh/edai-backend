@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import type { Language, User, UserRole } from '../entities/user.entity';
 import type { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
+import { AUTH_SEED_USERS } from '../auth/auth-seed-users';
 
 export interface UsersListResult {
   data: Omit<User, 'passwordHash'>[];
@@ -70,12 +71,41 @@ export class UsersService {
     return rest;
   }
 
+  /**
+   * Build the canonical merged user list.
+   *
+   * Sources:
+   *   1. {@link UsersService.store}      — mutable, authoritative (admin CRUD)
+   *   2. {@link AUTH_SEED_USERS}         — bootstrap accounts the AuthService
+   *      can authenticate even if no admin has touched them
+   *
+   * KAN-25: previously findAll only read `store`, while AuthService had its
+   * own SEED_USERS. The two stores drifted, so the admin Users table flickered
+   * between counts depending on which entry won the race (e.g. parent@rvce.edu
+   * exists in both stores under different ids). Dedupe is by lowercased email;
+   * the mutable `store` entry always wins because it carries admin edits.
+   * Output is ordered by createdAt desc for a deterministic display.
+   */
+  private mergedUsers(): User[] {
+    const byEmail = new Map<string, User>();
+    for (const u of AUTH_SEED_USERS) {
+      byEmail.set(u.email.toLowerCase(), u);
+    }
+    // store wins on conflict — admin edits/creations override seeds
+    for (const u of this.store) {
+      byEmail.set(u.email.toLowerCase(), u);
+    }
+    return Array.from(byEmail.values()).sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+  }
+
   /** GET /api/users — paginated, filtered */
   findAll(filters: UsersFilter): UsersListResult {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
 
-    let results = [...this.store];
+    let results = this.mergedUsers();
 
     if (filters.role) {
       results = results.filter(
@@ -193,7 +223,9 @@ export class UsersService {
   /** GET /api/users/export — returns CSV string */
   exportCsv(): string {
     const header = 'id,name,email,role,sapId,departmentCode,isActive,createdAt';
-    const rows = this.store.map((u) =>
+    // Use the merged + deduped list so the CSV row count matches the
+    // admin Users table (KAN-25).
+    const rows = this.mergedUsers().map((u) =>
       [u.id, u.name, u.email, u.role, u.sapId ?? '', u.departmentCode ?? '', u.isActive, u.createdAt].join(','),
     );
     return [header, ...rows].join('\n');

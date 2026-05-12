@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import type { User } from '../entities/user.entity';
 import { TokenBlocklistService } from './token-blocklist.service';
 import { UsersService } from '../users/users.service';
+import { AUTH_SEED_USERS } from './auth-seed-users';
 
 export interface JwtPayload {
   sub: string;
@@ -37,35 +38,10 @@ export interface LoginResponse extends TokenPair {
   user: Omit<User, 'passwordHash'>;
 }
 
-/**
- * Seed users with bcrypt-hashed passwords.
- * Phase 2: replace this array with a TypeORM UserRepository query.
- *
- * Default passwords (change via env-seeded DB in production):
- *   admin@rvce.edu      → Admin@123
- *   teacher@rvce.edu    → Teacher@123
- *   student@rvce.edu    → Student@123
- *   parent@rvce.edu     → Parent@123
- *   hod@rvce.edu        → Hod@123
- *   principal@rvce.edu  → Principal@123
- */
-const SEED_USERS: User[] = (() => {
-  const h = (plain: string) => bcrypt.hashSync(plain, 10);
-  return [
-    { id: 'u-admin-01',     email: 'admin@rvce.edu',     passwordHash: h('Admin@123'),     name: 'Admin User',       role: 'ADMIN',     institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-faculty-01',   email: 'teacher@rvce.edu',   passwordHash: h('Teacher@123'),   name: 'Dr. Priya Sharma', role: 'FACULTY',   institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-student-01',   email: 'student@rvce.edu',   passwordHash: h('Student@123'),   name: 'Arjun Sharma',     role: 'STUDENT',   institutionId: 'rvce', preferredLanguage: 'en', isActive: true, sapId: '1RV21CS001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-parent-01',    email: 'parent@rvce.edu',    passwordHash: h('Parent@123'),    name: 'Suresh Sharma',    role: 'PARENT',    institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-hod-01',       email: 'hod@rvce.edu',       passwordHash: h('Hod@123'),       name: 'Dr. Meena Rao',    role: 'HOD',       institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-principal-01', email: 'principal@rvce.edu', passwordHash: h('Principal@123'), name: 'Dr. K. Venkatesh', role: 'PRINCIPAL', institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'u-recruiter-01', email: 'recruiter@demo.com', passwordHash: h('Recruiter@123'), name: 'Recruiter', role: 'RECRUITER', institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  ];
-})();
-
 @Injectable()
 export class AuthService {
   /** Legacy fallback seed — UsersService now owns the canonical mutable store. */
-  private readonly users: User[] = SEED_USERS;
+  private readonly users: User[] = AUTH_SEED_USERS;
 
   constructor(
     private readonly jwtService: JwtService,
