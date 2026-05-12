@@ -211,6 +211,14 @@ describe('DocumentsService', () => {
       const noDbService = await buildServiceNoDB();
       expect(await noDbService.getAllPending()).toEqual([]);
     });
+
+    it('returns [] when document_requests table query rejects (missing table)', async () => {
+      // Simulates partially-migrated prod where the table does not yet exist.
+      // Earlier this 500ed the whole admin Document Centre.
+      mockQuery.mockRejectedValueOnce(new Error('relation "document_requests" does not exist'));
+      const result = await service.getAllPending();
+      expect(result).toEqual([]);
+    });
   });
 
   // ── approveRequest ───────────────────────────────────────────────────────

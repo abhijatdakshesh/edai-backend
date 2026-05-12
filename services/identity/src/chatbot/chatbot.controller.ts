@@ -89,6 +89,9 @@ export class ChatbotController {
         identifier = empCode || email || sub;
         graph = await this.kgService.buildTeacherGraph(identifier);
       } else if (role === 'PARENT') {
+        // Prefer phone (matches WhatsApp/SMS path), but the demo seed parent
+        // has no phone in the JWT — fall back to the user UUID `sub` so the
+        // graph builder can resolve it via parent_student_links / demo map.
         identifier = (phone || '').replace(/\D/g, '') || sub;
         graph = await this.kgService.buildParentGraph(identifier);
       } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {

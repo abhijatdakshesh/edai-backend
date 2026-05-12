@@ -148,10 +148,18 @@ export class DocumentsService {
 
   async getAllPending(): Promise<DocumentRequest[]> {
     if (!this.db) return [];
-    const rows = await this.db.query(
-      `SELECT * FROM document_requests WHERE status = 'PENDING' ORDER BY requested_at ASC`,
-    );
-    return (rows as Record<string, unknown>[]).map(mapRow);
+    // Tolerate partially-migrated environments where the document_requests
+    // table does not yet exist (e.g. fresh container starts before migrations
+    // complete). Returning [] is safer than 500ing the whole admin queue.
+    try {
+      const rows = await this.db.query(
+        `SELECT * FROM document_requests WHERE status = 'PENDING' ORDER BY requested_at ASC`,
+      );
+      return (rows as Record<string, unknown>[]).map(mapRow);
+    } catch (err) {
+      this.logger.warn(`document_requests query failed (returning empty list): ${(err as Error).message}`);
+      return [];
+    }
   }
 
   async approveRequest(id: string, adminUsn: string): Promise<DocumentRequest> {

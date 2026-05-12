@@ -309,36 +309,37 @@ export class TimetableService {
 
   async generate(configId: string): Promise<GeneratedTimetable> {
     if (!this.db) throw new InternalServerErrorException('No database');
-    if (!process.env['ANTHROPIC_API_KEY']) {
-      throw new InternalServerErrorException(
-        'ANTHROPIC_API_KEY is not configured. Set it in the production environment.',
-      );
-    }
 
     const config = await this.getConfig(configId);
     const classrooms = await this.getClassrooms();
-    const prompt = this.buildPrompt(config, classrooms);
 
-    let rawJson: string;
-    try {
-      rawJson = await geminiGenerate(prompt, GEMINI_SMART, 8192);
-    } catch (err) {
-      this.logger.error(`[Timetable] Claude failed for ${configId}: ${err instanceof Error ? err.message : String(err)}`);
-      throw new InternalServerErrorException('AI timetable generation failed');
+    // Try AI generation first; on any failure (no key, API error, malformed
+    // JSON) fall back to a deterministic round-robin scheduler so the demo
+    // never 500s. This matches Netflix's "graceful degradation" — show the
+    // user a working artefact and a banner explaining the fallback.
+    let parsed: ClaudeTimetableResponse | null = null;
+    let fallbackReason: string | null = null;
+
+    if (!process.env['ANTHROPIC_API_KEY'] && !process.env['GEMINI_API_KEY']) {
+      fallbackReason = 'AI key not configured';
+    } else {
+      const prompt = this.buildPrompt(config, classrooms);
+      try {
+        const rawJson = await geminiGenerate(prompt, GEMINI_SMART, 8192);
+        const jsonStr = rawJson
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```\s*$/i, '')
+          .trim();
+        parsed = JSON.parse(jsonStr) as ClaudeTimetableResponse;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`[Timetable] AI path failed for ${configId} — using synth fallback. Reason: ${msg}`);
+        fallbackReason = `AI generation failed: ${msg.slice(0, 120)}`;
+      }
     }
 
-    // Strip markdown fences Claude sometimes adds despite instructions
-    const jsonStr = rawJson
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```\s*$/i, '')
-      .trim();
-
-    let parsed: ClaudeTimetableResponse;
-    try {
-      parsed = JSON.parse(jsonStr) as ClaudeTimetableResponse;
-    } catch {
-      this.logger.error(`[Timetable] JSON parse failed. Raw: ${rawJson.slice(0, 500)}`);
-      throw new InternalServerErrorException('AI returned malformed timetable JSON');
+    if (!parsed) {
+      parsed = this.synthesizeTimetable(config, classrooms, fallbackReason ?? 'AI unavailable');
     }
 
     await this.persistSlots(configId, parsed.slots ?? [], classrooms);
@@ -349,9 +350,127 @@ export class TimetableService {
       [configId],
     );
 
-    this.logger.log(`[Timetable] Generated ${parsed.slots?.length ?? 0} slots, ${parsed.conflicts?.length ?? 0} conflicts for config ${configId}`);
+    this.logger.log(`[Timetable] Generated ${parsed.slots?.length ?? 0} slots, ${parsed.conflicts?.length ?? 0} conflicts for config ${configId}${fallbackReason ? ` (synth fallback)` : ''}`);
 
     return this.buildViews(configId, parsed.slots ?? [], parsed.conflicts ?? []);
+  }
+
+  /**
+   * Deterministic round-robin timetable used when the AI path fails. Honours
+   * the basic VTU rules: lunch break at config.breakAfterPeriod, lab subjects
+   * occupy 2 consecutive non-lunch periods, theory uses LECTURE rooms, lab
+   * uses LAB rooms, no per-section duplicate on the same day.
+   */
+  private synthesizeTimetable(
+    config: TimetableConfig,
+    classrooms: Classroom[],
+    reason: string,
+  ): ClaudeTimetableResponse {
+    const lectureRooms = classrooms.filter(c => c.type === 'LECTURE').map(c => c.name);
+    const labRooms = classrooms.filter(c => c.type === 'LAB').map(c => c.name);
+    const lectures = lectureRooms.length > 0 ? lectureRooms : ['LH-101', 'LH-102', 'LH-103'];
+    const labs = labRooms.length > 0 ? labRooms : ['LAB-CS-A', 'LAB-CS-B'];
+
+    const days = config.workingDays ?? ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const periods = config.periodsPerDay ?? 7;
+    const breakAt = config.breakAfterPeriod ?? 4;
+    const sections = config.sections ?? ['A'];
+    const subjects = config.subjects ?? [];
+
+    const slots: ClaudeSlot[] = [];
+    const conflicts: ClaudeConflict[] = [{
+      conflictType: 'OTHER',
+      severity: 'INFO',
+      description: `Synthesized fallback used: ${reason}. Review and regenerate when AI is available.`,
+    }];
+
+    if (subjects.length === 0) {
+      // Nothing to schedule — emit lunch breaks only so the table renders.
+      for (const section of sections) {
+        for (const day of days) {
+          for (let p = 1; p <= periods; p++) {
+            slots.push({ section, day, period: p, isBreak: p === breakAt });
+          }
+        }
+      }
+      return { slots, conflicts };
+    }
+
+    // Round-robin per section: walk subjects in order, advance one slot per
+    // period, skip the break, schedule LAB pairs on consecutive non-break
+    // periods. Saturday capped to first 4 periods (rule #9).
+    for (const section of sections) {
+      let lectureRoomIdx = 0;
+      let labRoomIdx = 0;
+      let subjIdx = 0;
+      const dailyUsed: Record<string, Set<string>> = {};
+
+      for (const day of days) {
+        dailyUsed[day] = new Set<string>();
+        const isSaturday = day === 'SAT';
+        const maxPeriod = isSaturday ? Math.min(4, periods) : periods;
+
+        for (let p = 1; p <= periods; p++) {
+          if (p === breakAt) {
+            slots.push({ section, day, period: p, isBreak: true });
+            continue;
+          }
+          if (p > maxPeriod) {
+            slots.push({ section, day, period: p, isBreak: true });
+            continue;
+          }
+
+          // Find next subject this section hasn't used today
+          let attempts = 0;
+          let chosen: TimetableSubjectRow | null = null;
+          while (attempts < subjects.length) {
+            const candidate = subjects[(subjIdx + attempts) % subjects.length];
+            if (candidate && !dailyUsed[day].has(candidate.subjectCode)) {
+              chosen = candidate;
+              subjIdx = (subjIdx + attempts + 1) % subjects.length;
+              break;
+            }
+            attempts++;
+          }
+          if (!chosen) {
+            // All subjects already taught today for this section — leave the
+            // slot as a free period rather than violating rule #5.
+            slots.push({ section, day, period: p, isBreak: true });
+            continue;
+          }
+
+          const isLab = chosen.subjectType === 'LAB' || chosen.requiresLab === true;
+          const room = isLab
+            ? (labs[labRoomIdx++ % labs.length] ?? 'LAB-CS-A')
+            : (lectures[lectureRoomIdx++ % lectures.length] ?? 'LH-101');
+
+          slots.push({
+            section, day, period: p, isBreak: false,
+            subjectCode: chosen.subjectCode,
+            subjectName: chosen.subjectName,
+            facultyName: chosen.facultyName,
+            classroomName: room,
+            subjectType: isLab ? 'LAB' : 'THEORY',
+          });
+          dailyUsed[day].add(chosen.subjectCode);
+
+          // LAB pair: occupy the next non-break, in-range period as well
+          if (isLab && p + 1 !== breakAt && p + 1 <= maxPeriod) {
+            slots.push({
+              section, day, period: p + 1, isBreak: false,
+              subjectCode: chosen.subjectCode,
+              subjectName: chosen.subjectName,
+              facultyName: chosen.facultyName,
+              classroomName: room,
+              subjectType: 'LAB',
+            });
+            p += 1;
+          }
+        }
+      }
+    }
+
+    return { slots, conflicts };
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────

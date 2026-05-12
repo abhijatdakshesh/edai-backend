@@ -454,6 +454,21 @@ describe('CommsService', () => {
       expect(svc.announcements[0].title).toBe('Holiday');
       expect(svc.announcements[0].createdAt).toBe('2026-04-10T09:00:00.000Z');
     });
+
+    it('seeds VOICE consent for demo USNs in rvce institution', async () => {
+      // Without this, the prod admin Voice Calling demo 403s with
+      // "principal <usn> has not consented to VOICE communications" because
+      // SeedService only runs on dev profiles. Voice consent for the
+      // hardcoded demo USNs lets the call trigger succeed without manual
+      // grant calls. Real students still require explicit opt-in.
+      const mockEvts = { emitAiCallCompleted: jest.fn(), emitAiCallTurn: jest.fn() };
+      const consent = new ConsentService(null);
+      const svc = new CommsService(mockEvts as any, consent);
+      await svc.onModuleInit();
+      expect(consent.hasConsent('1RV21CS001', 'VOICE', 'rvce')).toBe(true);
+      expect(consent.hasConsent('1RV21CS002', 'VOICE', 'rvce')).toBe(true);
+      expect(consent.hasConsent('1RV21CS003', 'VOICE', 'rvce')).toBe(true);
+    });
   });
 
   // ─── getAdminCallLogs — institutionId filter ────────────────────────────────
