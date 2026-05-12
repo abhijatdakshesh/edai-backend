@@ -163,8 +163,11 @@ describe('KnowledgeGraphService', () => {
       expect(graph.child.name).toBe('Alice');
     });
 
-    it('throws when parent not found', async () => {
-      mockQuery.mockResolvedValueOnce([]);  // no parent
+    it('throws when parent not found (after both phone- and user-id lookups miss)', async () => {
+      mockQuery
+        .mockResolvedValueOnce([])  // 1. students.parent_phone
+        .mockResolvedValueOnce([]); // 2. parent_student_links fallback
+      // Identifier is not in DEMO_PARENT_USN — must reject.
       await expect(svc.buildParentGraph('+91000')).rejects.toThrow('Parent not found');
     });
 
@@ -173,6 +176,19 @@ describe('KnowledgeGraphService', () => {
       const graph = await svcNoDb.buildParentGraph('+91000');
       expect(graph.role).toBe('PARENT');
       expect(graph.child.name).toBe('Unknown');
+    });
+
+    it('falls back to demo USN when identifier is the seed parent UUID and DB lookups miss', async () => {
+      // Both phone- and parent_student_links lookups return [] — but
+      // 'u-parent-01' is in DEMO_PARENT_USN so we still build a personalised
+      // graph keyed on the demo child USN. This is what unblocks the parent
+      // chatbot demo on prod (KAN-fix multi-portal sweep).
+      // Default to [] for all subsequent buildStudentGraph queries so
+      // every per-query .catch chain has something to chain off.
+      mockQuery.mockResolvedValue([]);
+      const graph = await svc.buildParentGraph('u-parent-01');
+      expect(graph.role).toBe('PARENT');
+      expect(graph.child).toBeDefined();
     });
   });
 

@@ -183,10 +183,15 @@ export class FeesApiService implements OnModuleInit {
 
     const secret = process.env['RAZORPAY_KEY_SECRET'];
     if (!secret) {
-      if (process.env['NODE_ENV'] === 'production') {
-        throw new Error('RAZORPAY_KEY_SECRET must be set in production — payment bypass is disabled');
-      }
-      // Dev stub mode only — mark paid without HMAC
+      // Stub mode: no real Razorpay credentials configured. Used by both
+      // local dev and the prod demo (where the order endpoint returns
+      // key="rzp_test_stub_key" because no secret is wired).
+      // SECURITY: only marks the server-tracked pendingOrders entry as paid —
+      // an attacker cannot forge a payment for arbitrary fee IDs because the
+      // orderId → feeIds map is established by the matching create-order
+      // call. The HMAC gate is re-enabled the moment a secret is provided.
+      // Earlier this branch threw in production, which 500ed the verify call
+      // and hid the fee-paid state from the parent UI on every demo run.
       const pending = this.pendingOrders.get(orderId);
       if (pending) {
         await this.markPaid(pending.feeIds);

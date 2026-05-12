@@ -315,5 +315,13 @@ describe('ChatbotService', () => {
       const svcNoDb = new ChatbotService(null);
       expect(await svcNoDb.getSessions()).toEqual([]);
     });
+
+    it('returns [] when chat_conversations query rejects (missing table)', async () => {
+      // Partially-migrated prod where the table is not yet created.
+      // Earlier this 500ed the principal Chat Sessions view.
+      mockQuery.mockRejectedValueOnce(new Error('relation "chat_conversations" does not exist'));
+      const sessions = await svc.getSessions();
+      expect(sessions).toEqual([]);
+    });
   });
 });

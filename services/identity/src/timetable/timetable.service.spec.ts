@@ -475,34 +475,45 @@ describe('TimetableService', () => {
       await expect(noDb.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('throws InternalServerErrorException when Claude throws an Error', async () => {
+    // After the AI-failure-fallback rollout, generate() no longer 500s when
+    // Claude/Gemini errors out — it returns a synth round-robin timetable
+    // with an INFO conflict explaining the fallback. These tests now assert
+    // that contract instead of expecting an exception.
+
+    it('falls back to synth timetable when Claude throws an Error', async () => {
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
       mockClaudeGenerate.mockRejectedValueOnce(new Error('Claude API down'));
 
-      await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
+      const result = await svc.generate(CONFIG_ID);
+      expect(result.slots.length).toBeGreaterThan(0);
+      expect(result.conflicts.some((c) => /Synthesized fallback/i.test(c.description ?? ''))).toBe(true);
     });
 
-    it('throws InternalServerErrorException when Claude throws a non-Error string', async () => {
+    it('falls back to synth timetable when Claude throws a non-Error string', async () => {
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
       mockClaudeGenerate.mockRejectedValueOnce('rate_limit_exceeded');
 
-      await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
+      const result = await svc.generate(CONFIG_ID);
+      expect(result.slots.length).toBeGreaterThan(0);
+      expect(result.conflicts.some((c) => /Synthesized fallback/i.test(c.description ?? ''))).toBe(true);
     });
 
-    it('throws InternalServerErrorException when JSON parse fails', async () => {
+    it('falls back to synth timetable when JSON parse fails', async () => {
       mockQuery
         .mockResolvedValueOnce([rawConfigRow])
         .mockResolvedValueOnce([rawSubjectRow])
         .mockResolvedValueOnce([rawClassroomRow]);
       mockClaudeGenerate.mockResolvedValueOnce('not json at all');
 
-      await expect(svc.generate(CONFIG_ID)).rejects.toThrow(InternalServerErrorException);
+      const result = await svc.generate(CONFIG_ID);
+      expect(result.slots.length).toBeGreaterThan(0);
+      expect(result.conflicts.some((c) => /Synthesized fallback/i.test(c.description ?? ''))).toBe(true);
     });
 
     it('strips plain ``` fences before parsing', async () => {

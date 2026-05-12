@@ -397,16 +397,52 @@ export class KnowledgeGraphService {
     return this.withTimeout(build(), this.emptyStudentGraph(usn));
   }
 
-  async buildParentGraph(phone: string): Promise<ParentKnowledgeGraph> {
+  // Demo seed map: parent JWT subject (UUID) → child USN.
+  // Keeps the parent chatbot personalised on the prod demo where the seeded
+  // parent user has no parent_phone column on `users` and the WhatsApp-style
+  // phone-key lookup misses. Real parents are still resolved via parent_phone.
+  // Mirrors SeedService.seedParentPortal (parent_id 'u-parent-01' → 1RV21CS001).
+  private readonly DEMO_PARENT_USN: Record<string, string> = {
+    'u-parent-01': '1RV21CS001',
+  };
+
+  async buildParentGraph(identifier: string): Promise<ParentKnowledgeGraph> {
     if (!this.db) {
-      return { role: 'PARENT', phone, preferredLanguage: 'en', child: this.emptyStudentGraph('UNKNOWN'), announcements: [] };
+      // Even without a DB, give the seed parent a personalised demo graph.
+      const demoUsn = this.DEMO_PARENT_USN[identifier];
+      if (demoUsn) {
+        const child = await this.buildStudentGraph(demoUsn).catch(() => this.emptyStudentGraph(demoUsn));
+        const { role: _r, ...childWithoutRole } = child;
+        return { role: 'PARENT', phone: identifier, preferredLanguage: 'en', child: childWithoutRole, announcements: [] };
+      }
+      return { role: 'PARENT', phone: identifier, preferredLanguage: 'en', child: this.emptyStudentGraph('UNKNOWN'), announcements: [] };
     }
 
     const build = async () => {
-      const rows = await this.db!.query(
+      // 1) Try the WhatsApp/SMS path: identifier is a digits-only phone.
+      let rows = await this.db!.query(
         `SELECT student_id, COALESCE(preferred_language, 'en') AS lang
-         FROM students WHERE parent_phone = $1 LIMIT 1`, [phone],
+         FROM students WHERE parent_phone = $1 LIMIT 1`, [identifier],
       ).catch(() => []);
+
+      // 2) Fall back: identifier is a parent user UUID — look up via parent_student_links.
+      if (!rows[0]) {
+        rows = await this.db!.query(
+          `SELECT s.student_id AS student_id, COALESCE(s.preferred_language, 'en') AS lang
+           FROM parent_student_links psl
+           JOIN students s ON s.id = psl.student_id
+           WHERE psl.parent_id = $1
+           ORDER BY psl.is_primary DESC NULLS LAST
+           LIMIT 1`, [identifier],
+        ).catch(() => []);
+      }
+
+      // 3) Demo seed fallback so prod demo works even when neither table is
+      //    populated for the seeded parent user.
+      if (!rows[0] && this.DEMO_PARENT_USN[identifier]) {
+        rows = [{ student_id: this.DEMO_PARENT_USN[identifier], lang: 'en' }];
+      }
+
       if (!rows[0]) throw new Error('Parent not found');
 
       const [childGraph, parentAnnouncements] = await Promise.all([
@@ -415,14 +451,24 @@ export class KnowledgeGraphService {
       ]);
       return {
         role: 'PARENT' as const,
-        phone,
+        phone: identifier,
         preferredLanguage: rows[0].lang,
         child: { ...childGraph, role: undefined as any },
         announcements: (parentAnnouncements as any[]).map(a => ({ title: a.title, content: a.content })),
       } as ParentKnowledgeGraph;
     };
 
-    return this.withTimeout(build(), { role: 'PARENT', phone, preferredLanguage: 'en', child: this.emptyStudentGraph('UNKNOWN'), announcements: [] });
+    // On total failure (e.g. timeout) at least return a personalised demo
+    // graph for the seed parent rather than an empty UNKNOWN child.
+    const demoUsn = this.DEMO_PARENT_USN[identifier];
+    const fallback: ParentKnowledgeGraph = {
+      role: 'PARENT',
+      phone: identifier,
+      preferredLanguage: 'en',
+      child: this.emptyStudentGraph(demoUsn ?? 'UNKNOWN'),
+      announcements: [],
+    };
+    return this.withTimeout(build(), fallback);
   }
 
   async buildTeacherGraph(empId: string): Promise<TeacherKnowledgeGraph> {

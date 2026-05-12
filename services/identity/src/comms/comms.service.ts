@@ -110,6 +110,26 @@ export class CommsService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    // Seed VOICE consent for demo students so the admin Voice Calling demo
+    // works on prod without manually granting consent. Idempotent — calling
+    // grant() on an existing record merges the channel set, never resets.
+    // DPDP: this only runs for the well-known demo USNs from SEED_USERS;
+    // real students still require explicit opt-in via /api/comms/consent/grant.
+    const DEMO_USNS = ['1RV21CS001', '1RV21CS002', '1RV21CS003'];
+    const DEMO_INSTITUTION = 'rvce';
+    for (const usn of DEMO_USNS) {
+      try {
+        this.consent.grant(
+          usn,
+          ['VOICE', 'ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL'],
+          DEMO_INSTITUTION,
+        );
+      } catch (e) {
+        this.logger.warn(`Demo consent seed failed for ${usn}: ${(e as Error).message}`);
+      }
+    }
+    this.logger.log(`Demo VOICE consent seeded for ${DEMO_USNS.length} USNs in ${DEMO_INSTITUTION}`);
+
     if (this.callLogRepo) {
       const rows = await this.callLogRepo.find({ order: { calledAt: 'DESC' }, take: 500 });
       this.callLogs = rows.map((r) => ({

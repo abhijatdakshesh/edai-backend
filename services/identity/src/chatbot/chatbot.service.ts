@@ -216,10 +216,17 @@ ${JSON.stringify(graph, null, 2)}`;
 
   async getSessions(): Promise<unknown[]> {
     if (!this.db) return [];
-    return this.db.query(
-      `SELECT id, user_identifier, user_role, channel, language, is_active, created_at, last_message_at
-       FROM chat_conversations ORDER BY last_message_at DESC LIMIT 100`,
-    ) as Promise<unknown[]>;
+    // Tolerate partially-migrated environments where chat_conversations does
+    // not yet exist. Returning [] keeps the admin dashboard from 500ing.
+    try {
+      return await (this.db.query(
+        `SELECT id, user_identifier, user_role, channel, language, is_active, created_at, last_message_at
+         FROM chat_conversations ORDER BY last_message_at DESC LIMIT 100`,
+      ) as Promise<unknown[]>);
+    } catch (err) {
+      this.logger.warn(`chat_conversations query failed (returning empty list): ${(err as Error).message}`);
+      return [];
+    }
   }
 
   /**
