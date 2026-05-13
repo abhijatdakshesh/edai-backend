@@ -15,6 +15,7 @@ const GRADE_POINTS: Record<string, number> = {
 };
 
 export function totalToVtuGrade(total: number, maxTotal: number): VtuGrade {
+  if (maxTotal <= 0) throw new Error("maxTotal must be > 0");
   const pct = (total / maxTotal) * 100;
   for (const t of GRADE_THRESHOLDS) {
     if (pct >= t.pct) return t.grade;
