@@ -450,9 +450,9 @@ export class SeedService implements OnModuleInit {
 
     // Seed DPDP consent for all students and parent u-parent-01
     STUDENTS.forEach((s) => {
-      this.commsSvc.grantConsent(s.usn, ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL']);
+      this.commsSvc.grantConsent(s.usn, ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL', 'VOICE']);
     });
-    this.commsSvc.grantConsent('u-parent-01', ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL']);
+    this.commsSvc.grantConsent('u-parent-01', ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL', 'VOICE']);
 
     this.commsSvc.messages = [
       { id: 'msg-1', parentId: 'u-parent-01', content: 'Your child was absent today. Please ensure they attend tomorrow.', direction: 'OUTBOUND', sentAt: now.toISOString(), channel: 'WHATSAPP' },
