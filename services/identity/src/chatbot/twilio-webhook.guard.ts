@@ -10,6 +10,8 @@ export class TwilioWebhookGuard implements CanActivate {
 
     // No Twilio token configured — allow (e.g. local dev without Twilio)
     if (!authToken) return true;
+    // Escape hatch for debugging proxy/signature issues — remove once confirmed working
+    if (process.env['TWILIO_SKIP_VALIDATION'] === 'true') return true;
     // Only bypass signature validation in test when explicitly opted in
     if (process.env['NODE_ENV'] === 'test' && process.env['ALLOW_WEBHOOK_IN_TEST'] === 'true') return true;
     if (!twilioSig) throw new ForbiddenException('Missing Twilio signature');
