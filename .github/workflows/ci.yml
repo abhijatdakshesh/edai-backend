@@ -105,7 +105,7 @@ jobs:
         # Explicitly install fastapi + pydantic-settings in case the
         # `pip install -r requirements.txt` step was a no-op (|| true).
         run: |
-          .venv/bin/pip install pytest httpx "fastapi>=0.100" "pydantic-settings>=2.0" "pydantic>=2.0"
+          .venv/bin/pip install pytest httpx "fastapi>=0.100" "pydantic-settings>=2.0" "pydantic>=2.0" pyyaml
           .venv/bin/pytest tests/ -v --tb=short
 
   # ── Go Voice Service ────────────────────────────────────────────────────
