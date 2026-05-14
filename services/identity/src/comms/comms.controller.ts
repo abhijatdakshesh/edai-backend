@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards, HttpCode } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Controller, Get, Post, Patch, Delete, Param, Body, Query, Request, Res, UseGuards, HttpCode, Logger } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Response } from 'express';
 import { CommsService } from './comms.service';
@@ -11,7 +11,7 @@ import { StudentPortalService } from '../student-portal/student-portal.service';
 const BCP47_LANG: Record<string, string> = {
   en: 'en-IN', kn: 'kn-IN', hi: 'hi-IN', ta: 'ta-IN', te: 'te-IN',
 };
-const POLLY_VOICE_EN = 'Polly.Aditi-Neural';
+const POLLY_VOICE_EN = 'Polly.Kajal-Neural';
 
 function escXml(s: string): string {
   return s
@@ -49,6 +49,7 @@ function verifyAudioSignature(key: string, exp: string | undefined, sig: string 
 @Controller()
 @UseGuards(TwilioWebhookGuard)
 class PublicCommsController {
+  private readonly logger = new Logger('PublicCommsController');
   constructor(
     private readonly svc: CommsService,
     private readonly conversation: ConversationStateService,
@@ -63,6 +64,7 @@ class PublicCommsController {
     const state = this.conversation.get(callId);
     const language = state?.language ?? 'en';
     const langTag = BCP47_LANG[language] ?? 'en-IN';
+    this.logger.log(`[TwiML] callId=${callId} stateFound=${!!state} language=${language} baseUrl=${baseUrl}`);
 
     let speakXml: string;
     if (language === 'en') {
@@ -71,6 +73,7 @@ class PublicCommsController {
     } else {
       // Regional: greeting audio cached under the bare callId, fetched via signed URL
       const playUrl = this.svc.signAudioUrl(callId, baseUrl);
+      this.logger.log(`[TwiML] playUrl=${playUrl}`);
       speakXml = `<Play>${escXml(playUrl)}</Play>`;
     }
 
@@ -118,6 +121,7 @@ export { PublicCommsController };
  * HMAC via verifyAudioSignature() (short-lived signed URL) is the sole auth gate. */
 @Controller()
 class AudioController {
+  private readonly logger = new Logger('AudioController');
   constructor(private readonly svc: CommsService) {}
 
   /** If the signing key is unset, all requests fail closed (403). */
@@ -128,11 +132,15 @@ class AudioController {
     @Query('sig') sig: string | undefined,
     @Res() res: Response,
   ) {
-    if (!verifyAudioSignature(key, exp, sig)) {
+    const sigOk = verifyAudioSignature(key, exp, sig);
+    this.logger.log(`[Audio] key=${key} exp=${exp} sigOk=${sigOk} signingKeySet=${!!process.env['TWILIO_AUDIO_SIGNING_KEY']}`);
+    if (!sigOk) {
+      this.logger.warn(`[Audio] 403 key=${key} exp=${exp} sig=${sig?.slice(0, 8)}`);
       res.status(403).send('Invalid or expired audio signature');
       return;
     }
     const buf = this.svc.getAudio(key);
+    this.logger.log(`[Audio] key=${key} bufLen=${buf?.length ?? 'NOT_FOUND'}`);
     if (!buf) { res.status(404).send('Audio not found'); return; }
     res.setHeader('Content-Type', 'audio/wav');
     res.setHeader('Content-Length', buf.length);
