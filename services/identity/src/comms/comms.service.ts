@@ -202,6 +202,19 @@ export class CommsService implements OnModuleInit {
     '1RV21CS005': '+919113949714',
   };
 
+  // ── Name → USN resolution for demo students (case-insensitive) ───────────
+  private readonly nameToUsnMap: Record<string, string> = {
+    'arjun kumar': '1RV21CS001',
+    'riya patel': '1RV21CS002',
+    'priya sharma': '1RV21CS003',
+    'rahul verma': '1RV21CS004',
+    'anjali reddy': '1RV21CS005',
+  };
+
+  private resolveUsn(input: string): string {
+    return this.nameToUsnMap[input.trim().toLowerCase()] ?? input.trim();
+  }
+
   // ── In-memory audio cache for Twilio <Play>. Keyed by `${callId}` (greeting)
   //    or `${callId}:${turnIdx}` (subsequent AI turns).
   //    Map preserves insertion order, so we evict the oldest entry when at cap
@@ -293,7 +306,8 @@ export class CommsService implements OnModuleInit {
     return null;
   }
 
-  async triggerCall(usn: string, type: string, institutionId = 'default', language = 'en'): Promise<{ callId: string; status: string; scheduledAt: string }> {
+  async triggerCall(rawUsn: string, type: string, institutionId = 'default', language = 'en'): Promise<{ callId: string; status: string; scheduledAt: string }> {
+    const usn = this.resolveUsn(rawUsn);
     // DPDP gate: voice calls require explicit VOICE consent.
     // - In production we propagate the ForbiddenException so the controller
     //   returns 403 to the caller. Silent bypass is the bug Daniel called out.
