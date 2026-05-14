@@ -6,6 +6,7 @@ on:
     paths:
       - 'services/voice/**'
       - '.github/workflows/deploy-voice.yml'
+  workflow_dispatch:
 
 env:
   ACR_LOGIN_SERVER: edaiacrprod.azurecr.io
