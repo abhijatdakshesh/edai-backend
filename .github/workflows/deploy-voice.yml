@@ -1,0 +1,82 @@
+name: Deploy — voice (Azure Container Apps)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/voice/**'
+      - '.github/workflows/deploy-voice.yml'
+
+env:
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+  CONTAINER_APP_NAME: voice
+  RESOURCE_GROUP: rg-rvtrust-voice
+  CONTAINER_APP_ENV: env-voice
+
+jobs:
+  build-and-deploy:
+    name: Build → Push → Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: ACR login
+        run: az acr login --name ${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ env.ACR_LOGIN_SERVER }}/voice:${{ github.sha }}
+          docker build -t "$IMAGE" services/voice/
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Container Apps (upsert)
+        run: |
+          # Create on first run, update on subsequent runs
+          EXISTS=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query name -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$EXISTS" ]; then
+            az containerapp create \
+              --name ${{ env.CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --environment ${{ env.CONTAINER_APP_ENV }} \
+              --image "$IMAGE" \
+              --registry-server ${{ env.ACR_LOGIN_SERVER }} \
+              --cpu 0.5 --memory 1Gi \
+              --min-replicas 0 --max-replicas 3 \
+              --ingress external --target-port 8090 \
+              --env-vars \
+                PORT=8090 \
+                KAFKA_BROKERS="${{ secrets.KAFKA_BROKERS }}" \
+                AI_ENGINE_URL="${{ secrets.AI_ENGINE_URL }}" \
+                SARVAM_API_KEY="${{ secrets.SARVAM_API_KEY }}" \
+                TWILIO_ACCOUNT_SID="${{ secrets.TWILIO_ACCOUNT_SID }}" \
+                TWILIO_AUTH_TOKEN="${{ secrets.TWILIO_AUTH_TOKEN }}" \
+                TWILIO_FROM_NUMBER="${{ secrets.TWILIO_FROM_NUMBER }}"
+          else
+            az containerapp update \
+              --name ${{ env.CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image "$IMAGE"
+          fi
+
+      - name: Print WEBHOOK_BASE_URL
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo ""
+          echo "=========================================="
+          echo "  WEBHOOK_BASE_URL=https://$FQDN"
+          echo "  Set this in Twilio console + VOICE_SERVICE_URL env"
+          echo "=========================================="
