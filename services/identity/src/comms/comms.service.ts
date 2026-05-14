@@ -23,6 +23,7 @@ export interface AICallLog {
   summary?: string;
   parentPhone?: string;
   language?: string;
+  callType?: string;
 }
 
 export interface Announcement {
@@ -54,7 +55,7 @@ const SARVAM_LANG: Record<string, string> = {
   hi: 'hi-IN', kn: 'kn-IN', ta: 'ta-IN', te: 'te-IN',
   mr: 'mr-IN', bn: 'bn-IN', gu: 'gu-IN', ml: 'ml-IN', pa: 'pa-IN', or: 'od-IN',
 };
-const POLLY_VOICE_EN = 'Polly.Aditi-Neural';
+const POLLY_VOICE_EN = 'Polly.Kajal-Neural';
 const MAX_TURNS = 6;
 const MAX_DURATION_MS = 4 * 60 * 1000;
 const AUDIO_URL_TTL_MS = 10 * 60 * 1000; // signed audio URL lifetime
@@ -115,7 +116,7 @@ export class CommsService implements OnModuleInit {
     // grant() on an existing record merges the channel set, never resets.
     // DPDP: this only runs for the well-known demo USNs from SEED_USERS;
     // real students still require explicit opt-in via /api/comms/consent/grant.
-    const DEMO_USNS = ['1RV21CS001', '1RV21CS002', '1RV21CS003'];
+    const DEMO_USNS = ['1RV21CS001', '1RV21CS002', '1RV21CS003', '1RV21CS006', '1RV21CS007', '1RV21CS008'];
     const DEMO_INSTITUTION = 'rvce';
     for (const usn of DEMO_USNS) {
       try {
@@ -200,6 +201,9 @@ export class CommsService implements OnModuleInit {
     '1RV21CS003': '+919113949714',
     '1RV21CS004': '+919113949714',
     '1RV21CS005': '+919113949714',
+    '1RV21CS006': '+918700151250',
+    '1RV21CS007': '+918700151250',
+    '1RV21CS008': '+918700151250',
   };
 
   // ── Name → USN resolution for demo students (case-insensitive) ───────────
@@ -209,6 +213,9 @@ export class CommsService implements OnModuleInit {
     'priya sharma': '1RV21CS003',
     'rahul verma': '1RV21CS004',
     'anjali reddy': '1RV21CS005',
+    'vikram singh': '1RV21CS006',
+    'deepa nair': '1RV21CS007',
+    'sanjay gowda': '1RV21CS008',
   };
 
   private resolveUsn(input: string): string {
@@ -256,8 +263,9 @@ export class CommsService implements OnModuleInit {
 
   private async generateSarvamAudio(text: string, langCode: string): Promise<Buffer | null> {
     const key = process.env['SARVAM_API_KEY'];
-    if (!key) return null;
+    if (!key) { this.logger.warn('[Sarvam] SARVAM_API_KEY not set'); return null; }
     try {
+      this.logger.log(`[Sarvam] TTS request lang=${langCode} textLen=${text.length}`);
       const res = await fetch('https://api.sarvam.ai/text-to-speech', {
         method: 'POST',
         headers: { 'api-subscription-key': key, 'Content-Type': 'application/json' },
@@ -273,9 +281,15 @@ export class CommsService implements OnModuleInit {
           enable_preprocessing: true,
         }),
       });
-      const data = await res.json() as { audios?: string[] };
-      if (data.audios?.[0]) return Buffer.from(data.audios[0], 'base64');
-    } catch (e) { console.error('[Sarvam] TTS error:', e); }
+      const data = await res.json() as { audios?: string[]; error?: unknown };
+      if (data.error) { this.logger.error(`[Sarvam] API error: ${JSON.stringify(data.error)}`); return null; }
+      if (data.audios?.[0]) {
+        const buf = Buffer.from(data.audios[0], 'base64');
+        this.logger.log(`[Sarvam] ✓ audio bytes=${buf.length} header=${buf.slice(0, 4).toString('ascii')}`);
+        return buf;
+      }
+      this.logger.warn(`[Sarvam] empty audios array httpStatus=${res.status}`);
+    } catch (e) { this.logger.error('[Sarvam] TTS error:', e); }
     return null;
   }
 
@@ -373,7 +387,12 @@ export class CommsService implements OnModuleInit {
       });
       this.generateSarvamAudio(greeting, langCode)
         .then(async (audio) => {
-          if (audio) this.setAudio(callId, audio);
+          if (audio) {
+            this.setAudio(callId, audio);
+            this.logger.log(`[Trigger] audio stored key=${callId} bytes=${audio.length}`);
+          } else {
+            this.logger.warn(`[Trigger] Sarvam returned null — no audio stored for callId=${callId}`);
+          }
           if (parentPhone) await this.dispatchTwilioCall(parentPhone, twimlUrl, statusUrl);
         })
         .catch((e) => console.error('[Sarvam→Twilio] Error:', e));
@@ -381,7 +400,7 @@ export class CommsService implements OnModuleInit {
 
     const callLog: AICallLog = {
       id: callId, studentUsn: usn, studentName: `Student ${usn}`, parentId: '',
-      parentPhone, language, outcome: 'NO_ANSWER', duration: 0, institutionId,
+      parentPhone, language, callType: type, outcome: 'NO_ANSWER', duration: 0, institutionId,
       calledAt: new Date().toISOString(),
     };
     this.callLogs.push(callLog);
