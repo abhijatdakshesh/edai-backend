@@ -20,8 +20,8 @@ _SILENCE_WAV_B64 = base64.b64encode(b"\x00" * 32000).decode()
 
 
 async def synthesise(text: str, language: str, gender: str, speed: float) -> TtsResponse:
-    cache_key = hashlib.sha256(f"{text}:{language}:{gender}".encode()).hexdigest()
-    # Production: check Redis cache first, then call TTS API, then store result
+    _cache_key = hashlib.sha256(f"{text}:{language}:{gender}".encode()).hexdigest()
+    # Production: check Redis cache using _cache_key, then call TTS API, then store result
 
     if language in SARVAM_LANGUAGES and settings.sarvam_api_key:
         logger.info("Sarvam TTS: language=%s", language)

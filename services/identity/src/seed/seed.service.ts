@@ -26,10 +26,10 @@ const STUDENTS = [
 ];
 
 const SUBJECTS = [
-  { code: 'CS501', name: 'Data Structures & Algorithms' },
-  { code: 'CS502', name: 'Database Management Systems' },
-  { code: 'CS503', name: 'Computer Networks' },
-  { code: 'CS504', name: 'Operating Systems' },
+  { code: 'CS501', name: 'Data Structures & Algorithms', credits: 4 },
+  { code: 'CS502', name: 'Database Management Systems', credits: 4 },
+  { code: 'CS503', name: 'Computer Networks', credits: 3 },
+  { code: 'CS504', name: 'Operating Systems', credits: 4 },
 ];
 
 const TEACHER_ID = 'u-faculty-01';

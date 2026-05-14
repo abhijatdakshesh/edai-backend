@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 async def translate(text: str, source_lang: str, target_lang: str) -> NmtResponse:
-    cache_key = hashlib.sha256(f"{text}:{source_lang}:{target_lang}".encode()).hexdigest()
-    # Production: check Redis cache
+    _cache_key = hashlib.sha256(f"{text}:{source_lang}:{target_lang}".encode()).hexdigest()
+    # Production: check Redis cache using _cache_key
 
     if settings.ai4bharat_api_key:
         logger.info("IndicTrans2 NMT: %s→%s", source_lang, target_lang)

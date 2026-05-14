@@ -110,14 +110,17 @@ export class CoursesService {
       })
       .sort((a, b) => b.semester - a.semester);
 
-    const cgpa = computeCgpa(
-      mappedSemesters.map((s) =>
-        s.subjects.map((sub) => ({
-          credits: sub.credits,
-          gradePoints: vtuGradeToPoints(sub.grade),
-        })),
-      ),
-    );
+    const cgpa =
+      mappedSemesters.length > 0
+        ? computeCgpa(
+            mappedSemesters.map((s) =>
+              s.subjects.map((sub) => ({
+                credits: sub.credits,
+                gradePoints: vtuGradeToPoints(sub.grade),
+              })),
+            ),
+          )
+        : result.cgpa; // fall back to DB value when no semester data exists
 
     return { usn, name: result.usn, cgpa, semesters: mappedSemesters };
   }
