@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { vtuGradeToPoints, computeSgpa, computeCgpa } from '../shared/vtu-grading';
 
 export interface Course {
   id: string;
@@ -90,26 +91,38 @@ export class CoursesService {
       MA101: 4, PH101: 4, CS101: 4,
       CS501: 4, CS502: 4, CS503: 3, CS504: 4, CS505: 3, CS506: 4, CS507: 3,
     };
-    return {
-      usn,
-      name: result.usn,
-      cgpa: result.cgpa,
-      semesters: result.semesters
-        .map((s) => ({
-          semester: s.sem,
-          sgpa: Number(s.sgpa.toFixed(2)),
-          subjects: s.subjects.map((sub) => ({
-            code: sub.code,
-            name: sub.name,
-            credits: creditsByCode[sub.code] ?? 3,
-            ia: sub.ia,
-            exam: sub.ese,
-            total: sub.total,
-            grade: sub.grade,
-          })),
-        }))
-        .sort((a, b) => b.semester - a.semester),
-    };
+    const mappedSemesters = result.semesters
+      .map((s) => {
+        const subjects = s.subjects.map((sub) => ({
+          code: sub.code,
+          name: sub.name,
+          credits: creditsByCode[sub.code] ?? 3,
+          ia: sub.ia,
+          exam: sub.ese,
+          total: sub.total,
+          grade: sub.grade,
+        }));
+        const sgpa = computeSgpa(subjects.map((sub) => ({
+          credits: sub.credits,
+          gradePoints: vtuGradeToPoints(sub.grade),
+        })));
+        return { semester: s.sem, sgpa, subjects };
+      })
+      .sort((a, b) => b.semester - a.semester);
+
+    const cgpa =
+      mappedSemesters.length > 0
+        ? computeCgpa(
+            mappedSemesters.map((s) =>
+              s.subjects.map((sub) => ({
+                credits: sub.credits,
+                gradePoints: vtuGradeToPoints(sub.grade),
+              })),
+            ),
+          )
+        : result.cgpa; // fall back to DB value when no semester data exists
+
+    return { usn, name: result.usn, cgpa, semesters: mappedSemesters };
   }
 
   getCourseById(id: string): Course {

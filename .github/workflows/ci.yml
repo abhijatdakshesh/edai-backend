@@ -10,7 +10,7 @@ jobs:
   # ── Node.js / NestJS services ──────────────────────────────────────────
   node:
     name: Node — ${{ matrix.service }}
-    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +69,7 @@ jobs:
   # ── Python AI Engine ────────────────────────────────────────────────────
   python:
     name: Python — ai-engine
-    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/ai-engine
@@ -88,6 +88,8 @@ jobs:
           .venv/bin/pip install --upgrade pip
 
       - name: Install deps
+        # || true kept for transient network failures on self-hosted runners;
+        # critical test deps are re-pinned explicitly in the Test step.
         run: .venv/bin/pip install -r requirements.txt || true
 
       - name: Lint (ruff)
@@ -100,12 +102,16 @@ jobs:
 
       - name: Test
         # Test failures must fail the job — Daniel review.
-        run: .venv/bin/pip install pytest httpx && .venv/bin/pytest tests/ -v --tb=short
+        # Explicitly install fastapi + pydantic-settings in case the
+        # `pip install -r requirements.txt` step was a no-op (|| true).
+        run: |
+          .venv/bin/pip install pytest httpx "fastapi>=0.100" "pydantic-settings>=2.0" "pydantic>=2.0" pyyaml
+          .venv/bin/pytest tests/ -v --tb=short
 
   # ── Go Voice Service ────────────────────────────────────────────────────
   go:
     name: Go — voice
-    runs-on: ${{ vars.CI_RUNNER_LABEL || 'self-hosted' }}
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/voice

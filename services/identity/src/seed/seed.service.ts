@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, Logger, Optional } from '@nestjs/common';
+import { totalToVtuGrade, vtuGradeToPoints, computeSgpa } from '../shared/vtu-grading';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { RecruiterService } from '../recruiter/recruiter.service';
@@ -25,10 +26,10 @@ const STUDENTS = [
 ];
 
 const SUBJECTS = [
-  { code: 'CS501', name: 'Data Structures & Algorithms' },
-  { code: 'CS502', name: 'Database Management Systems' },
-  { code: 'CS503', name: 'Computer Networks' },
-  { code: 'CS504', name: 'Operating Systems' },
+  { code: 'CS501', name: 'Data Structures & Algorithms', credits: 4 },
+  { code: 'CS502', name: 'Database Management Systems', credits: 4 },
+  { code: 'CS503', name: 'Computer Networks', credits: 3 },
+  { code: 'CS504', name: 'Operating Systems', credits: 4 },
 ];
 
 const TEACHER_ID = 'u-faculty-01';
@@ -467,21 +468,35 @@ export class SeedService implements OnModuleInit {
       semesters: [
         {
           sem: 1,
-          sgpa: s.cgpa + (Math.random() * 0.4 - 0.2),
+          get sgpa() {
+            return computeSgpa([
+              { credits: 4, gradePoints: vtuGradeToPoints(totalToVtuGrade(90, 100)) },
+              { credits: 4, gradePoints: vtuGradeToPoints(totalToVtuGrade(84, 100)) },
+              { credits: 3, gradePoints: vtuGradeToPoints(totalToVtuGrade(95, 100)) },
+            ]);
+          },
           subjects: [
-            { code: 'MA101', name: 'Engineering Mathematics I', ia: 18, ese: 72, total: 90, grade: 'S' },
-            { code: 'PH101', name: 'Engineering Physics', ia: 16, ese: 68, total: 84, grade: 'A' },
-            { code: 'CS101', name: 'Programming in C', ia: 19, ese: 76, total: 95, grade: 'S' },
+            { code: 'MA101', name: 'Engineering Mathematics I', ia: 18, ese: 72, total: 90, grade: totalToVtuGrade(90, 100) },
+            { code: 'PH101', name: 'Engineering Physics', ia: 16, ese: 68, total: 84, grade: totalToVtuGrade(84, 100) },
+            { code: 'CS101', name: 'Programming in C', ia: 19, ese: 76, total: 95, grade: totalToVtuGrade(95, 100) },
           ],
         },
         {
           sem: 5,
-          sgpa: s.cgpa,
+          get sgpa() {
+            return computeSgpa(
+              SUBJECTS.map((sub) => {
+                const ia = Math.min(20, Math.round((s.cgpa / 10) * 20));
+                const ese = Math.min(80, Math.round((s.cgpa / 10) * 80));
+                return { credits: sub.credits ?? 3, gradePoints: vtuGradeToPoints(totalToVtuGrade(ia + ese, 100)) };
+              }),
+            );
+          },
           subjects: SUBJECTS.map((sub) => {
             const ia = Math.min(20, Math.round((s.cgpa / 10) * 20));
             const ese = Math.min(80, Math.round((s.cgpa / 10) * 80));
             const total = ia + ese;
-            const grade = total >= 90 ? 'S' : total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : 'D';
+            const grade = totalToVtuGrade(total, 100);
             return { code: sub.code, name: sub.name, ia, ese, total, grade };
           }),
         },

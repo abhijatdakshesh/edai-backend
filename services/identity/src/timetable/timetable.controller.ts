@@ -56,4 +56,9 @@ export class TimetableController {
   getClassrooms() {
     return this.svc.getClassrooms();
   }
+
+  @Get('student/:usn')
+  getStudentSchedule(@Param('usn') usn: string) {
+    return this.svc.getStudentSchedule(usn);
+  }
 }
