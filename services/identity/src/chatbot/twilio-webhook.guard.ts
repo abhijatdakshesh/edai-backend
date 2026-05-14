@@ -17,19 +17,19 @@ export class TwilioWebhookGuard implements CanActivate {
     try {
       // Dynamic import to avoid hard dependency when Twilio not configured
       const twilio = await import('twilio');
-      // Behind Azure Container Apps, req.protocol is always 'http' (TLS
-      // terminated at ingress). Use TWILIO_WEBHOOK_BASE_URL — already set to
-      // the correct public https:// origin — to reconstruct the signed URL.
       const baseUrl = (process.env['TWILIO_WEBHOOK_BASE_URL'] ?? '').replace(/\/$/, '');
       const fullUrl = baseUrl
         ? `${baseUrl}${req.originalUrl}`
         : `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       const params = req.body as Record<string, string>;
       const valid = twilio.validateRequest(authToken, twilioSig, fullUrl, params);
+      // Temporary diagnostic log — remove after confirmed working
+      console.log(`[TwilioGuard] url=${fullUrl} sig=${twilioSig?.slice(0, 8)}… valid=${valid} bodyKeys=${Object.keys(params).join(',')}`);
       if (!valid) throw new ForbiddenException('Invalid Twilio signature');
       return true;
     } catch (err) {
       if (err instanceof ForbiddenException) throw err;
+      console.error('[TwilioGuard] validation threw:', err);
       throw new ForbiddenException('Twilio validation failed');
     }
   }
