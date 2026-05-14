@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommsController, PublicCommsController } from './comms.controller';
+import { CommsController, PublicCommsController, AudioController } from './comms.controller';
 import { CommsService } from './comms.service';
 import { ConsentService } from './consent.service';
 import { ConversationStateService } from './conversation-state.service';
@@ -18,7 +18,7 @@ import { AiCallLogEntity, AnnouncementEntity } from '../entities/comms.entity';
       ? [TypeOrmModule.forFeature([AiCallLogEntity, AnnouncementEntity])]
       : []),
   ],
-  controllers: [PublicCommsController, CommsController],
+  controllers: [PublicCommsController, AudioController, CommsController],
   providers: [CommsService, ConsentService, ConversationStateService],
   exports: [CommsService, ConsentService],
 })

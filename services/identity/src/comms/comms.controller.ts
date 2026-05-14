@@ -116,7 +116,17 @@ class PublicCommsController {
    * SECURITY: callId is a UUID v4 (crypto.randomUUID) so guessing is infeasible, but we
    * additionally require a short-lived HMAC signature (?exp=&sig=) so any leaked URL
    * stops working ~10 min after issue. Signing key: TWILIO_AUDIO_SIGNING_KEY.
-   * If the signing key is unset, all requests fail closed (403). */
+}
+
+export { PublicCommsController };
+
+/** Unguarded controller — Twilio <Play> fetches audio without X-Twilio-Signature.
+ * HMAC via verifyAudioSignature() (short-lived signed URL) is the sole auth gate. */
+@Controller()
+class AudioController {
+  constructor(private readonly svc: CommsService) {}
+
+  /** If the signing key is unset, all requests fail closed (403). */
   @ Get('comms/audio/:key')
   serveAudio(
     @Param('key') key: string,
@@ -136,7 +146,7 @@ class PublicCommsController {
   }
 }
 
-export { PublicCommsController };
+export { AudioController };
 
 @UseGuards(JwtAuthGuard)
 @Controller()
