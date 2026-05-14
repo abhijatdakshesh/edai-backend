@@ -8,10 +8,10 @@ on:
       - '.github/workflows/deploy-voice.yml'
 
 env:
-  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+  ACR_LOGIN_SERVER: edaiacrprod.azurecr.io
   CONTAINER_APP_NAME: voice
-  RESOURCE_GROUP: rg-rvtrust-voice
-  CONTAINER_APP_ENV: env-voice
+  RESOURCE_GROUP: rg-edai-prod-cin
+  CONTAINER_APP_ENV: cae-edai-prod
 
 jobs:
   build-and-deploy:
