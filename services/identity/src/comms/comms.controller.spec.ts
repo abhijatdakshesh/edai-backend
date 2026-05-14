@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { CommsController, PublicCommsController } from './comms.controller';
+import { CommsController, PublicCommsController, AudioController } from './comms.controller';
 import { CommsService } from './comms.service';
 import { ConsentService } from './consent.service';
 import { StudentPortalService } from '../student-portal/student-portal.service';
@@ -347,6 +347,7 @@ describe('CommsController', () => {
 
 describe('PublicCommsController', () => {
   let publicController: PublicCommsController;
+  let audioController: AudioController;
   const mockGetAudio = jest.fn();
   const mockHandleTurn = jest.fn();
   const mockFinalizeCall = jest.fn();
@@ -364,7 +365,7 @@ describe('PublicCommsController', () => {
         `${baseUrl}/api/comms/audio/${encodeURIComponent(key)}?exp=999999999999&sig=deadbeef`,
     );
     const module = await Test.createTestingModule({
-      controllers: [PublicCommsController],
+      controllers: [PublicCommsController, AudioController],
       providers: [
         { provide: CommsService, useValue: {
           getAudio: mockGetAudio,
@@ -382,6 +383,7 @@ describe('PublicCommsController', () => {
       .useValue({ canActivate: () => true })
       .compile();
     publicController = module.get(PublicCommsController);
+    audioController = module.get(AudioController);
   });
 
   describe('serveTwiml() — interactive', () => {
@@ -460,7 +462,7 @@ describe('PublicCommsController', () => {
     it('returns 403 when signature is missing', () => {
       mockGetAudio.mockReturnValue(Buffer.from('x'));
       const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
-      publicController.serveAudio('call-x', undefined, undefined, res);
+      audioController.serveAudio('call-x', undefined, undefined, res);
       expect(res.status).toHaveBeenCalledWith(403);
       expect(mockGetAudio).not.toHaveBeenCalled();
     });
@@ -468,7 +470,7 @@ describe('PublicCommsController', () => {
     it('returns 403 when signature is invalid', () => {
       const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
       const { exp } = signedParams('call-x');
-      publicController.serveAudio('call-x', exp, 'deadbeef', res);
+      audioController.serveAudio('call-x', exp, 'deadbeef', res);
       expect(res.status).toHaveBeenCalledWith(403);
     });
 
@@ -477,7 +479,7 @@ describe('PublicCommsController', () => {
       const { createHmac } = require('node:crypto');
       const sig = createHmac('sha256', SIGNING_KEY).update(`call-x:${expPast}`).digest('hex');
       const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
-      publicController.serveAudio('call-x', expPast, sig, res);
+      audioController.serveAudio('call-x', expPast, sig, res);
       expect(res.status).toHaveBeenCalledWith(403);
     });
 
@@ -489,7 +491,7 @@ describe('PublicCommsController', () => {
         return { exp: e, sig: createHmac('sha256', 'whatever').update(`call-x:${e}`).digest('hex') };
       })();
       const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
-      publicController.serveAudio('call-x', exp, sig, res);
+      audioController.serveAudio('call-x', exp, sig, res);
       expect(res.status).toHaveBeenCalledWith(403);
     });
 
@@ -497,7 +499,7 @@ describe('PublicCommsController', () => {
       mockGetAudio.mockReturnValue(undefined);
       const { exp, sig } = signedParams('call-missing');
       const res = { status: jest.fn().mockReturnThis(), send: jest.fn(), setHeader: jest.fn() } as any;
-      publicController.serveAudio('call-missing', exp, sig, res);
+      audioController.serveAudio('call-missing', exp, sig, res);
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -506,7 +508,7 @@ describe('PublicCommsController', () => {
       mockGetAudio.mockReturnValue(buf);
       const { exp, sig } = signedParams('call-abc');
       const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() } as any;
-      publicController.serveAudio('call-abc', exp, sig, res);
+      audioController.serveAudio('call-abc', exp, sig, res);
       expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'audio/wav');
       expect(res.setHeader).toHaveBeenCalledWith('Content-Length', buf.length);
       expect(res.send).toHaveBeenCalledWith(buf);
