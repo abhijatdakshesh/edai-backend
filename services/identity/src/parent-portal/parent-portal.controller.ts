@@ -14,6 +14,8 @@ export class ParentPortalController {
   }
 
   private assertOwnership(req: any, usn: string): void {
+    const role: string = req.user?.role ?? '';
+    if (['ADMIN', 'PRINCIPAL', 'STAFF'].includes(role.toUpperCase())) return;
     const parentId = this.parentId(req);
     if (!this.svc.isParentOf(parentId, usn)) {
       throw new ForbiddenException('Access denied: student not linked to this account');
