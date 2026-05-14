@@ -264,7 +264,7 @@ export class CommsService implements OnModuleInit {
         body: JSON.stringify({
           inputs: [text],
           target_language_code: langCode,
-          speaker: 'pavithra',
+          speaker: 'anushka',
           pitch: 0,
           pace: 1.0,
           loudness: 1.5,
