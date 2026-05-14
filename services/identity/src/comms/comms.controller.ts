@@ -110,12 +110,6 @@ class PublicCommsController {
     }
   }
 
-  /** Audio file endpoint — serves Sarvam AI generated WAV. Accepts `${callId}` (greeting)
-   * or `${callId}:${turnIdx}` (per-turn AI replies).
-   *
-   * SECURITY: callId is a UUID v4 (crypto.randomUUID) so guessing is infeasible, but we
-   * additionally require a short-lived HMAC signature (?exp=&sig=) so any leaked URL
-   * stops working ~10 min after issue. Signing key: TWILIO_AUDIO_SIGNING_KEY.
 }
 
 export { PublicCommsController };
