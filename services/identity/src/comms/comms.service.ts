@@ -285,7 +285,8 @@ export class CommsService implements OnModuleInit {
     const from = process.env['TWILIO_PHONE_NUMBER'];
     if (!sid || !token || !from) return null;
     try {
-      const params: Record<string, string> = { To: phone, From: from, Url: twimlUrl };
+      // Method: GET — Twilio defaults to POST but serveTwiml is a GET handler.
+      const params: Record<string, string> = { To: phone, From: from, Url: twimlUrl, Method: 'GET' };
       if (statusCallbackUrl) {
         params['StatusCallback'] = statusCallbackUrl;
         params['StatusCallbackEvent'] = 'completed';
