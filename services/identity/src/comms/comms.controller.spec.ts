@@ -406,7 +406,7 @@ describe('PublicCommsController', () => {
       const res = { type: jest.fn(), send: jest.fn() } as any;
       publicController.serveTwiml('call-en', res);
       const xml: string = res.send.mock.calls[0][0];
-      expect(xml).toContain('<Say voice="Polly.Aditi-Neural"');
+      expect(xml).toContain('<Say voice="Polly.Kajal-Neural"');
       expect(xml).toContain('Hello there');
       expect(xml).toContain('language="en-IN"');
       expect(xml).toContain('<Gather');
