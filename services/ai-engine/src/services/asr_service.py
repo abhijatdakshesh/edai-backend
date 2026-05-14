@@ -2,10 +2,7 @@
 ASR service — routes to Sarvam, AI4Bharat, or OpenAI Whisper based on language.
 """
 
-import base64
 import logging
-
-import httpx
 
 from src.config import settings
 from src.models.schemas import AsrResponse, TranscriptSegment

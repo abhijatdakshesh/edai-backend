@@ -3,7 +3,6 @@ Loads YAML call-script dialogue trees from the dialogue/ directory.
 Scripts are cached in memory after first load.
 """
 
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any

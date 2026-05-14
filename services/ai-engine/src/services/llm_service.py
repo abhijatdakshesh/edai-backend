@@ -4,16 +4,13 @@ PII is scrubbed before every API call.
 """
 
 import logging
-from typing import Optional
 
-from src.config import settings
 from src.models.schemas import (
     ChatRequest, ChatResponse,
     DialogueTurnRequest, DialogueTurnResponse,
     DtmfOptions,
     IncidentClassifyRequest, IncidentClassifyResponse,
     SummariseCallRequest, SummariseCallResponse,
-    StudentContext,
 )
 from src.services.pii_scrubber import scrub
 from src.services.dialogue_loader import get_greeting
