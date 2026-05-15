@@ -37,6 +37,7 @@ import { TimetableModule } from './timetable/timetable.module';
 import { ReportGeneratorModule } from './report-generator/report-generator.module';
 import { PlacementModule } from './placement/placement.module';
 import { RecruiterModule } from './recruiter/recruiter.module';
+import { LmsModule } from './lms/lms.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { RecruiterModule } from './recruiter/recruiter.module';
     ReportGeneratorModule,
     PlacementModule,
     RecruiterModule,
+    LmsModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
