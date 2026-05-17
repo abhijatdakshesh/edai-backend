@@ -20,6 +20,6 @@ import { AiCallLogEntity, AnnouncementEntity } from '../entities/comms.entity';
   ],
   controllers: [PublicCommsController, AudioController, CommsController],
   providers: [CommsService, ConsentService, ConversationStateService],
-  exports: [CommsService, ConsentService],
+  exports: [CommsService, ConsentService, ConversationStateService],
 })
 export class CommsModule {}

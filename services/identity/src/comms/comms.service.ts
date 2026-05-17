@@ -234,6 +234,18 @@ export class CommsService implements OnModuleInit {
 
   /** Insert with bounded-LRU eviction. The 10-min setTimeout TTL is a backstop
    * that handles cases where the LRU cap is never hit. */
+  /** Public alias for cross-module reuse (e.g. LMS Voice-Tutor Hotline).
+   *  Same TTL + LRU eviction as the private setAudio. */
+  setAudioPublic(key: string, buf: Buffer): void {
+    this.setAudio(key, buf);
+  }
+
+  /** Public alias for cross-module reuse. Returns null on any error so
+   *  callers can fall back to <Say>. */
+  async generateSarvamAudioPublic(text: string, langCode: string): Promise<Buffer | null> {
+    return this.generateSarvamAudio(text, langCode);
+  }
+
   private setAudio(key: string, buf: Buffer): void {
     if (this.audioStore.has(key)) this.audioStore.delete(key);
     this.audioStore.set(key, buf);
