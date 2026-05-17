@@ -19,9 +19,12 @@ export interface CheckpointQuestion {
 }
 
 @Entity({ name: 'lms_modules' })
-@Index(['courseId'])
+@Index(['collegeId'])
+@Index(['collegeId', 'courseId'])
 export class ModuleEntity {
   @PrimaryColumn() id!: string;
+  /** Tenant scope. RLS policy: college_id = current_setting('app.college_id')::uuid */
+  @Column({ name: 'college_id' }) collegeId!: string;
   @Column() courseId!: string;
   @Column() title!: string;
   @Column({ type: 'text', nullable: true }) description?: string;
@@ -32,9 +35,12 @@ export class ModuleEntity {
 }
 
 @Entity({ name: 'lms_lessons' })
-@Index(['moduleId'])
+@Index(['collegeId'])
+@Index(['collegeId', 'moduleId'])
 export class LessonEntity {
   @PrimaryColumn() id!: string;
+  /** Tenant scope mirrors the parent module for RLS performance. */
+  @Column({ name: 'college_id' }) collegeId!: string;
   @Column() moduleId!: string;
   @Column() title!: string;
   @Column({ type: 'int', default: 0 }) order!: number;
@@ -49,8 +55,10 @@ export class LessonEntity {
 @Entity({ name: 'lms_lesson_progress' })
 @Index(['studentUsn', 'lessonId'], { unique: true })
 @Index(['studentUsn'])
+@Index(['collegeId', 'studentUsn'])
 export class LessonProgressEntity {
   @PrimaryColumn() id!: string;
+  @Column({ name: 'college_id' }) collegeId!: string;
   @Column() studentUsn!: string;
   @Column() lessonId!: string;
   @Column({ type: 'varchar', default: 'NOT_STARTED' }) state!: ProgressState;
@@ -62,8 +70,10 @@ export class LessonProgressEntity {
 @Entity({ name: 'lms_topic_mastery' })
 @Index(['studentUsn', 'courseId'])
 @Index(['studentUsn', 'topic'], { unique: true })
+@Index(['collegeId', 'studentUsn'])
 export class TopicMasteryEntity {
   @PrimaryColumn() id!: string;
+  @Column({ name: 'college_id' }) collegeId!: string;
   @Column() studentUsn!: string;
   @Column() courseId!: string;
   @Column() topic!: string;

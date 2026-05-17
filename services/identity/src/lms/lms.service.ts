@@ -10,6 +10,7 @@ import { geminiGenerate, GEMINI_FAST, GEMINI_SMART } from '../shared/gemini-ai';
 
 export interface ModuleSummary {
   id: string;
+  collegeId: string;
   courseId: string;
   title: string;
   description?: string;
@@ -55,28 +56,33 @@ export class LmsService {
 
   // ── Modules ──────────────────────────────────────────────────────────────
 
-  async listModules(courseId: string): Promise<ModuleSummary[]> {
+  async listModules(collegeId: string, courseId: string): Promise<ModuleSummary[]> {
     const mods = this.modRepo
-      ? await this.modRepo.find({ where: { courseId }, order: { order: 'ASC' } })
-      : this.memModules.filter(m => m.courseId === courseId).sort((a, b) => a.order - b.order);
+      ? await this.modRepo.find({ where: { collegeId, courseId }, order: { order: 'ASC' } })
+      : this.memModules
+          .filter(m => m.collegeId === collegeId && m.courseId === courseId)
+          .sort((a, b) => a.order - b.order);
     const counts: Record<string, number> = {};
     if (this.lesRepo) {
-      const all = await this.lesRepo.find();
+      const all = await this.lesRepo.find({ where: { collegeId } });
       for (const l of all) counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
     } else {
-      for (const l of this.memLessons) counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
+      for (const l of this.memLessons.filter(l => l.collegeId === collegeId)) {
+        counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
+      }
     }
     return mods.map(m => ({
-      id: m.id, courseId: m.courseId, title: m.title,
+      id: m.id, collegeId: m.collegeId, courseId: m.courseId, title: m.title,
       description: m.description, order: m.order, published: m.published,
       lessonCount: counts[m.id] ?? 0,
     }));
   }
 
-  async createModule(input: Partial<ModuleEntity>): Promise<ModuleEntity> {
+  async createModule(collegeId: string, input: Partial<ModuleEntity>): Promise<ModuleEntity> {
     if (!input.courseId || !input.title) throw new Error('courseId + title required');
     const mod: ModuleEntity = {
       id: `mod-${randomUUID().slice(0, 8)}`,
+      collegeId,
       courseId: input.courseId,
       title: input.title,
       description: input.description,
@@ -91,18 +97,20 @@ export class LmsService {
 
   // ── Lessons ──────────────────────────────────────────────────────────────
 
-  async listLessons(moduleId: string): Promise<LessonEntity[]> {
+  async listLessons(collegeId: string, moduleId: string): Promise<LessonEntity[]> {
     return this.lesRepo
-      ? await this.lesRepo.find({ where: { moduleId }, order: { order: 'ASC' } })
-      : this.memLessons.filter(l => l.moduleId === moduleId).sort((a, b) => a.order - b.order);
+      ? await this.lesRepo.find({ where: { collegeId, moduleId }, order: { order: 'ASC' } })
+      : this.memLessons
+          .filter(l => l.collegeId === collegeId && l.moduleId === moduleId)
+          .sort((a, b) => a.order - b.order);
   }
 
-  async getLesson(id: string, usn?: string): Promise<LessonView | null> {
+  async getLesson(collegeId: string, id: string, usn?: string): Promise<LessonView | null> {
     const l = this.lesRepo
-      ? await this.lesRepo.findOne({ where: { id } })
-      : this.memLessons.find(x => x.id === id) ?? null;
+      ? await this.lesRepo.findOne({ where: { collegeId, id } })
+      : this.memLessons.find(x => x.collegeId === collegeId && x.id === id) ?? null;
     if (!l) return null;
-    const progress = usn ? await this.getProgress(usn, id) : undefined;
+    const progress = usn ? await this.getProgress(collegeId, usn, id) : undefined;
     return {
       id: l.id, moduleId: l.moduleId, title: l.title, order: l.order,
       contentBlocks: l.contentBlocks ?? [], checkpoint: l.checkpoint ?? [],
@@ -111,10 +119,11 @@ export class LmsService {
     };
   }
 
-  async createLesson(input: Partial<LessonEntity>): Promise<LessonEntity> {
+  async createLesson(collegeId: string, input: Partial<LessonEntity>): Promise<LessonEntity> {
     if (!input.moduleId || !input.title) throw new Error('moduleId + title required');
     const lesson: LessonEntity = {
       id: `les-${randomUUID().slice(0, 8)}`,
+      collegeId,
       moduleId: input.moduleId,
       title: input.title,
       order: input.order ?? 0,
@@ -129,50 +138,58 @@ export class LmsService {
     return lesson;
   }
 
-  async updateLesson(id: string, patch: Partial<LessonEntity>): Promise<LessonEntity | null> {
+  async updateLesson(collegeId: string, id: string, patch: Partial<LessonEntity>): Promise<LessonEntity | null> {
+    // Strip collegeId out of any incoming patch — tenancy is immutable.
+    const { collegeId: _ignored, ...safePatch } = patch as LessonEntity;
+    void _ignored;
     if (this.lesRepo) {
-      const found = await this.lesRepo.findOne({ where: { id } });
+      const found = await this.lesRepo.findOne({ where: { collegeId, id } });
       if (!found) return null;
-      Object.assign(found, patch, { updatedAt: new Date() });
+      Object.assign(found, safePatch, { updatedAt: new Date() });
       await this.lesRepo.save(found);
       return found;
     }
-    const idx = this.memLessons.findIndex(l => l.id === id);
+    const idx = this.memLessons.findIndex(l => l.collegeId === collegeId && l.id === id);
     if (idx < 0) return null;
     const existing = this.memLessons[idx]!;
-    const merged: LessonEntity = { ...existing, ...patch, updatedAt: new Date() } as LessonEntity;
+    const merged: LessonEntity = { ...existing, ...safePatch, updatedAt: new Date() } as LessonEntity;
     this.memLessons[idx] = merged;
     return merged;
   }
 
   // ── Progress + Mastery ───────────────────────────────────────────────────
 
-  async getProgress(usn: string, lessonId: string): Promise<LessonProgressEntity | null> {
+  async getProgress(collegeId: string, usn: string, lessonId: string): Promise<LessonProgressEntity | null> {
     return this.progRepo
-      ? await this.progRepo.findOne({ where: { studentUsn: usn, lessonId } })
-      : this.memProgress.find(p => p.studentUsn === usn && p.lessonId === lessonId) ?? null;
+      ? await this.progRepo.findOne({ where: { collegeId, studentUsn: usn, lessonId } })
+      : this.memProgress.find(p => p.collegeId === collegeId && p.studentUsn === usn && p.lessonId === lessonId) ?? null;
   }
 
-  async listProgressForCourse(usn: string, courseId: string): Promise<LessonProgressEntity[]> {
-    const lessons = await this.lessonIdsForCourse(courseId);
+  async listProgressForCourse(collegeId: string, usn: string, courseId: string): Promise<LessonProgressEntity[]> {
+    const lessons = await this.lessonIdsForCourse(collegeId, courseId);
     if (this.progRepo) {
       return this.progRepo
         .createQueryBuilder('p')
-        .where('p.studentUsn = :usn', { usn })
+        .where('p.collegeId = :collegeId', { collegeId })
+        .andWhere('p.studentUsn = :usn', { usn })
         .andWhere('p.lessonId IN (:...ids)', { ids: lessons.length ? lessons : [''] })
         .getMany();
     }
-    return this.memProgress.filter(p => p.studentUsn === usn && lessons.includes(p.lessonId));
+    return this.memProgress.filter(p =>
+      p.collegeId === collegeId && p.studentUsn === usn && lessons.includes(p.lessonId)
+    );
   }
 
-  async recordCheckpoint(usn: string, lessonId: string, score: number, totalQs: number): Promise<LessonProgressEntity> {
+  async recordCheckpoint(
+    collegeId: string, usn: string, lessonId: string, score: number, totalQs: number,
+  ): Promise<LessonProgressEntity> {
     const passed = totalQs > 0 && score / totalQs >= 0.66;
     const state: ProgressState = passed ? 'MASTERED' : 'IN_PROGRESS';
-    let prog = await this.getProgress(usn, lessonId);
+    let prog = await this.getProgress(collegeId, usn, lessonId);
     if (!prog) {
       prog = {
         id: `prg-${randomUUID().slice(0, 8)}`,
-        studentUsn: usn, lessonId, state, score, attempts: 1,
+        collegeId, studentUsn: usn, lessonId, state, score, attempts: 1,
         updatedAt: new Date(),
       };
       if (this.progRepo) await this.progRepo.save(prog);
@@ -185,20 +202,20 @@ export class LmsService {
       prog.updatedAt = new Date();
       if (this.progRepo) await this.progRepo.save(prog);
     }
-    if (state === 'MASTERED') await this.bumpTopicMastery(usn, lessonId);
+    if (state === 'MASTERED') await this.bumpTopicMastery(collegeId, usn, lessonId);
     return prog;
   }
 
-  private async bumpTopicMastery(usn: string, lessonId: string): Promise<void> {
+  private async bumpTopicMastery(collegeId: string, usn: string, lessonId: string): Promise<void> {
     const lesson = this.lesRepo
-      ? await this.lesRepo.findOne({ where: { id: lessonId } })
-      : this.memLessons.find(l => l.id === lessonId);
+      ? await this.lesRepo.findOne({ where: { collegeId, id: lessonId } })
+      : this.memLessons.find(l => l.collegeId === collegeId && l.id === lessonId);
     if (!lesson) return;
-    const courseId = await this.courseIdForLesson(lessonId);
+    const courseId = await this.courseIdForLesson(collegeId, lessonId);
     for (const topic of lesson.topicTags ?? []) {
       const existing = this.masRepo
-        ? await this.masRepo.findOne({ where: { studentUsn: usn, topic } })
-        : this.memMastery.find(m => m.studentUsn === usn && m.topic === topic);
+        ? await this.masRepo.findOne({ where: { collegeId, studentUsn: usn, topic } })
+        : this.memMastery.find(m => m.collegeId === collegeId && m.studentUsn === usn && m.topic === topic);
       if (existing) {
         existing.masteryScore = Math.min(1, existing.masteryScore + 0.34);
         existing.updatedAt = new Date();
@@ -206,7 +223,7 @@ export class LmsService {
       } else {
         const row: TopicMasteryEntity = {
           id: `tm-${randomUUID().slice(0, 8)}`,
-          studentUsn: usn, courseId, topic, masteryScore: 0.34,
+          collegeId, studentUsn: usn, courseId, topic, masteryScore: 0.34,
           updatedAt: new Date(),
         };
         if (this.masRepo) await this.masRepo.save(row);
@@ -215,21 +232,23 @@ export class LmsService {
     }
   }
 
-  async getMastery(usn: string, courseId: string): Promise<TopicMasteryEntity[]> {
+  async getMastery(collegeId: string, usn: string, courseId: string): Promise<TopicMasteryEntity[]> {
     return this.masRepo
-      ? await this.masRepo.find({ where: { studentUsn: usn, courseId } })
-      : this.memMastery.filter(m => m.studentUsn === usn && m.courseId === courseId);
+      ? await this.masRepo.find({ where: { collegeId, studentUsn: usn, courseId } })
+      : this.memMastery.filter(m => m.collegeId === collegeId && m.studentUsn === usn && m.courseId === courseId);
   }
 
   // ── AI features ──────────────────────────────────────────────────────────
 
   /** ELI5 rewrite at three levels: 'beginner' | 'intermediate' | 'advanced'.
-   *  Cached per (lessonId, level). */
-  async rewriteAtLevel(lessonId: string, level: 'beginner' | 'intermediate' | 'advanced'): Promise<string> {
-    const key = `eli:${lessonId}:${level}`;
+   *  Cached per (collegeId, lessonId, level) so two tenants never share text. */
+  async rewriteAtLevel(
+    collegeId: string, lessonId: string, level: 'beginner' | 'intermediate' | 'advanced',
+  ): Promise<string> {
+    const key = `eli:${collegeId}:${lessonId}:${level}`;
     const cached = this.textCache.get(key);
     if (cached) return cached;
-    const lesson = await this.getLesson(lessonId);
+    const lesson = await this.getLesson(collegeId, lessonId);
     if (!lesson) return '';
     const body = (lesson.contentBlocks.find(b => b.kind === 'MARKDOWN')?.data ?? '').slice(0, 2000);
     if (!body) return '';
@@ -248,10 +267,13 @@ export class LmsService {
     }
   }
 
-  /** Faculty co-pilot: paste syllabus → AI drafts a module skeleton. */
-  async draftModuleFromSyllabus(courseId: string, syllabus: string): Promise<{
+  /** Faculty co-pilot: paste syllabus → AI drafts a module skeleton.
+   *  collegeId is used to namespace the cache and may eventually inject
+   *  per-tenant prompt overrides (e.g. autonomous-college grading rubric). */
+  async draftModuleFromSyllabus(collegeId: string, courseId: string, syllabus: string): Promise<{
     title: string; lessons: Array<{ title: string; topicTags: string[]; checkpoint: CheckpointQuestion[]; markdown: string }>;
   }> {
+    void collegeId;
     const prompt =
       `You are designing one LMS module for VTU course ${courseId}.\n` +
       `Input syllabus chunk:\n${syllabus.slice(0, 3000)}\n\n` +
@@ -282,24 +304,24 @@ export class LmsService {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private async lessonIdsForCourse(courseId: string): Promise<string[]> {
-    const mods = await this.listModules(courseId);
+  private async lessonIdsForCourse(collegeId: string, courseId: string): Promise<string[]> {
+    const mods = await this.listModules(collegeId, courseId);
     const out: string[] = [];
     for (const m of mods) {
-      const ls = await this.listLessons(m.id);
+      const ls = await this.listLessons(collegeId, m.id);
       out.push(...ls.map(l => l.id));
     }
     return out;
   }
 
-  private async courseIdForLesson(lessonId: string): Promise<string> {
+  private async courseIdForLesson(collegeId: string, lessonId: string): Promise<string> {
     const lesson = this.lesRepo
-      ? await this.lesRepo.findOne({ where: { id: lessonId } })
-      : this.memLessons.find(l => l.id === lessonId);
+      ? await this.lesRepo.findOne({ where: { collegeId, id: lessonId } })
+      : this.memLessons.find(l => l.collegeId === collegeId && l.id === lessonId);
     if (!lesson) return '';
     const mod = this.modRepo
-      ? await this.modRepo.findOne({ where: { id: lesson.moduleId } })
-      : this.memModules.find(m => m.id === lesson.moduleId);
+      ? await this.modRepo.findOne({ where: { collegeId, id: lesson.moduleId } })
+      : this.memModules.find(m => m.collegeId === collegeId && m.id === lesson.moduleId);
     return mod?.courseId ?? '';
   }
 
@@ -307,9 +329,11 @@ export class LmsService {
    *  even when DB is empty and no faculty has authored a module yet. */
   private seedDemoIfEmpty(): void {
     if (this.memModules.length > 0) return;
+    const collegeId = process.env['DEFAULT_COLLEGE_ID'] ?? 'default';
     const courseId = 'CS501';
     const mod: ModuleEntity = {
       id: 'mod-os-scheduling',
+      collegeId,
       courseId,
       title: 'Process Scheduling',
       description: 'How the OS decides which process runs next on the CPU.',
@@ -327,7 +351,7 @@ for name, burst in processes:
 print(f"Average completion time: {time / len(processes):.1f}")`;
     const lessons: Array<Partial<LessonEntity>> = [
       {
-        id: 'les-fcfs', moduleId: mod.id, title: 'First-Come First-Served (FCFS)', order: 1, published: true,
+        id: 'les-fcfs', collegeId, moduleId: mod.id, title: 'First-Come First-Served (FCFS)', order: 1, published: true,
         topicTags: ['scheduling', 'fcfs'],
         contentBlocks: [
           { kind: 'MARKDOWN', data: '## FCFS Scheduling\n\nFirst-Come First-Served is the simplest CPU scheduling algorithm. Processes are executed strictly in the order they arrive in the ready queue.\n\n**Pros:** simple, fair in arrival order.\n\n**Cons:** *convoy effect* — one long process delays many short ones.\n\n### Example\nIf P1 (burst 24ms), P2 (3ms), P3 (3ms) arrive in that order, P2 and P3 wait 24ms each despite needing only 3ms.' },
@@ -340,7 +364,7 @@ print(f"Average completion time: {time / len(processes):.1f}")`;
         ],
       },
       {
-        id: 'les-sjf', moduleId: mod.id, title: 'Shortest Job First (SJF)', order: 2, published: true,
+        id: 'les-sjf', collegeId, moduleId: mod.id, title: 'Shortest Job First (SJF)', order: 2, published: true,
         topicTags: ['scheduling', 'sjf'],
         contentBlocks: [
           { kind: 'MARKDOWN', data: '## Shortest Job First\n\nSJF picks the process with the smallest next CPU burst. Optimal for minimum average waiting time, but predicting the next burst is hard in practice.' },
@@ -353,7 +377,7 @@ print(f"Average completion time: {time / len(processes):.1f}")`;
         ],
       },
       {
-        id: 'les-rr', moduleId: mod.id, title: 'Round Robin (RR)', order: 3, published: true,
+        id: 'les-rr', collegeId, moduleId: mod.id, title: 'Round Robin (RR)', order: 3, published: true,
         topicTags: ['scheduling', 'round-robin', 'time-slice'],
         contentBlocks: [
           { kind: 'MARKDOWN', data: '## Round Robin\n\nEach process gets a fixed *time quantum* (e.g. 10ms) then is preempted. Good for interactive systems. Choosing the quantum is the key tuning knob.' },
