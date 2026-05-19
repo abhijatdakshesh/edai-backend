@@ -73,10 +73,10 @@ export class ChatbotController {
   @UseGuards(JwtAuthGuard)
   @Post('message')
   async restChat(
-    @Req() req: { user: { sub: string; role?: string; sapId?: string; phone?: string; email?: string; empCode?: string } },
+    @Req() req: { user: { sub: string; role?: string; sapId?: string; phone?: string; email?: string; empCode?: string; name?: string } },
     @Body() body: { message: string; conversationId?: string },
   ): Promise<{ conversationId: string; message: string; timestamp: string }> {
-    const { sub, role = 'STUDENT', sapId, phone, email, empCode } = req.user;
+    const { sub, role = 'STUDENT', sapId, phone, email, empCode, name } = req.user;
     // Resolve the right identifier per role — student/teacher graphs key on
     // domain identifiers (USN/empCode/phone), NOT the auth UUID `sub`.
     let identifier = sub;
@@ -96,6 +96,11 @@ export class ChatbotController {
         graph = await this.kgService.buildParentGraph(identifier);
       } else if (role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'TRUSTEE' || role === 'COUNSELLOR') {
         graph = await this.kgService.buildAdminGraph(sub);
+      } else if (role === 'RECRUITER') {
+        // Recruiter chatbot — keyed on the auth UUID `sub` since recruiters
+        // don't have a USN/empCode. Falls back to a realistic demo graph
+        // when the recruiter has no jobs yet (KAN-28).
+        graph = await this.kgService.buildRecruiterGraph(sub, name);
       } else {
         throw new Error('Unsupported role for chatbot');
       }

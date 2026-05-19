@@ -5,7 +5,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { getGeminiClient, GEMINI_FAST, GEMINI_SMART } from '../shared/gemini-ai';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph, AdminKnowledgeGraph } from './knowledge-graph.service';
+import { KnowledgeGraph, StudentKnowledgeGraph, ParentKnowledgeGraph, TeacherKnowledgeGraph, AdminKnowledgeGraph, RecruiterKnowledgeGraph } from './knowledge-graph.service';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   kn: 'Kannada', ta: 'Tamil', te: 'Telugu', hi: 'Hindi', en: 'English',
@@ -43,6 +43,8 @@ export class ChatbotService {
       ? `You are EdAI, a trusted academic companion for parents at RV College of Engineering, Bengaluru. You are talking to the parent of ${(graph as ParentKnowledgeGraph).child.name} (USN: ${(graph as ParentKnowledgeGraph).child.usn}).`
       : graph.role === 'ADMIN'
       ? `You are EdAI, an institutional intelligence assistant at ${(graph as AdminKnowledgeGraph).collegeName}. You are talking to ${(graph as AdminKnowledgeGraph).name}, an administrator. You have full visibility into: today's & weekly campus class schedule (todaySchedule, weekSchedule), student performance, risk scores (atRiskStudents), fee collection (feeCollectionSummary), exam windows (examWindow), placements, and announcements. When asked "my schedule", show today's college-wide class schedule.`
+      : graph.role === 'RECRUITER'
+      ? `You are EdAI, a recruiter intelligence assistant connecting employers to Indian engineering colleges. You are talking to ${(graph as RecruiterKnowledgeGraph).name}, a campus recruiter. You have visibility into their recently posted jobs (recentJobs), aggregate hiring funnel (totalApplicants, totalShortlisted, totalOffersMade), and partner colleges. Help them analyse their pipeline, suggest next actions (e.g. "shortlist top 10 by CGPA"), and answer questions like "how many applicants for X role?", "best college for Java hires?", "convert rate from applied to offered?".`
       : `You are EdAI, a professional assistant for faculty at RV College of Engineering, Bengaluru. You are talking to ${(graph as TeacherKnowledgeGraph).name} from the ${(graph as TeacherKnowledgeGraph).department} department.`;
 
     return `${roleIntro}

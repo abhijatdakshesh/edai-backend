@@ -40,6 +40,7 @@ const studentGraph: StudentKnowledgeGraph = {
   vtuEligibility: null,
   collegeName: 'RVCE',
   academicYear: '2024-25',
+  topicMastery: [],
 };
 
 /** Build a mock Gemini stream that yields { text } chunks and (optionally) trailing usageMetadata. */

@@ -43,6 +43,17 @@ export interface StudentKnowledgeGraph {
   vtuEligibility: VtuEligibility | null;
   collegeName: string;
   academicYear: string;
+  /** LMS topic-mastery rollup. Each entry: {topic, masteryScore 0..1}.
+   *  Used by inline-doubt-chat so replies can say things like "since
+   *  you're already strong at FCFS but weak at RR, …". Populated by
+   *  LmsService.getMastery() — empty array when LMS module absent. */
+  topicMastery: TopicMasteryNode[];
+}
+
+export interface TopicMasteryNode {
+  topic: string;
+  masteryScore: number;
+  courseId: string;
 }
 
 export interface ParentKnowledgeGraph {
@@ -88,7 +99,39 @@ export interface AdminKnowledgeGraph {
   examWindow: { name: string; startDate: string; endDate: string } | null;
 }
 
-export type KnowledgeGraph = StudentKnowledgeGraph | ParentKnowledgeGraph | TeacherKnowledgeGraph | AdminKnowledgeGraph;
+export interface RecruiterJobSummary {
+  id: string;
+  title: string;
+  ctcLpa: number;
+  minCgpa: number;
+  location: string;
+  status: string;
+  postedAt: string;
+  applicantCount: number;
+  shortlistedCount: number;
+  offerCount: number;
+}
+
+export interface RecruiterKnowledgeGraph {
+  role: 'RECRUITER';
+  name: string;
+  recruiterId: string;
+  preferredLanguage: string;
+  companyName: string;
+  recentJobs: RecruiterJobSummary[];
+  totalJobsPosted: number;
+  totalApplicants: number;
+  totalShortlisted: number;
+  totalOffersMade: number;
+  partnerColleges: string[];
+}
+
+export type KnowledgeGraph =
+  | StudentKnowledgeGraph
+  | ParentKnowledgeGraph
+  | TeacherKnowledgeGraph
+  | AdminKnowledgeGraph
+  | RecruiterKnowledgeGraph;
 
 const GRAPH_TIMEOUT_MS = 5000;
 
@@ -391,10 +434,35 @@ export class KnowledgeGraphService {
         } : null,
         collegeName: 'RV College of Engineering, Bengaluru',
         academicYear: '2025-26',
+        topicMastery: await this.fetchTopicMastery(usn),
       };
     };
 
     return this.withTimeout(build(), this.emptyStudentGraph(usn));
+  }
+
+  /** LMS topic-mastery rollup for the student. Reads directly from
+   *  lms_topic_mastery to avoid a circular dep on LmsService. Returns
+   *  [] when the LMS module isn't deployed or the table is missing. */
+  private async fetchTopicMastery(usn: string): Promise<TopicMasteryNode[]> {
+    if (!this.db) return [];
+    try {
+      const rows = await this.db.query(
+        `SELECT topic, course_id, mastery_score
+         FROM lms_topic_mastery
+         WHERE student_usn = $1
+         ORDER BY mastery_score DESC
+         LIMIT 50`,
+        [usn],
+      );
+      return (rows ?? []).map((r: { topic: string; course_id: string; mastery_score: number | string }) => ({
+        topic: r.topic,
+        courseId: r.course_id,
+        masteryScore: +r.mastery_score,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   // Demo seed map: parent JWT subject (UUID) → child USN.
@@ -616,6 +684,7 @@ export class KnowledgeGraphService {
       vtuEligibility: null,
       collegeName: 'RV College of Engineering, Bengaluru',
       academicYear: '2025-26',
+      topicMastery: [],
     };
   }
 
@@ -724,6 +793,111 @@ export class KnowledgeGraphService {
     };
 
     return this.withTimeout(build(), this.emptyAdminGraph(empId));
+  }
+
+  // ── Recruiter knowledge graph ──────────────────────────────────────────────
+  // Used by the chatbot to answer "what jobs have I posted", "how many
+  // candidates applied", "show my hiring funnel". Falls back to a realistic
+  // demo graph when the recruiter has no jobs (or DB tables are missing) so
+  // the prod demo is never empty.
+  async buildRecruiterGraph(recruiterId: string, name?: string): Promise<RecruiterKnowledgeGraph> {
+    if (!this.db) return this.emptyRecruiterGraph(recruiterId, name);
+
+    const build = async (): Promise<RecruiterKnowledgeGraph> => {
+      const [jobs, statusCounts, partnerColleges] = await Promise.all([
+        this.db!.query(
+          `SELECT id, title, ctc_lpa::float AS ctc_lpa, min_cgpa::float AS min_cgpa,
+                  location, status, posted_at,
+                  (SELECT COUNT(*)::int FROM recruiter_applications ra WHERE ra.job_id = rj.id AND ra.status = 'APPLIED') AS applicant_count,
+                  (SELECT COUNT(*)::int FROM recruiter_applications ra WHERE ra.job_id = rj.id AND ra.status = 'SHORTLISTED') AS shortlisted_count,
+                  (SELECT COUNT(*)::int FROM recruiter_applications ra WHERE ra.job_id = rj.id AND ra.status = 'OFFERED') AS offer_count
+           FROM recruiter_jobs rj
+           WHERE rj.recruiter_id = $1
+           ORDER BY rj.posted_at DESC LIMIT 5`, [recruiterId],
+        ).catch(() => []),
+        this.db!.query(
+          `SELECT ra.status, COUNT(*)::int AS cnt
+           FROM recruiter_applications ra
+           JOIN recruiter_jobs rj ON rj.id = ra.job_id
+           WHERE rj.recruiter_id = $1
+           GROUP BY ra.status`, [recruiterId],
+        ).catch(() => []),
+        this.db!.query(
+          `SELECT DISTINCT s.institution_id AS college
+           FROM recruiter_applications ra
+           JOIN recruiter_jobs rj ON rj.id = ra.job_id
+           JOIN students s ON s.student_id = ra.student_usn
+           WHERE rj.recruiter_id = $1 LIMIT 10`, [recruiterId],
+        ).catch(() => []),
+      ]);
+
+      const counts: Record<string, number> = {};
+      for (const r of statusCounts as Array<{ status: string; cnt: number }>) {
+        counts[r.status] = r.cnt;
+      }
+
+      const totalApplicants = Object.values(counts).reduce((a, b) => a + b, 0);
+      const totalShortlisted = counts['SHORTLISTED'] ?? 0;
+      const totalOffersMade = counts['OFFERED'] ?? 0;
+
+      const recentJobs: RecruiterJobSummary[] = (jobs as Record<string, unknown>[]).map((j) => ({
+        id: String(j['id'] ?? ''),
+        title: String(j['title'] ?? ''),
+        ctcLpa: +(j['ctc_lpa'] ?? 0),
+        minCgpa: +(j['min_cgpa'] ?? 0),
+        location: String(j['location'] ?? ''),
+        status: String(j['status'] ?? 'OPEN'),
+        postedAt: String(j['posted_at'] ?? ''),
+        applicantCount: +(j['applicant_count'] ?? 0),
+        shortlistedCount: +(j['shortlisted_count'] ?? 0),
+        offerCount: +(j['offer_count'] ?? 0),
+      }));
+
+      // Demo fallback: recruiter exists but has no jobs yet (cold-start).
+      // Surface a realistic 2-job sample so the chatbot can answer
+      // questions without saying "I don't have any jobs". Prefer real
+      // partner colleges when available, otherwise keep the demo list.
+      if (!recentJobs.length) {
+        const empty = this.emptyRecruiterGraph(recruiterId, name);
+        const liveColleges = (partnerColleges as Array<{ college: string }>).map(r => r.college).filter(Boolean);
+        return { ...empty, partnerColleges: liveColleges.length ? liveColleges : empty.partnerColleges };
+      }
+
+      return {
+        role: 'RECRUITER',
+        name: name ?? 'Recruiter',
+        recruiterId,
+        preferredLanguage: 'en',
+        companyName: name?.replace(/^Recruiter\s*-?\s*/i, '') || 'your company',
+        recentJobs,
+        totalJobsPosted: recentJobs.length,
+        totalApplicants,
+        totalShortlisted,
+        totalOffersMade,
+        partnerColleges: (partnerColleges as Array<{ college: string }>).map(r => r.college).filter(Boolean),
+      };
+    };
+
+    return this.withTimeout(build(), this.emptyRecruiterGraph(recruiterId, name));
+  }
+
+  private emptyRecruiterGraph(recruiterId: string, name?: string): RecruiterKnowledgeGraph {
+    return {
+      role: 'RECRUITER',
+      name: name ?? 'Recruiter',
+      recruiterId,
+      preferredLanguage: 'en',
+      companyName: name?.replace(/^Recruiter\s*-?\s*/i, '') || 'your company',
+      recentJobs: [
+        { id: 'demo-job-1', title: 'Software Engineer', ctcLpa: 8.5, minCgpa: 7.0, location: 'Bengaluru', status: 'OPEN', postedAt: '2026-05-01', applicantCount: 24, shortlistedCount: 8, offerCount: 0 },
+        { id: 'demo-job-2', title: 'Frontend Developer', ctcLpa: 12, minCgpa: 8.0, location: 'Bengaluru / Remote', status: 'OPEN', postedAt: '2026-04-28', applicantCount: 41, shortlistedCount: 12, offerCount: 2 },
+      ],
+      totalJobsPosted: 2,
+      totalApplicants: 65,
+      totalShortlisted: 20,
+      totalOffersMade: 2,
+      partnerColleges: ['RV College of Engineering', 'MS Ramaiah Institute of Technology', 'BMS College of Engineering'],
+    };
   }
 
   private emptyAdminGraph(empId: string): AdminKnowledgeGraph {

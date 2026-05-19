@@ -7,6 +7,7 @@ import { VtuWindowEntity, VtuEligibilityEntity, VtuRegistrationEntity } from '..
 import { AiCallLogEntity, ConsentRecordEntity, AnnouncementEntity } from '../entities/comms.entity';
 import { StudentEntity, ParentStudentLinkEntity } from '../entities/student-orm.entity';
 import { AlumniOutcomeEntity } from '../entities/placement.entity';
+import { ModuleEntity, LessonEntity, LessonProgressEntity, TopicMasteryEntity } from '../entities/lms.entity';
 
 const ALL_ENTITIES = [
   StudentEntity,
@@ -21,6 +22,11 @@ const ALL_ENTITIES = [
   ConsentRecordEntity,
   AnnouncementEntity,
   AlumniOutcomeEntity,
+  // LMS
+  ModuleEntity,
+  LessonEntity,
+  LessonProgressEntity,
+  TopicMasteryEntity,
 ];
 
 /**

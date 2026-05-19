@@ -45,13 +45,51 @@ export class LmsService {
   // Cache for ELI5 + narration text rewrites: key = `${lessonId}:${level}` or `${lessonId}:${lang}`
   private readonly textCache = new Map<string, string>();
 
+  /** Mutable view of the injected repos. Set to undefined per-repo if the
+   *  underlying Postgres table is missing (e.g. migration not yet run), so
+   *  the service silently falls back to the in-memory demo seed instead of
+   *  500-ing every request. */
+  private modRepo?: Repository<ModuleEntity>;
+  private lesRepo?: Repository<LessonEntity>;
+  private progRepo?: Repository<LessonProgressEntity>;
+  private masRepo?: Repository<TopicMasteryEntity>;
+
   constructor(
-    @Optional() @InjectRepository(ModuleEntity) private readonly modRepo?: Repository<ModuleEntity>,
-    @Optional() @InjectRepository(LessonEntity) private readonly lesRepo?: Repository<LessonEntity>,
-    @Optional() @InjectRepository(LessonProgressEntity) private readonly progRepo?: Repository<LessonProgressEntity>,
-    @Optional() @InjectRepository(TopicMasteryEntity) private readonly masRepo?: Repository<TopicMasteryEntity>,
+    @Optional() @InjectRepository(ModuleEntity) injectedMod?: Repository<ModuleEntity>,
+    @Optional() @InjectRepository(LessonEntity) injectedLes?: Repository<LessonEntity>,
+    @Optional() @InjectRepository(LessonProgressEntity) injectedProg?: Repository<LessonProgressEntity>,
+    @Optional() @InjectRepository(TopicMasteryEntity) injectedMas?: Repository<TopicMasteryEntity>,
   ) {
+    this.modRepo = injectedMod;
+    this.lesRepo = injectedLes;
+    this.progRepo = injectedProg;
+    this.masRepo = injectedMas;
     this.seedDemoIfEmpty();
+    // Verify tables exist; null out the repo for any table that's missing
+    // so the service falls back to in-memory demo content.
+    void this.verifyTables();
+  }
+
+  private async verifyTables(): Promise<void> {
+    type RepoField = 'modRepo' | 'lesRepo' | 'progRepo' | 'masRepo';
+    type AnyRepo = Repository<ModuleEntity | LessonEntity | LessonProgressEntity | TopicMasteryEntity>;
+    const checks: Array<[RepoField, AnyRepo | undefined]> = [
+      ['modRepo', this.modRepo],
+      ['lesRepo', this.lesRepo],
+      ['progRepo', this.progRepo],
+      ['masRepo', this.masRepo],
+    ];
+    for (const [field, repo] of checks) {
+      if (!repo) continue;
+      try {
+        await repo.query(`SELECT 1 FROM ${repo.metadata.tableName} LIMIT 1`);
+      } catch (e) {
+        this.logger.warn(
+          `[LMS] table '${repo.metadata.tableName}' unreachable (${(e as Error).message}); falling back to in-memory store`,
+        );
+        (this as unknown as Record<RepoField, unknown>)[field] = undefined;
+      }
+    }
   }
 
   // ── Modules ──────────────────────────────────────────────────────────────

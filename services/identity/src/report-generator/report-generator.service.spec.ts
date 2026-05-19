@@ -105,8 +105,10 @@ describe('ReportGeneratorService', () => {
         'user-1',
       );
 
-      // Must return a Buffer
-      expect(Buffer.isBuffer(result)).toBe(true);
+      // Must return { buffer, mimeType, fileExtension }
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+      expect(result.mimeType).toBe('application/zip');
+      expect(result.fileExtension).toBe('zip');
 
       // INSERT PENDING called first
       expect(mockQuery).toHaveBeenNthCalledWith(
@@ -143,7 +145,7 @@ describe('ReportGeneratorService', () => {
         .mockResolvedValueOnce([]);
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-2');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
     });
 
     it('handles empty student rows (maxSubjects falls back to 1)', async () => {
@@ -154,7 +156,7 @@ describe('ReportGeneratorService', () => {
         .mockResolvedValueOnce([]);
 
       const result = await svc.generate('ATTENDANCE', { semester: 3 }, 'user-3');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
     });
 
     it('generates correct BRANCH_MAP and SEMESTER_LABELS for known department/semester', async () => {
@@ -235,8 +237,12 @@ describe('ReportGeneratorService', () => {
       mockFetch.mockResolvedValueOnce(makeFetchResponse(false, 502));
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-7');
-      expect(Buffer.isBuffer(result)).toBe(true);
-      expect(result.length).toBeGreaterThan(0);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      // KAN-35: engine fallback now serves a proper .xlsx with the right
+      // mime so Excel actually opens the file (was application/zip before).
+      expect(result.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      expect(result.fileExtension).toBe('xlsx');
       expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
         expect.anything(),
@@ -253,7 +259,7 @@ describe('ReportGeneratorService', () => {
       mockFetch.mockRejectedValueOnce(new Error('network timeout'));
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-8');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
       expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
         expect.anything(),
@@ -279,7 +285,7 @@ describe('ReportGeneratorService', () => {
       mockFetch.mockResolvedValueOnce(textThrowingResponse);
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-textfail');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
     });
 
     it('when fetch returns non-ok and res.text() throws → engine error message includes 503', async () => {
@@ -323,7 +329,7 @@ describe('ReportGeneratorService', () => {
 
       // Engine errors are now swallowed — generate resolves with raw XLSX.
       const result = await svc.generate('ATTENDANCE', {}, 'user-abort');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
       expect(mockQuery).not.toHaveBeenCalledWith(
         expect.stringContaining("'FAILED'"),
         expect.anything(),
@@ -363,7 +369,7 @@ describe('ReportGeneratorService', () => {
 
       // Engine errors are swallowed — generate resolves with a Buffer.
       const result = await generatePromise;
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
 
       jest.useRealTimers();
     }, 15_000);
@@ -419,7 +425,7 @@ describe('ReportGeneratorService', () => {
         .mockResolvedValueOnce([]);
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-11');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
 
       // aoa_to_sheet is called with a 2-D array; find the data row for student B
       const aoaCall = mockAoaToSheet.mock.calls[0][0] as unknown[][];
@@ -518,7 +524,7 @@ describe('ReportGeneratorService', () => {
         .mockResolvedValueOnce([]);
 
       const result = await svc.generate('ATTENDANCE', {}, 'user-null');
-      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
 
       // Verify aoa_to_sheet received the data row for this student.
       // Row structure: [name, usn, father, parentEmail, counsellorEmail, remarks, subjectName, test, assign, held, attended]

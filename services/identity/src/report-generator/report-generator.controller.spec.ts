@@ -48,7 +48,7 @@ describe('ReportGeneratorController', () => {
 
     it('calls service.generate, sets correct response headers, and sends ZIP buffer', async () => {
       const zipBuf = Buffer.from('zip-content');
-      mockGenerate.mockResolvedValueOnce(zipBuf);
+      mockGenerate.mockResolvedValueOnce({ buffer: zipBuf, mimeType: 'application/zip', fileExtension: 'zip' });
 
       const res = makeRes();
       await controller.generate(req, body, res as any);
@@ -67,9 +67,28 @@ describe('ReportGeneratorController', () => {
       expect(res.send).toHaveBeenCalledWith(zipBuf);
     });
 
+    it('serves XLSX with correct mime + extension when service falls back (KAN-35)', async () => {
+      const xlsxBuf = Buffer.from('PK\x03\x04xlsx-bytes');
+      mockGenerate.mockResolvedValueOnce({
+        buffer: xlsxBuf,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileExtension: 'xlsx',
+      });
+
+      const res = makeRes();
+      await controller.generate(req, body, res as any);
+
+      expect(res.set).toHaveBeenCalledWith({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="ATTENDANCE-report.xlsx"',
+        'Content-Length': String(xlsxBuf.byteLength),
+      });
+      expect(res.send).toHaveBeenCalledWith(xlsxBuf);
+    });
+
     it('uses an empty object for params when body.params is undefined (nullish coalescing)', async () => {
       const zipBuf = Buffer.from('z');
-      mockGenerate.mockResolvedValueOnce(zipBuf);
+      mockGenerate.mockResolvedValueOnce({ buffer: zipBuf, mimeType: 'application/zip', fileExtension: 'zip' });
 
       const res = makeRes();
       const bodyNullParams = { reportType: 'MARKS', params: undefined as any };

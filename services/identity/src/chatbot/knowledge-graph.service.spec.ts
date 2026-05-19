@@ -42,7 +42,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
 
@@ -73,7 +74,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('UNKNOWN');
       // Production now synthesizes a 'Demo Student' profile when the row is missing.
@@ -105,7 +107,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.detentionRisk).toBe(true);
@@ -126,7 +129,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       // Missing fee row now falls back to DEMO_FEES with status 'PARTIAL'.
@@ -155,7 +159,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
         .mockResolvedValueOnce([])              // 14. vtuReg
-        .mockResolvedValueOnce([]);             // 15. parentAnnouncements
+        .mockResolvedValueOnce([])              // 15. topicMastery (lms_topic_mastery)
+        .mockResolvedValueOnce([]);             // 16. parentAnnouncements
 
       const graph = await svc.buildParentGraph('+919845012345');
       expect(graph.role).toBe('PARENT');
@@ -388,7 +393,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.attendanceSummary[0].percentage).toBe(0);
@@ -410,7 +416,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.todaySchedule[0].room).toBe('TBD');
@@ -432,7 +439,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.todaySchedule[0].isLab).toBe(true);
@@ -455,7 +463,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.marksSummary[0].ia1).toBeNull();
@@ -479,7 +488,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.marksSummary[0].maxMarks).toBe(20);
@@ -501,7 +511,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       // Empty attendance falls back to DEMO_ATTENDANCE → overall pct computed from demo rows.
@@ -524,7 +535,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       // When risk row is absent, production now defaults to 0.18 / LOW.
@@ -547,7 +559,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])              // 11. placements
         .mockResolvedValueOnce([])              // 12. vtuWindows
         .mockResolvedValueOnce([])              // 13. vtuElig
-        .mockResolvedValueOnce([]);             // 14. vtuReg
+        .mockResolvedValueOnce([])             // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.recentAbsenceCount).toBe(0);
@@ -591,7 +604,8 @@ describe('KnowledgeGraphService', () => {
         .mockResolvedValueOnce([])                          // 11. placements
         .mockResolvedValueOnce([])                          // 12. vtuWindows
         .mockResolvedValueOnce([])                          // 13. vtuElig
-        .mockResolvedValueOnce([]);                         // 14. vtuReg
+        .mockResolvedValueOnce([])                         // 14. vtuReg
+        .mockResolvedValueOnce([]);             // 15. topicMastery (lms_topic_mastery)
 
       const graph = await svc.buildStudentGraph('1RV21CS001');
       expect(graph.name).toBe('Alice');
@@ -951,6 +965,46 @@ describe('KnowledgeGraphService', () => {
       expect(graph.name).toBe('Administrator');
       expect(graph.stats.totalStudents).toBe(450);
       expect(graph.atRiskStudents).toHaveLength(3);
+    });
+
+    it('recruiter graph: returns realistic demo when recruiter has no jobs (KAN-28)', async () => {
+      mockQuery.mockResolvedValue([]); // empty jobs, no applications
+      const graph = await svc.buildRecruiterGraph('u-recruiter-01', 'Acme Corp');
+      expect(graph.role).toBe('RECRUITER');
+      expect(graph.recruiterId).toBe('u-recruiter-01');
+      expect(graph.recentJobs.length).toBeGreaterThan(0);
+      expect(graph.totalJobsPosted).toBeGreaterThan(0);
+      expect(graph.partnerColleges.length).toBeGreaterThan(0);
+    });
+
+    it('recruiter graph: maps live job rows + funnel counts when DB returns data', async () => {
+      const jobRow = {
+        id: 'j-1', title: 'SDE I', ctc_lpa: 12, min_cgpa: 7.5, location: 'Bengaluru',
+        status: 'OPEN', posted_at: '2026-05-01', applicant_count: 30, shortlisted_count: 8, offer_count: 1,
+      };
+      mockQuery
+        .mockResolvedValueOnce([jobRow])              // jobs
+        .mockResolvedValueOnce([                        // statusCounts
+          { status: 'APPLIED', cnt: 30 },
+          { status: 'SHORTLISTED', cnt: 8 },
+          { status: 'OFFERED', cnt: 1 },
+        ])
+        .mockResolvedValueOnce([{ college: 'rvce' }]); // partnerColleges
+
+      const graph = await svc.buildRecruiterGraph('rec-uuid');
+      expect(graph.recentJobs).toHaveLength(1);
+      expect(graph.recentJobs[0].title).toBe('SDE I');
+      expect(graph.totalApplicants).toBe(39); // sum of all status counts
+      expect(graph.totalShortlisted).toBe(8);
+      expect(graph.totalOffersMade).toBe(1);
+      expect(graph.partnerColleges).toEqual(['rvce']);
+    });
+
+    it('recruiter graph: returns empty graph when db is null', async () => {
+      const noDb = new KnowledgeGraphService(null);
+      const graph = await noDb.buildRecruiterGraph('rec-uuid', 'Recruiter Bob');
+      expect(graph.role).toBe('RECRUITER');
+      expect(graph.recentJobs.length).toBeGreaterThan(0);
     });
 
     it('admin timeout fallback returns the empty admin graph', async () => {
