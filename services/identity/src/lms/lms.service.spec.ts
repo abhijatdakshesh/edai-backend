@@ -85,4 +85,116 @@ describe('LmsService', () => {
       expect(lesson.checkpoint).toHaveLength(3);
     }
   });
+
+  // ─── Strengthened coverage per Priya's gap list ────────────────────────
+
+  describe('createModule / createLesson validation', () => {
+    it('createModule throws when courseId missing', async () => {
+      await expect(
+        svc.createModule('col-test', { title: 'OK' } as any),
+      ).rejects.toThrow(/courseId \+ title required/);
+    });
+
+    it('createModule throws when title missing', async () => {
+      await expect(
+        svc.createModule('col-test', { courseId: 'CS501' } as any),
+      ).rejects.toThrow(/courseId \+ title required/);
+    });
+
+    it('createLesson throws when moduleId missing', async () => {
+      await expect(
+        svc.createLesson('col-test', { title: 'L1' } as any),
+      ).rejects.toThrow(/moduleId \+ title required/);
+    });
+
+    it('createLesson throws when title missing', async () => {
+      await expect(
+        svc.createLesson('col-test', { moduleId: 'm1' } as any),
+      ).rejects.toThrow(/moduleId \+ title required/);
+    });
+
+    it('createModule defaults order=0 and published=false', async () => {
+      const mod = await svc.createModule('col-test', {
+        courseId: 'CS502',
+        title: 'DBMS Basics',
+      });
+      expect(mod.order).toBe(0);
+      expect(mod.published).toBe(false);
+    });
+  });
+
+  describe('updateLesson — tenancy immutability + 404', () => {
+    it('returns null when the lesson does not exist', async () => {
+      const out = await svc.updateLesson('col-test', 'les-missing', { title: 'X' });
+      expect(out).toBeNull();
+    });
+
+    it('returns null when the lesson exists in a different tenant (no cross-tenant write)', async () => {
+      // 'les-fcfs' exists for col-test only.
+      const out = await svc.updateLesson('col-other', 'les-fcfs', { title: 'X' });
+      expect(out).toBeNull();
+    });
+
+    it('strips collegeId from the patch — tenancy is immutable', async () => {
+      const out = await svc.updateLesson('col-test', 'les-fcfs', {
+        title: 'New Title',
+        collegeId: 'col-attacker',
+      } as any);
+      expect(out).not.toBeNull();
+      expect(out!.collegeId).toBe('col-test'); // original tenant preserved
+      expect(out!.title).toBe('New Title');
+    });
+  });
+
+  describe('bumpTopicMastery — boundary + missing lesson', () => {
+    it('caps masteryScore at 1.0 across repeated MASTERED checkpoints', async () => {
+      // 3 passes × 0.34 = 1.02 → must clamp to 1.0
+      await svc.recordCheckpoint('col-test', '1RV21CS010', 'les-fcfs', 3, 3);
+      await svc.recordCheckpoint('col-test', '1RV21CS010', 'les-fcfs', 3, 3);
+      await svc.recordCheckpoint('col-test', '1RV21CS010', 'les-fcfs', 3, 3);
+      await svc.recordCheckpoint('col-test', '1RV21CS010', 'les-fcfs', 3, 3);
+      const mastery = await svc.getMastery('col-test', '1RV21CS010', 'CS501');
+      const fcfs = mastery.find((m) => m.topic === 'fcfs');
+      expect(fcfs).toBeDefined();
+      expect(fcfs!.masteryScore).toBeLessThanOrEqual(1);
+      expect(fcfs!.masteryScore).toBeGreaterThanOrEqual(0.99);
+    });
+
+    it('records a mastery row only when the checkpoint actually MASTERED (≥ 66%)', async () => {
+      // 1/3 score = 33% → IN_PROGRESS — no mastery row should be created
+      await svc.recordCheckpoint('col-test', '1RV21CS099', 'les-fcfs', 1, 3);
+      const mastery = await svc.getMastery('col-test', '1RV21CS099', 'CS501');
+      expect(mastery).toEqual([]);
+    });
+  });
+
+  describe('rewriteAtLevel — content gating', () => {
+    it('returns empty string when the lesson does not exist', async () => {
+      const out = await svc.rewriteAtLevel('col-test', 'les-missing', 'beginner');
+      expect(out).toBe('');
+    });
+
+    it('returns empty string when the lesson exists in a different tenant', async () => {
+      const out = await svc.rewriteAtLevel('col-other', 'les-fcfs', 'beginner');
+      expect(out).toBe('');
+    });
+
+    it('serves the same cached output for repeated (collegeId, lessonId, level) calls', async () => {
+      const a = await svc.rewriteAtLevel('col-test', 'les-fcfs', 'advanced');
+      const b = await svc.rewriteAtLevel('col-test', 'les-fcfs', 'advanced');
+      expect(typeof a).toBe('string');
+      expect(b).toBe(a);
+    });
+  });
+
+  describe('listProgressForCourse — empty-lesson edge', () => {
+    it('returns [] for a course with no lessons (avoids IN (...) SQL with empty array)', async () => {
+      const out = await svc.listProgressForCourse(
+        'col-test',
+        '1RV21CS001',
+        'CS-NONEXISTENT',
+      );
+      expect(out).toEqual([]);
+    });
+  });
 });

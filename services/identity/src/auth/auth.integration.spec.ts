@@ -390,9 +390,13 @@ describe('Full auth + user management workflow', () => {
   // ════════════════════════════════════════════════════════════════════════════
 
   // Note: bcrypt at the default cost factor adds ~100ms per login. Looping
-  // three seed-role logins serially on CI runners (slower CPU than dev) can
-  // brush against Jest's default 5 s ceiling. Bump to 15 s and parallelise
-  // the logins so the test is fast and not flaky.
+  // three seed-role logins serially on CI runners brushes against Jest's
+  // 5 s default. We bump the per-test ceiling to 15 s but KEEP the serial
+  // loop on purpose — running logins sequentially is itself an implicit
+  // assertion that the auth service is stateless across logins (no shared
+  // rate-limiter, lockout counter, or lastLogin cache that would leak
+  // between iterations). Parallelising with Promise.all would silently
+  // weaken that guarantee.
   it('access token payload contains correct claims for each seed role', async () => {
     const { authService } = await buildServices();
 
@@ -402,12 +406,8 @@ describe('Full auth + user management workflow', () => {
       { email: 'student@rvce.edu', password: 'Student@123', expectedRole: 'STUDENT', expectedSub: 'u-student-01' },
     ];
 
-    const tokens = await Promise.all(
-      credentials.map((cred) => authService.login(cred.email, cred.password)),
-    );
-
-    tokens.forEach(({ accessToken }, i) => {
-      const cred = credentials[i]!;
+    for (const cred of credentials) {
+      const { accessToken } = await authService.login(cred.email, cred.password);
       const payload = decodePayload(accessToken);
 
       expect(payload['sub']).toBe(cred.expectedSub);
@@ -417,6 +417,6 @@ describe('Full auth + user management workflow', () => {
       expect(payload['iss']).toBe('edai-identity');
       expect(payload['aud']).toBe('edai-services');
       expect((payload as any)['passwordHash']).toBeUndefined();
-    });
+    }
   }, 15000);
 });

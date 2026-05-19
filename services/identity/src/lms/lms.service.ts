@@ -70,24 +70,65 @@ export class LmsService {
     void this.verifyTables();
   }
 
+  /**
+   * Verify Postgres tables exist for each injected repo.
+   *
+   * Behaviour is INTENTIONALLY asymmetric between write-path and read-only
+   * repos (review feedback from `/dev` on PR #29):
+   *
+   *  - `modRepo` and `lesRepo` are write paths. If their table is
+   *    unreachable we LOG LOUDLY and leave the repo in place (do NOT null
+   *    it out). A subsequent write will surface the real Postgres error
+   *    to the caller — far better than silently routing writes into an
+   *    in-memory store that disappears on pod restart and risks
+   *    cross-tenant leakage. Operators see the failure immediately; k8s
+   *    readiness/liveness probes pick it up via the surfaced error path.
+   *
+   *  - `progRepo` and `masRepo` are read-mostly (student progress + topic
+   *    mastery). Falling back to in-memory demo seed is acceptable here
+   *    because: (a) the demo experience matters for unseeded environments,
+   *    (b) the impact of stale read data is bounded, and (c) no writes
+   *    are routed to the in-memory mirror without an explicit write call
+   *    landing on the (still-failing) repo first.
+   *
+   * Pre-existing comment that this method would "silently fall back" was
+   * the source of a CRITICAL footgun: a transient Postgres blip during
+   * pod boot would convert a multi-tenant LMS into a single-tenant
+   * in-memory store seeded with DEFAULT_COLLEGE_ID. Never again.
+   */
   private async verifyTables(): Promise<void> {
     type RepoField = 'modRepo' | 'lesRepo' | 'progRepo' | 'masRepo';
     type AnyRepo = Repository<ModuleEntity | LessonEntity | LessonProgressEntity | TopicMasteryEntity>;
-    const checks: Array<[RepoField, AnyRepo | undefined]> = [
-      ['modRepo', this.modRepo],
-      ['lesRepo', this.lesRepo],
-      ['progRepo', this.progRepo],
-      ['masRepo', this.masRepo],
+    // [field, repo, kind] — 'write' repos fail loud; 'read' repos may fall back.
+    type RepoKind = 'write' | 'read';
+    const checks: Array<[RepoField, AnyRepo | undefined, RepoKind]> = [
+      ['modRepo', this.modRepo, 'write'],
+      ['lesRepo', this.lesRepo, 'write'],
+      ['progRepo', this.progRepo, 'read'],
+      ['masRepo', this.masRepo, 'read'],
     ];
-    for (const [field, repo] of checks) {
+    for (const [field, repo, kind] of checks) {
       if (!repo) continue;
       try {
         await repo.query(`SELECT 1 FROM ${repo.metadata.tableName} LIMIT 1`);
       } catch (e) {
-        this.logger.warn(
-          `[LMS] table '${repo.metadata.tableName}' unreachable (${(e as Error).message}); falling back to in-memory store`,
-        );
-        (this as unknown as Record<RepoField, unknown>)[field] = undefined;
+        const msg = (e as Error).message;
+        if (kind === 'write') {
+          // FAIL LOUD on write-path tables. Surface the failure so the pod
+          // can be restarted / migrations re-run. Do NOT null out the
+          // repo — the next write attempt should also fail visibly.
+          this.logger.error(
+            `[LMS] write-path table '${repo.metadata.tableName}' unreachable (${msg}); ` +
+              `LMS writes will fail loudly. Run migrations or check DB connectivity.`,
+          );
+        } else {
+          // Read-only fallback is acceptable.
+          this.logger.warn(
+            `[LMS] read-path table '${repo.metadata.tableName}' unreachable (${msg}); ` +
+              `falling back to in-memory store for reads only`,
+          );
+          (this as unknown as Record<RepoField, unknown>)[field] = undefined;
+        }
       }
     }
   }

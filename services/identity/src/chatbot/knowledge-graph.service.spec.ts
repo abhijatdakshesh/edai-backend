@@ -188,12 +188,23 @@ describe('KnowledgeGraphService', () => {
       // 'u-parent-01' is in DEMO_PARENT_USN so we still build a personalised
       // graph keyed on the demo child USN. This is what unblocks the parent
       // chatbot demo on prod (KAN-fix multi-portal sweep).
-      // Default to [] for all subsequent buildStudentGraph queries so
-      // every per-query .catch chain has something to chain off.
+      //
+      // We use a catch-all `mockResolvedValue([])` because buildParentGraph
+      // → buildStudentGraph fans out into ~15 queries (and a follow-on
+      // parent-announcements lookup). Tracking each one with `Once` here
+      // would create a brittle test that breaks whenever a new node is
+      // added to the student KG without changing the semantics being
+      // tested. Instead we pin the *count* so a query-shape regression
+      // (e.g. the function stops querying entirely and short-circuits to
+      // a demo blob) is still caught.
       mockQuery.mockResolvedValue([]);
       const graph = await svc.buildParentGraph('u-parent-01');
       expect(graph.role).toBe('PARENT');
       expect(graph.child).toBeDefined();
+      // Pin the expected query fan-out: 2 lookups for parent identification
+      // (phone, parent_student_links) plus the student KG queries. If this
+      // changes, the test should be updated deliberately, not silently.
+      expect(mockQuery.mock.calls.length).toBeGreaterThanOrEqual(10);
     });
   });
 
@@ -968,13 +979,24 @@ describe('KnowledgeGraphService', () => {
     });
 
     it('recruiter graph: returns realistic demo when recruiter has no jobs (KAN-28)', async () => {
-      mockQuery.mockResolvedValue([]); // empty jobs, no applications
+      // Explicit Once chain so the test fails if buildRecruiterGraph stops
+      // emitting these queries (e.g. accidentally short-circuits to demo
+      // before checking the DB). The catch-all `mockResolvedValue([])` form
+      // would mask that regression.
+      mockQuery
+        .mockResolvedValueOnce([])   // 1. jobs
+        .mockResolvedValueOnce([])   // 2. statusCounts
+        .mockResolvedValueOnce([]);  // 3. partnerColleges
       const graph = await svc.buildRecruiterGraph('u-recruiter-01', 'Acme Corp');
       expect(graph.role).toBe('RECRUITER');
       expect(graph.recruiterId).toBe('u-recruiter-01');
-      expect(graph.recentJobs.length).toBeGreaterThan(0);
-      expect(graph.totalJobsPosted).toBeGreaterThan(0);
+      // Empty DB → service falls back to demo-seed data. Assert the demo
+      // shape, not just `.length > 0`, so a future code path that returns
+      // a single placeholder row doesn't quietly pass.
+      expect(graph.recentJobs.length).toBeGreaterThanOrEqual(2);
+      expect(graph.totalJobsPosted).toBeGreaterThanOrEqual(2);
       expect(graph.partnerColleges.length).toBeGreaterThan(0);
+      expect(mockQuery).toHaveBeenCalledTimes(3); // pins the query count
     });
 
     it('recruiter graph: maps live job rows + funnel counts when DB returns data', async () => {
