@@ -20,13 +20,17 @@ export class ReportGeneratorController {
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {
     try {
-      const zipBuf = await this.svc.generate(body.reportType, body.params ?? {}, req.user.id);
+      const { buffer, mimeType, fileExtension } = await this.svc.generate(
+        body.reportType,
+        body.params ?? {},
+        req.user.id,
+      );
       res.set({
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${body.reportType}-report.zip"`,
-        'Content-Length': String(zipBuf.byteLength),
+        'Content-Type': mimeType,
+        'Content-Disposition': `attachment; filename="${body.reportType}-report.${fileExtension}"`,
+        'Content-Length': String(buffer.byteLength),
       });
-      res.send(zipBuf);
+      res.send(buffer);
     } catch (err) {
       this.logger.error('Report generation failed', err);
       if (!res.headersSent) {

@@ -58,7 +58,7 @@ export class ReportGeneratorService {
     reportType: string,
     params: ReportParams,
     requestedBy: string,
-  ): Promise<Buffer> {
+  ): Promise<{ buffer: Buffer; mimeType: string; fileExtension: string }> {
     if (!this.db) throw new InternalServerErrorException('Database not configured');
 
     let genId: string | null = null;
@@ -72,16 +72,16 @@ export class ReportGeneratorService {
       genId = ins[0].id;
 
       const xlsxBuf = await this.buildAttendanceExcel(params);
-      const pdfZip = await this.callReportEngine(xlsxBuf, params);
+      const result = await this.callReportEngine(xlsxBuf, params);
 
       await this.db.query(
         `UPDATE report_generations
          SET status = 'DONE', pdf_size_bytes = $2, completed_at = now()
          WHERE id = $1`,
-        [genId, pdfZip.byteLength],
+        [genId, result.buffer.byteLength],
       );
 
-      return Buffer.from(pdfZip);
+      return result;
     } catch (err) {
       if (genId) {
         await this.db.query(
@@ -303,7 +303,7 @@ export class ReportGeneratorService {
     return xlsxBuf;
   }
 
-  private async callReportEngine(xlsxBuf: Buffer, params: ReportParams): Promise<ArrayBuffer> {
+  private async callReportEngine(xlsxBuf: Buffer, params: ReportParams): Promise<{ buffer: Buffer; mimeType: string; fileExtension: string }> {
     const { department = 'COMPUTER SCIENCE & ENGINEERING', semester = 5, testChoice = 'CIE-1', submissionDate = '', note = '' } = params;
     const branchChoice = BRANCH_MAP[department] ?? department.toUpperCase();
     const semesterLabel = SEMESTER_LABELS[semester] ?? `${semester} Semester BE`;
@@ -331,15 +331,25 @@ export class ReportGeneratorService {
         throw new InternalServerErrorException(`Report engine error ${res.status}: ${txt}`);
       }
 
-      return res.arrayBuffer();
+      // Report engine returns a ZIP of PDFs (one per student).
+      const ab = await res.arrayBuffer();
+      return {
+        buffer: Buffer.from(ab),
+        mimeType: 'application/zip',
+        fileExtension: 'zip',
+      };
     } catch (err) {
       // Report engine (Python service at :8001) isn't reachable in this
       // environment — fall back to returning the raw Excel so the user at
-      // least gets a working file instead of a 500.
+      // least gets a working file instead of a 500. The ZIP wrapper would
+      // make Excel refuse to open the file (KAN-35), so we serve the raw
+      // XLSX with the correct mime type + .xlsx extension.
       this.logger?.warn?.(`Report engine unreachable (${(err as Error).message}); returning raw XLSX`);
-      const ab = new ArrayBuffer(xlsxBuf.byteLength);
-      new Uint8Array(ab).set(xlsxBuf);
-      return ab;
+      return {
+        buffer: xlsxBuf,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileExtension: 'xlsx',
+      };
     } finally {
       clearTimeout(timeout);
     }

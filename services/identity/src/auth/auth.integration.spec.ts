@@ -389,6 +389,10 @@ describe('Full auth + user management workflow', () => {
   // Test 7 — access token claims integrity after login
   // ════════════════════════════════════════════════════════════════════════════
 
+  // Note: bcrypt at the default cost factor adds ~100ms per login. Looping
+  // three seed-role logins serially on CI runners (slower CPU than dev) can
+  // brush against Jest's default 5 s ceiling. Bump to 15 s and parallelise
+  // the logins so the test is fast and not flaky.
   it('access token payload contains correct claims for each seed role', async () => {
     const { authService } = await buildServices();
 
@@ -398,8 +402,12 @@ describe('Full auth + user management workflow', () => {
       { email: 'student@rvce.edu', password: 'Student@123', expectedRole: 'STUDENT', expectedSub: 'u-student-01' },
     ];
 
-    for (const cred of credentials) {
-      const { accessToken } = await authService.login(cred.email, cred.password);
+    const tokens = await Promise.all(
+      credentials.map((cred) => authService.login(cred.email, cred.password)),
+    );
+
+    tokens.forEach(({ accessToken }, i) => {
+      const cred = credentials[i]!;
       const payload = decodePayload(accessToken);
 
       expect(payload['sub']).toBe(cred.expectedSub);
@@ -409,6 +417,6 @@ describe('Full auth + user management workflow', () => {
       expect(payload['iss']).toBe('edai-identity');
       expect(payload['aud']).toBe('edai-services');
       expect((payload as any)['passwordHash']).toBeUndefined();
-    }
-  });
+    });
+  }, 15000);
 });
