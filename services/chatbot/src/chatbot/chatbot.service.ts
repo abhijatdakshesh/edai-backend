@@ -106,6 +106,66 @@ export class ChatbotService {
     return this.messages.get(sessionId) ?? [];
   }
 
+  /**
+   * Stateless ask — wraps the session-based flow into a single round-trip
+   * for the Next.js chatbot widget. Conversation history is kept in memory
+   * keyed by `conversationId` (a UUID returned to the client). If no
+   * conversationId is passed in, a fresh one is minted.
+   *
+   * Falls back to a deterministic stub reply when the ai-engine is
+   * unreachable so the UI never sees a 5xx.
+   */
+  async ask(input: {
+    message: string;
+    language: string;
+    userRole: ChatUserRole;
+    conversationId?: string;
+  }): Promise<{ conversationId: string; message: string; timestamp: string }> {
+    const conversationId = input.conversationId ?? randomUUID();
+    const history = this.messages.get(conversationId) ?? [];
+
+    history.push({
+      id: randomUUID(),
+      sessionId: conversationId,
+      role: 'USER',
+      content: input.message,
+      escalatedToTeacher: false,
+      createdAt: new Date(),
+    });
+
+    let reply: string;
+    try {
+      const resp = await axios.post(
+        `${AI_ENGINE_URL}/llm/chat`,
+        {
+          user_role: input.userRole,
+          student_context: { name: 'Guest', class_name: '-', recent_subjects: [] },
+          conversation_history: history.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+          message: input.message,
+          language: input.language,
+        },
+        { timeout: 15_000 },
+      );
+      reply = (resp.data as { response: string }).response;
+    } catch (err) {
+      this.logger.warn(`ai-engine unreachable for ask(): ${(err as Error).message}`);
+      reply = `I'm temporarily offline. Please try again in a moment. (You asked: "${input.message.slice(0, 80)}")`;
+    }
+
+    const createdAt = new Date();
+    history.push({
+      id: randomUUID(),
+      sessionId: conversationId,
+      role: 'ASSISTANT',
+      content: reply,
+      escalatedToTeacher: false,
+      createdAt,
+    });
+    this.messages.set(conversationId, history);
+
+    return { conversationId, message: reply, timestamp: createdAt.toISOString() };
+  }
+
   getTeacherEscalations(teacherId: string): TeacherEscalation[] {
     return this.escalations.filter(
       (e) => e.teacherId === teacherId && e.status === 'PENDING',
