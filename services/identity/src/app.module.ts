@@ -38,6 +38,7 @@ import { ReportGeneratorModule } from './report-generator/report-generator.modul
 import { PlacementModule } from './placement/placement.module';
 import { RecruiterModule } from './recruiter/recruiter.module';
 import { LmsModule } from './lms/lms.module';
+import { BulkImportModule } from './bulk-import/bulk-import.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { LmsModule } from './lms/lms.module';
     PlacementModule,
     RecruiterModule,
     LmsModule,
+    BulkImportModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
