@@ -156,7 +156,7 @@ export class LmsCronService {
       return [];
     }
     return [
-      { usn: '1RV21CS001', parentPhone: '+919113949714', language: 'kn' },
+      { usn: '1RV21CS001', parentPhone: '+919741573296', language: 'kn' },
       { usn: '1RV21CS006', parentPhone: '+918700151250', language: 'kn' },
     ];
   }
