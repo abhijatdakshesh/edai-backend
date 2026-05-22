@@ -196,11 +196,11 @@ export class CommsService implements OnModuleInit {
 
   // ── Static parent phone registry (extend as DB is wired) ─────────────────
   private readonly parentPhoneMap: Record<string, string> = {
-    '1RV21CS001': '+919113949714',
-    '1RV21CS002': '+919113949714',
-    '1RV21CS003': '+919113949714',
-    '1RV21CS004': '+919113949714',
-    '1RV21CS005': '+919113949714',
+    '1RV21CS001': '+919741573296',
+    '1RV21CS002': '+919741573296',
+    '1RV21CS003': '+919741573296',
+    '1RV21CS004': '+919741573296',
+    '1RV21CS005': '+919741573296',
     '1RV21CS006': '+918700151250',
     '1RV21CS007': '+918700151250',
     '1RV21CS008': '+918700151250',
