@@ -130,4 +130,28 @@ export class CoursesService {
     if (!course) throw new NotFoundException('Course not found');
     return course;
   }
+
+  getCourseByCode(code: string): Course | undefined {
+    return this.courses.find((c) => c.code === code);
+  }
+
+  isEnrolled(courseId: string, studentUsn: string): boolean {
+    return this.enrollments.some(
+      (e) => e.courseId === courseId && e.studentUsn === studentUsn,
+    );
+  }
+
+  /** Resolve LMS course key (VTU subject code, e.g. CS501) to internal course id. */
+  resolveCourseId(courseIdOrCode: string): string | undefined {
+    const byId = this.courses.find((c) => c.id === courseIdOrCode);
+    if (byId) return byId.id;
+    return this.getCourseByCode(courseIdOrCode)?.id;
+  }
+
+  getEnrolledCourses(studentUsn: string): Course[] {
+    const ids = new Set(
+      this.enrollments.filter((e) => e.studentUsn === studentUsn).map((e) => e.courseId),
+    );
+    return this.courses.filter((c) => ids.has(c.id));
+  }
 }

@@ -8,6 +8,13 @@ import { FeeItemEntity } from '../entities/fee-item.entity';
 import { PromotionBatchEntity, PromotionAuditEntity } from '../entities/promotion-batch.entity';
 import { VtuWindowEntity, VtuEligibilityEntity, VtuRegistrationEntity } from '../entities/vtu.entity';
 import { AiCallLogEntity, ConsentRecordEntity, AnnouncementEntity } from '../entities/comms.entity';
+import {
+  ModuleEntity, LessonEntity, LessonProgressEntity, TopicMasteryEntity,
+} from '../entities/lms.entity';
+import {
+  LmsAssignmentEntity, LmsSubmissionEntity, LmsQuizQuestionEntity,
+  LmsDiscussionPostEntity, LmsLessonPrerequisiteEntity, LmsLearningSessionEntity, LmsStreakEntity,
+} from '../entities/lms-extensions.entity';
 
 const ds = new DataSource({
   type: 'postgres',
@@ -22,6 +29,17 @@ const ds = new DataSource({
     AiCallLogEntity,
     ConsentRecordEntity,
     AnnouncementEntity,
+    ModuleEntity,
+    LessonEntity,
+    LessonProgressEntity,
+    TopicMasteryEntity,
+    LmsAssignmentEntity,
+    LmsSubmissionEntity,
+    LmsQuizQuestionEntity,
+    LmsDiscussionPostEntity,
+    LmsLessonPrerequisiteEntity,
+    LmsLearningSessionEntity,
+    LmsStreakEntity,
   ],
   synchronize: false,
   migrations: [__dirname + '/0[0-9][0-9]_*.ts'],

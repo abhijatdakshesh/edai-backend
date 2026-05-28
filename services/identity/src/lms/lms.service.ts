@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'node:crypto';
@@ -7,6 +7,19 @@ import {
   type LessonContentBlock, type CheckpointQuestion, type ProgressState,
 } from '../entities/lms.entity';
 import { geminiGenerate, GEMINI_FAST, GEMINI_SMART } from '../shared/gemini-ai';
+import { CommsService } from '../comms/comms.service';
+import { EventsGateway } from '../events/events.gateway';
+import { CoursesService } from '../courses/courses.service';
+import {
+  LMS_DEMO_COURSE_ID,
+  LMS_DEMO_LESSONS,
+  LMS_DEMO_MODULE,
+  LMS_DEMO_MODULE_ID,
+} from './lms-demo-seed';
+
+const SARVAM_LANG: Record<string, string> = {
+  en: 'en-IN', hi: 'hi-IN', kn: 'kn-IN', ta: 'ta-IN', te: 'te-IN',
+};
 
 export interface ModuleSummary {
   id: string;
@@ -33,8 +46,13 @@ export interface LessonView {
 
 /** Top-level LMS service. Uses in-memory fallback when DATABASE_URL is unset
  *  so demos work without a Postgres instance. */
+export interface LmsListOptions {
+  /** When true, only published modules/lessons are returned (student-facing). */
+  publishedOnly?: boolean;
+}
+
 @Injectable()
-export class LmsService {
+export class LmsService implements OnModuleInit {
   private readonly logger = new Logger(LmsService.name);
 
   // In-memory fallbacks (used when repos not provided in non-DB envs)
@@ -55,6 +73,9 @@ export class LmsService {
   private masRepo?: Repository<TopicMasteryEntity>;
 
   constructor(
+    @Optional() private readonly comms?: CommsService,
+    @Optional() private readonly events?: EventsGateway,
+    @Optional() private readonly courses?: CoursesService,
     @Optional() @InjectRepository(ModuleEntity) injectedMod?: Repository<ModuleEntity>,
     @Optional() @InjectRepository(LessonEntity) injectedLes?: Repository<LessonEntity>,
     @Optional() @InjectRepository(LessonProgressEntity) injectedProg?: Repository<LessonProgressEntity>,
@@ -65,9 +86,20 @@ export class LmsService {
     this.progRepo = injectedProg;
     this.masRepo = injectedMas;
     this.seedDemoIfEmpty();
-    // Verify tables exist; null out the repo for any table that's missing
-    // so the service falls back to in-memory demo content.
-    void this.verifyTables();
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.verifyTables();
+    await this.seedDbIfEmpty();
+  }
+
+  /** Students may only access LMS for courses they are enrolled in. */
+  assertStudentEnrollment(studentUsn: string, courseIdOrCode: string): void {
+    if (!this.courses || !studentUsn) return;
+    const internalId = this.courses.resolveCourseId(courseIdOrCode);
+    if (!internalId || !this.courses.isEnrolled(internalId, studentUsn)) {
+      throw new ForbiddenException('Not enrolled in this course');
+    }
   }
 
   private async verifyTables(): Promise<void> {
@@ -94,26 +126,62 @@ export class LmsService {
 
   // ── Modules ──────────────────────────────────────────────────────────────
 
-  async listModules(collegeId: string, courseId: string): Promise<ModuleSummary[]> {
+  async listModules(
+    collegeId: string,
+    courseId: string,
+    opts: LmsListOptions = {},
+  ): Promise<ModuleSummary[]> {
     const mods = this.modRepo
       ? await this.modRepo.find({ where: { collegeId, courseId }, order: { order: 'ASC' } })
       : this.memModules
           .filter(m => m.collegeId === collegeId && m.courseId === courseId)
           .sort((a, b) => a.order - b.order);
+    const visible = opts.publishedOnly ? mods.filter((m) => m.published) : mods;
     const counts: Record<string, number> = {};
-    if (this.lesRepo) {
-      const all = await this.lesRepo.find({ where: { collegeId } });
-      for (const l of all) counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
-    } else {
-      for (const l of this.memLessons.filter(l => l.collegeId === collegeId)) {
-        counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
-      }
+    const lessons = this.lesRepo
+      ? await this.lesRepo.find({ where: { collegeId } })
+      : this.memLessons.filter((l) => l.collegeId === collegeId);
+    for (const l of lessons) {
+      if (opts.publishedOnly && !l.published) continue;
+      counts[l.moduleId] = (counts[l.moduleId] ?? 0) + 1;
     }
-    return mods.map(m => ({
+    return visible.map(m => ({
       id: m.id, collegeId: m.collegeId, courseId: m.courseId, title: m.title,
       description: m.description, order: m.order, published: m.published,
       lessonCount: counts[m.id] ?? 0,
     }));
+  }
+
+  async hasPublishedContent(collegeId: string, courseId: string): Promise<boolean> {
+    const mods = await this.listModules(collegeId, courseId, { publishedOnly: true });
+    return mods.some((m) => m.lessonCount > 0);
+  }
+
+  async setModulePublished(
+    collegeId: string,
+    moduleId: string,
+    published: boolean,
+  ): Promise<ModuleEntity | null> {
+    if (this.modRepo) {
+      const found = await this.modRepo.findOne({ where: { collegeId, id: moduleId } });
+      if (!found) return null;
+      found.published = published;
+      found.updatedAt = new Date();
+      return this.modRepo.save(found);
+    }
+    const idx = this.memModules.findIndex((m) => m.collegeId === collegeId && m.id === moduleId);
+    if (idx < 0) return null;
+    this.memModules[idx]!.published = published;
+    this.memModules[idx]!.updatedAt = new Date();
+    return this.memModules[idx]!;
+  }
+
+  async setLessonPublished(
+    collegeId: string,
+    lessonId: string,
+    published: boolean,
+  ): Promise<LessonEntity | null> {
+    return this.updateLesson(collegeId, lessonId, { published });
   }
 
   async createModule(collegeId: string, input: Partial<ModuleEntity>): Promise<ModuleEntity> {
@@ -135,19 +203,29 @@ export class LmsService {
 
   // ── Lessons ──────────────────────────────────────────────────────────────
 
-  async listLessons(collegeId: string, moduleId: string): Promise<LessonEntity[]> {
-    return this.lesRepo
+  async listLessons(
+    collegeId: string,
+    moduleId: string,
+    opts: LmsListOptions = {},
+  ): Promise<LessonEntity[]> {
+    const rows = this.lesRepo
       ? await this.lesRepo.find({ where: { collegeId, moduleId }, order: { order: 'ASC' } })
       : this.memLessons
           .filter(l => l.collegeId === collegeId && l.moduleId === moduleId)
           .sort((a, b) => a.order - b.order);
+    return opts.publishedOnly ? rows.filter((l) => l.published) : rows;
   }
 
-  async getLesson(collegeId: string, id: string, usn?: string): Promise<LessonView | null> {
+  async getLesson(
+    collegeId: string,
+    id: string,
+    usn?: string,
+    opts: LmsListOptions = {},
+  ): Promise<LessonView | null> {
     const l = this.lesRepo
       ? await this.lesRepo.findOne({ where: { collegeId, id } })
       : this.memLessons.find(x => x.collegeId === collegeId && x.id === id) ?? null;
-    if (!l) return null;
+    if (!l || (opts.publishedOnly && !l.published)) return null;
     const progress = usn ? await this.getProgress(collegeId, usn, id) : undefined;
     return {
       id: l.id, moduleId: l.moduleId, title: l.title, order: l.order,
@@ -240,8 +318,54 @@ export class LmsService {
       prog.updatedAt = new Date();
       if (this.progRepo) await this.progRepo.save(prog);
     }
-    if (state === 'MASTERED') await this.bumpTopicMastery(collegeId, usn, lessonId);
+    const courseId = await this.courseIdForLesson(collegeId, lessonId);
+    if (state === 'MASTERED') {
+      await this.bumpTopicMastery(collegeId, usn, lessonId);
+      this.events?.emitLmsLessonMastered({ lessonId, courseId, institutionId: collegeId });
+      this.logger.log(`[LMS] lesson mastered lessonId=${lessonId} courseId=${courseId}`);
+    } else if (!passed) {
+      this.events?.emitLmsCheckpointFailed({ lessonId, courseId, institutionId: collegeId });
+      this.logger.log(`[LMS] checkpoint failed lessonId=${lessonId} courseId=${courseId}`);
+    }
     return prog;
+  }
+
+  /** Sarvam TTS narration for lesson markdown (Phase 1). */
+  async narrateLesson(
+    collegeId: string,
+    lessonId: string,
+    lang: string,
+  ): Promise<{ audioUrl: string | null; lang: string; fallbackText?: string; useBrowserTts?: boolean }> {
+    const lesson = await this.getLesson(collegeId, lessonId, undefined, { publishedOnly: false });
+    if (!lesson) return { audioUrl: null, lang };
+    const body = (lesson.contentBlocks.find((b) => b.kind === 'MARKDOWN')?.data ?? '').slice(0, 2000);
+    if (!body) return { audioUrl: null, lang, fallbackText: '', useBrowserTts: true };
+
+    const cacheKey = `lms-narr:${lessonId}:${lang}`;
+    const baseUrl =
+      process.env['TWILIO_WEBHOOK_BASE_URL'] ??
+      process.env['APP_URL'] ??
+      'http://localhost:3001';
+
+    const comms = this.comms;
+    if (comms?.getAudio(cacheKey)) {
+      return {
+        audioUrl: comms.signAudioUrl(cacheKey, baseUrl.replace(/\/$/, '')),
+        lang,
+      };
+    }
+
+    const langCode = SARVAM_LANG[lang] ?? 'en-IN';
+    const audio = await comms?.generateSarvamAudioPublic(body, langCode);
+    if (audio?.length && comms) {
+      comms.setAudioPublic(cacheKey, audio);
+      return {
+        audioUrl: comms.signAudioUrl(cacheKey, baseUrl.replace(/\/$/, '')),
+        lang,
+      };
+    }
+
+    return { audioUrl: null, lang, fallbackText: body, useBrowserTts: true };
   }
 
   private async bumpTopicMastery(collegeId: string, usn: string, lessonId: string): Promise<void> {
@@ -352,6 +476,10 @@ export class LmsService {
     return out;
   }
 
+  async getLessonCourseId(collegeId: string, lessonId: string): Promise<string> {
+    return this.courseIdForLesson(collegeId, lessonId);
+  }
+
   private async courseIdForLesson(collegeId: string, lessonId: string): Promise<string> {
     const lesson = this.lesRepo
       ? await this.lesRepo.findOne({ where: { collegeId, id: lessonId } })
@@ -363,76 +491,72 @@ export class LmsService {
     return mod?.courseId ?? '';
   }
 
-  /** Seed one demo course (CS501 Operating Systems) so the demo flow has content
-   *  even when DB is empty and no faculty has authored a module yet. */
+  private async seedDbIfEmpty(): Promise<void> {
+    if (!this.modRepo || !this.lesRepo) return;
+    const collegeId = process.env['DEFAULT_COLLEGE_ID'] ?? 'rvce';
+    const count = await this.modRepo.count({ where: { collegeId, courseId: LMS_DEMO_COURSE_ID } });
+    if (count > 0) return;
+    const mod: ModuleEntity = {
+      id: LMS_DEMO_MODULE_ID,
+      collegeId,
+      courseId: LMS_DEMO_COURSE_ID,
+      title: LMS_DEMO_MODULE.title,
+      description: LMS_DEMO_MODULE.description,
+      order: LMS_DEMO_MODULE.order,
+      published: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await this.modRepo.save(mod);
+    for (const l of LMS_DEMO_LESSONS) {
+      await this.lesRepo.save({
+        id: l.id,
+        collegeId,
+        moduleId: mod.id,
+        title: l.title,
+        order: l.order,
+        contentBlocks: l.contentBlocks,
+        checkpoint: l.checkpoint,
+        topicTags: l.topicTags,
+        published: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+    this.logger.log(`[LMS] DB seed: ${LMS_DEMO_LESSONS.length} lessons for ${LMS_DEMO_COURSE_ID}`);
+  }
+
+  /** In-memory demo when Postgres tables/repos are unavailable. */
   private seedDemoIfEmpty(): void {
     if (this.memModules.length > 0) return;
     const collegeId = process.env['DEFAULT_COLLEGE_ID'] ?? 'default';
-    const courseId = 'CS501';
     const mod: ModuleEntity = {
-      id: 'mod-os-scheduling',
+      id: LMS_DEMO_MODULE_ID,
       collegeId,
-      courseId,
-      title: 'Process Scheduling',
-      description: 'How the OS decides which process runs next on the CPU.',
-      order: 1,
+      courseId: LMS_DEMO_COURSE_ID,
+      title: LMS_DEMO_MODULE.title,
+      description: LMS_DEMO_MODULE.description,
+      order: LMS_DEMO_MODULE.order,
       published: true,
-      createdAt: new Date(), updatedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.memModules.push(mod);
-    const sampleCode = `# FCFS scheduling example
-processes = [("P1", 5), ("P2", 3), ("P3", 8)]
-time = 0
-for name, burst in processes:
-    print(f"{name} runs from {time} to {time + burst}")
-    time += burst
-print(f"Average completion time: {time / len(processes):.1f}")`;
-    const lessons: Array<Partial<LessonEntity>> = [
-      {
-        id: 'les-fcfs', collegeId, moduleId: mod.id, title: 'First-Come First-Served (FCFS)', order: 1, published: true,
-        topicTags: ['scheduling', 'fcfs'],
-        contentBlocks: [
-          { kind: 'MARKDOWN', data: '## FCFS Scheduling\n\nFirst-Come First-Served is the simplest CPU scheduling algorithm. Processes are executed strictly in the order they arrive in the ready queue.\n\n**Pros:** simple, fair in arrival order.\n\n**Cons:** *convoy effect* — one long process delays many short ones.\n\n### Example\nIf P1 (burst 24ms), P2 (3ms), P3 (3ms) arrive in that order, P2 and P3 wait 24ms each despite needing only 3ms.' },
-          { kind: 'CODE', data: sampleCode },
-        ],
-        checkpoint: [
-          { q: 'FCFS is best described as:', options: ['Preemptive', 'Non-preemptive', 'Round-robin', 'Priority-based'], correctIndex: 1 },
-          { q: 'The "convoy effect" means:', options: ['CPU is idle', 'Short jobs wait behind long jobs', 'Disk is slow', 'I/O bound jobs starve'], correctIndex: 1 },
-          { q: 'FCFS scheduling order is determined by:', options: ['Burst time', 'Priority', 'Arrival time', 'Random'], correctIndex: 2 },
-        ],
-      },
-      {
-        id: 'les-sjf', collegeId, moduleId: mod.id, title: 'Shortest Job First (SJF)', order: 2, published: true,
-        topicTags: ['scheduling', 'sjf'],
-        contentBlocks: [
-          { kind: 'MARKDOWN', data: '## Shortest Job First\n\nSJF picks the process with the smallest next CPU burst. Optimal for minimum average waiting time, but predicting the next burst is hard in practice.' },
-          { kind: 'VIDEO', data: 'https://www.youtube.com/watch?v=2h3eWaPx8SA' },
-        ],
-        checkpoint: [
-          { q: 'SJF minimises:', options: ['Throughput', 'Avg waiting time', 'CPU util', 'Response time'], correctIndex: 1 },
-          { q: 'SJF requires:', options: ['Random selection', 'Knowing burst times in advance', 'Two CPUs', 'Priority list'], correctIndex: 1 },
-          { q: 'SJF can be:', options: ['Only preemptive', 'Only non-preemptive', 'Either', 'Neither'], correctIndex: 2 },
-        ],
-      },
-      {
-        id: 'les-rr', collegeId, moduleId: mod.id, title: 'Round Robin (RR)', order: 3, published: true,
-        topicTags: ['scheduling', 'round-robin', 'time-slice'],
-        contentBlocks: [
-          { kind: 'MARKDOWN', data: '## Round Robin\n\nEach process gets a fixed *time quantum* (e.g. 10ms) then is preempted. Good for interactive systems. Choosing the quantum is the key tuning knob.' },
-        ],
-        checkpoint: [
-          { q: 'Round Robin is:', options: ['Non-preemptive', 'Preemptive', 'Cooperative', 'Manual'], correctIndex: 1 },
-          { q: 'A very small time quantum causes:', options: ['Better latency, lower throughput', 'Better throughput', 'CPU starvation', 'Disk thrashing'], correctIndex: 0 },
-          { q: 'RR is best for:', options: ['Batch jobs', 'Interactive workloads', 'Real-time only', 'Memory-bound'], correctIndex: 1 },
-        ],
-      },
-    ];
-    for (const l of lessons) {
+    for (const l of LMS_DEMO_LESSONS) {
       this.memLessons.push({
-        ...(l as LessonEntity),
-        createdAt: new Date(), updatedAt: new Date(),
+        id: l.id,
+        collegeId,
+        moduleId: mod.id,
+        title: l.title,
+        order: l.order,
+        contentBlocks: l.contentBlocks,
+        checkpoint: l.checkpoint,
+        topicTags: l.topicTags,
+        published: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
     }
-    this.logger.log(`Seeded demo LMS content: ${this.memLessons.length} lessons in ${courseId}`);
+    this.logger.log(`Seeded demo LMS content: ${this.memLessons.length} lessons in ${LMS_DEMO_COURSE_ID}`);
   }
 }
