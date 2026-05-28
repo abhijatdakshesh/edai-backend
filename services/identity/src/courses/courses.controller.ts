@@ -1,11 +1,16 @@
 import { Controller, Get, Post, Delete, Param, Request, UseGuards } from '@nestjs/common';
 import { CoursesService } from './courses.service';
+import { LmsService } from '../lms/lms.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { resolveCollegeId } from '../lms/tenant-context';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class CoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(
+    private readonly coursesService: CoursesService,
+    private readonly lmsService: LmsService,
+  ) {}
 
   @Get('courses')
   getCourses() {
@@ -53,5 +58,26 @@ export class CoursesController {
       .filter((e) => e.studentUsn === usn)
       .map((e) => e.courseId);
     return { courseIds };
+  }
+
+  /** Enrolled courses with LMS availability — powers /student/learn hub (Phase 1). */
+  @Get('student/learn/courses')
+  async getStudentLearnCourses(@Request() req: any) {
+    const usn = req.user?.sapId ?? req.user?.sub ?? 'UNKNOWN';
+    const collegeId = resolveCollegeId(req);
+    const enrolled = this.coursesService.getEnrolledCourses(usn);
+    const courses = await Promise.all(
+      enrolled.map(async (c) => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        credits: c.credits,
+        department: c.department,
+        instructorName: c.instructorName,
+        hasLms: await this.lmsService.hasPublishedContent(collegeId, c.code),
+        learnUrl: `/student/learn/${c.code}`,
+      })),
+    );
+    return { courses };
   }
 }

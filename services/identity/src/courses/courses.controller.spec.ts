@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CoursesController } from './courses.controller';
 import { CoursesService } from './courses.service';
+import { LmsService } from '../lms/lms.service';
 
 const mockSvc = {
   getCourses: jest.fn(),
@@ -10,6 +11,10 @@ const mockSvc = {
   getCourseById: jest.fn(),
 };
 
+const mockLms = {
+  hasPublishedContent: jest.fn().mockResolvedValue(false),
+};
+
 describe('CoursesController', () => {
   let controller: CoursesController;
 
@@ -17,7 +22,10 @@ describe('CoursesController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CoursesController],
-      providers: [{ provide: CoursesService, useValue: mockSvc }],
+      providers: [
+        { provide: CoursesService, useValue: mockSvc },
+        { provide: LmsService, useValue: mockLms },
+      ],
     })
       .overrideGuard(require('../auth/jwt-auth.guard').JwtAuthGuard)
       .useValue({ canActivate: () => true })

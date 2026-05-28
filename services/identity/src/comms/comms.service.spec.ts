@@ -236,7 +236,7 @@ describe('CommsService', () => {
       const result = await service.triggerCall('USN001', 'ATTENDANCE');
       const after = Date.now();
       expect(result.status).toBe('QUEUED');
-      expect(result.callId).toMatch(/^call-/);
+      expect(result.callId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
       const scheduled = new Date(result.scheduledAt).getTime();
       expect(scheduled).toBeGreaterThan(before);
       expect(scheduled).toBeLessThanOrEqual(after + 5 * 60 * 1000 + 1000);

@@ -8,6 +8,11 @@ import { ConversationStateService, Turn } from './conversation-state.service';
 import { KnowledgeGraphService } from '../chatbot/knowledge-graph.service';
 import { geminiGenerate, GEMINI_FAST } from '../shared/gemini-ai';
 import { AiCallLogEntity, AnnouncementEntity } from '../entities/comms.entity';
+import {
+  isLocalWebhookBase,
+  isTwilioWebhookReachable,
+  resolveTwilioWebhookBase,
+} from './twilio-webhook.util';
 
 export interface AICallLog {
   id: string;
@@ -131,6 +136,19 @@ export class CommsService implements OnModuleInit {
     }
     this.logger.log(`Demo VOICE consent seeded for ${DEMO_USNS.length} USNs in ${DEMO_INSTITUTION}`);
 
+    const webhookBase = resolveTwilioWebhookBase();
+    if (isLocalWebhookBase(webhookBase)) {
+      this.logger.warn(
+        `[Voice] TWILIO_WEBHOOK_BASE_URL is localhost — Twilio cannot reach TwiML; calls will play "application error". Run: cloudflared tunnel --url http://localhost:3001`,
+      );
+    } else if (!(await isTwilioWebhookReachable(webhookBase))) {
+      this.logger.warn(
+        `[Voice] TWILIO_WEBHOOK_BASE_URL not reachable (${webhookBase}) — refresh your tunnel and update .env`,
+      );
+    } else {
+      this.logger.log(`[Voice] Twilio webhook base OK: ${webhookBase}`);
+    }
+
     if (this.callLogRepo) {
       const rows = await this.callLogRepo.find({ order: { calledAt: 'DESC' }, take: 500 });
       this.callLogs = rows.map((r) => ({
@@ -196,15 +214,33 @@ export class CommsService implements OnModuleInit {
 
   // ── Static parent phone registry (extend as DB is wired) ─────────────────
   private readonly parentPhoneMap: Record<string, string> = {
-    '1RV21CS001': '+919741573296',
-    '1RV21CS002': '+919741573296',
-    '1RV21CS003': '+919741573296',
-    '1RV21CS004': '+919741573296',
-    '1RV21CS005': '+919741573296',
-    '1RV21CS006': '+918700151250',
-    '1RV21CS007': '+918700151250',
-    '1RV21CS008': '+918700151250',
+    '1RV21CS001': '+919113949714',
+    '1RV21CS002': '+919113949714',
+    '1RV21CS003': '+919113949714',
+    '1RV21CS004': '+919113949714',
+    '1RV21CS005': '+919113949714',
+    '1RV21CS006': '+919113949714',
+    '1RV21CS007': '+919113949714',
+    '1RV21CS008': '+919113949714',
   };
+
+  /** Normalize to E.164; bare 10-digit Indian mobiles get +91 prefix. */
+  private normalizeParentPhone(raw?: string): string | undefined {
+    const trimmed = raw?.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('+')) return trimmed;
+    if (/^\d{10}$/.test(trimmed)) return `+91${trimmed}`;
+    if (/^91\d{10}$/.test(trimmed)) return `+${trimmed}`;
+    return `+${trimmed.replace(/^\+/, '')}`;
+  }
+
+  private resolveParentPhone(usn: string, explicit?: string): string | undefined {
+    return (
+      this.normalizeParentPhone(explicit)
+      ?? this.parentPhoneMap[usn]
+      ?? this.normalizeParentPhone(process.env['DEFAULT_PARENT_PHONE'])
+    );
+  }
 
   // ── Name → USN resolution for demo students (case-insensitive) ───────────
   private readonly nameToUsnMap: Record<string, string> = {
@@ -308,7 +344,7 @@ export class CommsService implements OnModuleInit {
   private async dispatchTwilioCall(phone: string, twimlUrl: string, statusCallbackUrl?: string): Promise<string | null> {
     const sid = process.env['TWILIO_ACCOUNT_SID'];
     const token = process.env['TWILIO_AUTH_TOKEN'];
-    const from = process.env['TWILIO_PHONE_NUMBER'];
+    const from = process.env['TWILIO_PHONE_NUMBER'] ?? process.env['TWILIO_FROM_NUMBER'];
     if (!sid || !token || !from) return null;
     try {
       // Method: GET — Twilio defaults to POST but serveTwiml is a GET handler.
@@ -333,7 +369,13 @@ export class CommsService implements OnModuleInit {
     return null;
   }
 
-  async triggerCall(rawUsn: string, type: string, institutionId = 'default', language = 'en'): Promise<{ callId: string; status: string; scheduledAt: string }> {
+  async triggerCall(
+    rawUsn: string,
+    type: string,
+    institutionId = 'default',
+    language = 'en',
+    parentPhoneOverride?: string,
+  ): Promise<{ callId: string; status: string; scheduledAt: string; warning?: string }> {
     const usn = this.resolveUsn(rawUsn);
     // DPDP gate: voice calls require explicit VOICE consent.
     // - In production we propagate the ForbiddenException so the controller
@@ -359,11 +401,10 @@ export class CommsService implements OnModuleInit {
       );
     }
 
-    const parentPhone = this.parentPhoneMap[usn] ?? process.env['DEFAULT_PARENT_PHONE'];
-    // Use a UUIDv4 so callIds are unguessable — the audio endpoint uses callId as a
-    // capability-style key, and a sequential `call-${Date.now()}` would let an
-    // attacker enumerate/predict the audio URLs of in-flight calls.
-    const callId = `call-${randomUUID()}`;
+    const parentPhone = this.resolveParentPhone(usn, parentPhoneOverride);
+    // Bare UUID — matches ai_call_logs.id (Postgres uuid) and is unguessable for
+    // signed audio URLs.
+    const callId = randomUUID();
     const greeting = this.buildCallTask(usn, type, language);
 
     // Initialize conversation state (in-memory; HORIZONTAL_SCALE_GAP)
@@ -383,7 +424,7 @@ export class CommsService implements OnModuleInit {
         .catch((e) => console.error('[KnowledgeGraph] build error:', e));
     }
 
-    const baseUrl = process.env['TWILIO_WEBHOOK_BASE_URL'] ?? process.env['APP_URL'] ?? 'http://localhost:3001';
+    const baseUrl = resolveTwilioWebhookBase();
     const twimlUrl = `${baseUrl}/api/comms/twiml/${callId}`;
     const statusUrl = `${baseUrl}/api/comms/twiml/${callId}/status`;
 
@@ -429,7 +470,47 @@ export class CommsService implements OnModuleInit {
     this.callLogRepo?.save({ ...callLog, calledAt: undefined } as unknown as AiCallLogEntity)
       .catch((e) => console.error('DB persist error (triggerCall)', e));
 
-    return { callId, status: 'QUEUED', scheduledAt: new Date(Date.now() + 30_000).toISOString() };
+    let warning: string | undefined;
+    if (isLocalWebhookBase(baseUrl)) {
+      warning =
+        'Twilio webhook is localhost — start cloudflared tunnel --url http://localhost:3001 and set TWILIO_WEBHOOK_BASE_URL in .env';
+    } else if (!(await isTwilioWebhookReachable(baseUrl))) {
+      warning =
+        'Twilio webhook URL is not reachable — restart cloudflared and update TWILIO_WEBHOOK_BASE_URL, then restart identity';
+    }
+
+    return {
+      callId,
+      status: 'QUEUED',
+      scheduledAt: new Date(Date.now() + 30_000).toISOString(),
+      ...(warning ? { warning } : {}),
+    };
+  }
+
+  /** Pollable status for admin voice-calling UI (identity call path). */
+  getCallStatus(callId: string): { callId: string; state: string; language: string; callType: string } | null {
+    const log = this.callLogs.find((c) => c.id === callId);
+    if (!log) return null;
+
+    const outcomeToState: Record<string, string> = {
+      ANSWERED: 'COMPLETED',
+      VOICEMAIL: 'COMPLETED',
+      NO_ANSWER: 'NO_ANSWER',
+      BUSY: 'BUSY',
+    };
+
+    let state = outcomeToState[log.outcome] ?? 'INITIATED';
+    const conv = this.conversation?.get(callId);
+    if (conv && log.outcome === 'NO_ANSWER') {
+      state = conv.turns.length > 1 ? 'ACTIVE' : 'INITIATED';
+    }
+
+    return {
+      callId,
+      state,
+      language: log.language ?? 'en',
+      callType: log.callType ?? 'ABSENT_CALL',
+    };
   }
 
   // ── Interactive-turn handler ────────────────────────────────────────────
@@ -438,7 +519,8 @@ export class CommsService implements OnModuleInit {
    * Returns TwiML string for the next prompt or hangup.
    */
   async handleTurn(callId: string, speechResult: string, _callStatus?: string): Promise<string> {
-    const baseUrl = process.env['TWILIO_WEBHOOK_BASE_URL'] ?? process.env['APP_URL'] ?? 'http://localhost:3001';
+    const baseUrl = resolveTwilioWebhookBase();
+    const webhookOk = await isTwilioWebhookReachable(baseUrl);
     const state = this.conversation?.get(callId);
     if (!state) return this.hangupTwiml('Call session expired.');
 
@@ -509,11 +591,13 @@ export class CommsService implements OnModuleInit {
       const langCode = SARVAM_LANG[language] ?? 'hi-IN';
       const audio = await this.generateSarvamAudio(aiReply, langCode);
       const audioKey = `${callId}:${turnIdx}`;
-      if (audio) {
+      if (audio && webhookOk) {
         this.setAudio(audioKey, audio);
         speakXml = `<Play>${escapeXml(this.signAudioUrl(audioKey, baseUrl))}</Play>`;
       } else {
-        // Fallback to Polly if Sarvam fails
+        if (audio && !webhookOk) {
+          this.logger.warn(`[handleTurn] webhook unreachable — Polly Say fallback for callId=${callId}`);
+        }
         speakXml = `<Say voice="${POLLY_VOICE_EN}" language="${langTag}">${escapeXml(aiReply)}</Say>`;
       }
     }
@@ -542,6 +626,19 @@ export class CommsService implements OnModuleInit {
     const kgJson = state.knowledgeGraph ? JSON.stringify(state.knowledgeGraph).slice(0, 1500) : '{}';
     const transcript = recentTurns.map(t => `${t.role}: ${t.text}`).join('\n');
     const bcp47 = BCP47[state.language] ?? 'en-IN';
+
+    if (state.callType.startsWith('LMS_REVISION')) {
+      const topics = state.callType.replace('LMS_REVISION:', '').split(':').pop() ?? 'revision';
+      return [
+        `You are EdAI, an AI tutor calling a student before their exam.`,
+        `Speak in language: ${state.language} (BCP-47: ${bcp47}). Quiz them briefly on these weak topics: ${topics}.`,
+        `Ask one short question at a time. Praise correct answers. If wrong, give a one-sentence hint.`,
+        `Keep each reply ≤20 words. End with encouragement.`,
+        `Recent:\n${transcript}`,
+        `Student said:\n<UNTRUSTED_PARENT_INPUT>\n${parentText || '(waiting)'}\n</UNTRUSTED_PARENT_INPUT>`,
+      ].join('\n\n');
+    }
+
     // Prompt-injection defence: anything inside <UNTRUSTED_PARENT_INPUT> is data,
     // never instructions. The parent's transcribed speech is attacker-controlled.
     return [

@@ -94,4 +94,21 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitDocumentStatusChanged(payload: { docId: string; studentUsn: string; status: string; institutionId?: string }): void {
     this.emitToInstitution(payload.institutionId ?? 'default', 'document:status-changed', payload);
   }
+
+  /** LMS observability — no student USN in payload (DPDP). */
+  emitLmsLessonMastered(payload: {
+    lessonId: string;
+    courseId: string;
+    institutionId?: string;
+  }): void {
+    this.emitToInstitution(payload.institutionId ?? 'default', 'lms:lesson-mastered', payload);
+  }
+
+  emitLmsCheckpointFailed(payload: {
+    lessonId: string;
+    courseId: string;
+    institutionId?: string;
+  }): void {
+    this.emitToInstitution(payload.institutionId ?? 'default', 'lms:checkpoint-failed', payload);
+  }
 }

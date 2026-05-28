@@ -35,6 +35,18 @@ describe('LmsService', () => {
     expect(mods).toEqual([]);
   });
 
+  it('publishedOnly hides draft modules and lessons', async () => {
+    await svc.createModule('col-test', {
+      courseId: 'CS502',
+      title: 'Draft Module',
+      published: false,
+    });
+    const all = await svc.listModules('col-test', 'CS502');
+    expect(all).toHaveLength(1);
+    const pub = await svc.listModules('col-test', 'CS502', { publishedOnly: true });
+    expect(pub).toHaveLength(0);
+  });
+
   it('lists lessons in deterministic order', async () => {
     const lessons = await svc.listLessons('col-test', 'mod-os-scheduling');
     expect(lessons.map((l) => l.title)).toEqual([
