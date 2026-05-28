@@ -346,7 +346,17 @@ export class CommsService implements OnModuleInit {
       this.consent.assertConsent(usn, 'VOICE', institutionId);
     } catch (err) {
       if (process.env['NODE_ENV'] === 'production') throw err;
-      this.logger.warn(`[DPDP] VOICE consent missing for ${usn}@${institutionId} — allowing in non-prod (NODE_ENV=${process.env['NODE_ENV'] ?? 'undefined'})`);
+      // Demo/dev path: auto-grant the missing consent so first-time principals
+      // (e.g. "Usman" typed into the admin trigger panel) don't 403. Previously
+      // we only warned, but that left the ConsentService cache empty so the
+      // mid-call assertConsent in handleTurn() and the finalizeCall() gate
+      // re-threw the same error a few seconds later.
+      this.logger.warn(`[DPDP] VOICE consent missing for ${usn}@${institutionId} — auto-granting in non-prod (NODE_ENV=${process.env['NODE_ENV'] ?? 'undefined'})`);
+      this.consent.grant(
+        usn,
+        ['ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS', 'GENERAL', 'VOICE'],
+        institutionId,
+      );
     }
 
     const parentPhone = this.parentPhoneMap[usn] ?? process.env['DEFAULT_PARENT_PHONE'];
