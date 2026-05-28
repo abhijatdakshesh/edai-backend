@@ -16,7 +16,7 @@ import { CoursesModule } from '../courses/courses.module';
 
 @Module({
   imports: [
-    CommsModule,
+    forwardRef(() => CommsModule),
     EventsModule,
     AbcCreditsModule,
     forwardRef(() => CoursesModule),

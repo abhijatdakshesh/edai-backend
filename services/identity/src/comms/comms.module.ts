@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommsController, PublicCommsController, AudioController } from './comms.controller';
 import { CommsService } from './comms.service';
@@ -12,7 +12,7 @@ import { AiCallLogEntity, AnnouncementEntity } from '../entities/comms.entity';
 @Module({
   imports: [
     EventsModule,
-    StudentPortalModule,
+    forwardRef(() => StudentPortalModule),
     ChatbotModule,
     ...(process.env['DATABASE_URL']
       ? [TypeOrmModule.forFeature([AiCallLogEntity, AnnouncementEntity])]
