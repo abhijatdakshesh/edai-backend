@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/naac && cp src/naac/naac-metrics.json dist/naac/naac-metrics.json",
     "migration:run": "ts-node src/migrations/run.ts",
     "lint": "eslint 'src/**/*.ts' --fix || true",
     "test": "jest",
