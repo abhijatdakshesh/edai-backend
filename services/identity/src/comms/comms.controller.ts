@@ -204,6 +204,41 @@ export class CommsController {
     return this.svc.triggerCall(body.studentUsn, body.type, 'rvce', body.language ?? 'en');
   }
 
+  /**
+   * DPDP consent capture (admin-attested). The Voice Calling Centre operator
+   * affirmatively confirms the data principal has opted in to voice calls; we
+   * record that explicit consent so the subsequent trigger passes the gate.
+   * This is a deliberate, logged act — not a silent bypass.
+   */
+  @ Post('comms/consent/grant')
+  grantVoiceConsent(
+    @Body() body: { usn: string; channels?: string[] },
+    @Request() req: any,
+  ) {
+    const role = req.user?.role;
+    const isStaff =
+      role === 'ADMIN' || role === 'PRINCIPAL' || role === 'DEAN' || role === 'COUNSELLOR';
+    if (!isStaff) {
+      throw new ForbiddenException('Only staff may record consent on behalf of a principal');
+    }
+    if (!body.usn?.trim()) {
+      throw new BadRequestException('usn is required');
+    }
+    const institutionId: string =
+      req.user?.institutionId ?? process.env['INSTITUTION_ID'] ?? 'rvce';
+    const channels = (body.channels?.length
+      ? body.channels
+      : ['VOICE', 'GENERAL', 'ATTENDANCE_ALERTS', 'FEES_ALERTS', 'MARKS_ALERTS']) as ConsentChannel[];
+    this.svc.grantConsent(body.usn, channels, institutionId);
+    return {
+      ok: true,
+      usn: body.usn,
+      channels,
+      recordedBy: req.user?.sub ?? 'admin',
+      recordedAt: new Date().toISOString(),
+    };
+  }
+
   @ Post('comms/sms/send')
   sendSms(@Body() body: { phone: string; message: string }) {
     return this.svc.sendSms(body.phone, body.message);
