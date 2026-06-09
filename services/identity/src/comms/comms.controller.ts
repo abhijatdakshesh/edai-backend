@@ -200,8 +200,16 @@ export class CommsController {
   }
 
   @ Post('comms/calls/trigger')
-  async triggerCall(@Body() body: { studentUsn: string; type: string; language?: string }) {
-    return this.svc.triggerCall(body.studentUsn, body.type, 'rvce', body.language ?? 'en');
+  async triggerCall(
+    @Body() body: { studentUsn: string; type: string; language?: string; parentPhone?: string },
+  ) {
+    return this.svc.triggerCall(
+      body.studentUsn,
+      body.type,
+      'rvce',
+      body.language ?? 'en',
+      body.parentPhone?.trim() || undefined,
+    );
   }
 
   /**
