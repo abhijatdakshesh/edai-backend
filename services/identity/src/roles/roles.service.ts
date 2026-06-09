@@ -18,6 +18,8 @@ export class RolesService {
     { name: 'PARENT', permissions: ['students:read:linked', 'attendance:read:linked', 'fees:read:linked'] },
     { name: 'STUDENT', permissions: ['students:read:self', 'attendance:read:self', 'fees:read:self'] },
     { name: 'TRUSTEE', permissions: ['analytics:read', 'reports:read'] },
+    { name: 'RECRUITER', permissions: ['placements:read', 'placements:write'] },
+    { name: 'APPLICANT', permissions: ['admissions:read:self', 'admissions:write:self'] },
   ];
 
   findAll(): RoleDefinition[] {

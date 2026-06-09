@@ -17,6 +17,7 @@ import type { User } from '../entities/user.entity';
  *   hod@rvce.edu        → Hod@123
  *   principal@rvce.edu  → Principal@123
  *   recruiter@demo.com  → Recruiter@123
+ *   applicant@demo.com  → Applicant@123
  */
 export const AUTH_SEED_USERS: User[] = (() => {
   const h = (plain: string) => bcrypt.hashSync(plain, 10);
@@ -28,5 +29,6 @@ export const AUTH_SEED_USERS: User[] = (() => {
     { id: 'u-hod-01',       email: 'hod@rvce.edu',       passwordHash: h('Hod@123'),       name: 'Dr. Meena Rao',    role: 'HOD',       institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: 'u-principal-01', email: 'principal@rvce.edu', passwordHash: h('Principal@123'), name: 'Dr. K. Venkatesh', role: 'PRINCIPAL', institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: 'u-recruiter-01', email: 'recruiter@demo.com', passwordHash: h('Recruiter@123'), name: 'Recruiter',        role: 'RECRUITER', institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'u-applicant-01', email: 'applicant@demo.com', passwordHash: h('Applicant@123'), name: 'Applicant',        role: 'APPLICANT', institutionId: 'rvce', preferredLanguage: 'en', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   ];
 })();
