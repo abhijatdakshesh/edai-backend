@@ -8,7 +8,8 @@ export type UserRole =
   | 'TRUSTEE'
   | 'COUNSELLOR'
   | 'ADMIN'
-  | 'RECRUITER';
+  | 'RECRUITER'
+  | 'APPLICANT';
 
 export type Language = 'kn' | 'en' | 'hi' | 'ta' | 'te' | 'ml';
 
