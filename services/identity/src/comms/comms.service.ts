@@ -13,6 +13,26 @@ import {
   isTwilioWebhookReachable,
   resolveTwilioWebhookBase,
 } from './twilio-webhook.util';
+import { waitUntil } from '@vercel/functions';
+
+/**
+ * Keep a fire-and-forget promise alive past the HTTP response.
+ *
+ * On Vercel (Fluid Compute) the function instance is frozen as soon as the
+ * response is sent, so a detached `void promise` (e.g. the outbound Twilio
+ * dispatch) never runs — this is why AI calls silently failed on serverless.
+ * `waitUntil()` registers the promise with the current invocation so it
+ * completes. On non-Vercel/always-on hosts `waitUntil` throws (no context),
+ * so we fall back to a plain detached promise (the event loop stays alive
+ * there anyway).
+ */
+function keepAlive(p: Promise<unknown>): void {
+  try {
+    waitUntil(p);
+  } catch {
+    void Promise.resolve(p).catch(() => undefined);
+  }
+}
 
 export interface AICallLog {
   id: string;
@@ -418,10 +438,12 @@ export class CommsService implements OnModuleInit {
 
     // Fire-and-forget knowledge graph build so per-turn handler has context.
     if (this.knowledgeGraph) {
-      this.knowledgeGraph
-        .buildStudentGraph(usn)
-        .then((kg) => this.conversation?.setKnowledgeGraph(callId, kg))
-        .catch((e) => console.error('[KnowledgeGraph] build error:', e));
+      keepAlive(
+        this.knowledgeGraph
+          .buildStudentGraph(usn)
+          .then((kg) => this.conversation?.setKnowledgeGraph(callId, kg))
+          .catch((e) => console.error('[KnowledgeGraph] build error:', e)),
+      );
     }
 
     const baseUrl = resolveTwilioWebhookBase();
@@ -437,7 +459,7 @@ export class CommsService implements OnModuleInit {
         ts: new Date().toISOString(), institutionId,
       });
       if (parentPhone) {
-        void this.dispatchTwilioCall(parentPhone, twimlUrl, statusUrl);
+        keepAlive(this.dispatchTwilioCall(parentPhone, twimlUrl, statusUrl));
       }
     } else {
       // Regional: pre-gen Sarvam audio for the greeting.
@@ -448,17 +470,19 @@ export class CommsService implements OnModuleInit {
         callId, turn: 0, role: 'AI', text: greeting, language,
         ts: new Date().toISOString(), institutionId,
       });
-      this.generateSarvamAudio(greeting, langCode)
-        .then(async (audio) => {
-          if (audio) {
-            this.setAudio(callId, audio);
-            this.logger.log(`[Trigger] audio stored key=${callId} bytes=${audio.length}`);
-          } else {
-            this.logger.warn(`[Trigger] Sarvam returned null — no audio stored for callId=${callId}`);
-          }
-          if (parentPhone) await this.dispatchTwilioCall(parentPhone, twimlUrl, statusUrl);
-        })
-        .catch((e) => console.error('[Sarvam→Twilio] Error:', e));
+      keepAlive(
+        this.generateSarvamAudio(greeting, langCode)
+          .then(async (audio) => {
+            if (audio) {
+              this.setAudio(callId, audio);
+              this.logger.log(`[Trigger] audio stored key=${callId} bytes=${audio.length}`);
+            } else {
+              this.logger.warn(`[Trigger] Sarvam returned null — no audio stored for callId=${callId}`);
+            }
+            if (parentPhone) await this.dispatchTwilioCall(parentPhone, twimlUrl, statusUrl);
+          })
+          .catch((e) => console.error('[Sarvam→Twilio] Error:', e)),
+      );
     }
 
     const callLog: AICallLog = {

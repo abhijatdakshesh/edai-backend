@@ -89,6 +89,13 @@ describe('AuthService', () => {
       expect(result.user.id).toBe('u-faculty-01');
     });
 
+    it('returns tokens for applicant demo credentials', async () => {
+      const result = await service.login('applicant@demo.com', 'Applicant@123');
+      expect(result.user.role).toBe('APPLICANT');
+      expect(result.user.id).toBe('u-applicant-01');
+      expect(result.user.email).toBe('applicant@demo.com');
+    });
+
     it('throws UnauthorizedException for wrong password', async () => {
       await expect(
         service.login('admin@rvce.edu', 'WrongPassword!'),
@@ -355,6 +362,8 @@ describe('AuthService', () => {
         { sub: 'u-parent-01', email: 'parent@rvce.edu', role: 'PARENT' },
         { sub: 'u-hod-01', email: 'hod@rvce.edu', role: 'HOD' },
         { sub: 'u-principal-01', email: 'principal@rvce.edu', role: 'PRINCIPAL' },
+        { sub: 'u-recruiter-01', email: 'recruiter@demo.com', role: 'RECRUITER' },
+        { sub: 'u-applicant-01', email: 'applicant@demo.com', role: 'APPLICANT' },
       ];
       for (const seed of seeds) {
         const payload: JwtPayload = {

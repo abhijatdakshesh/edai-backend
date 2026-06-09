@@ -19,7 +19,7 @@ export class CreateUserDto {
   @MinLength(8)
   password!: string;
 
-  @IsEnum(['STUDENT', 'PARENT', 'FACULTY', 'HOD', 'DEAN', 'PRINCIPAL', 'TRUSTEE', 'COUNSELLOR', 'ADMIN'])
+  @IsEnum(['STUDENT', 'PARENT', 'FACULTY', 'HOD', 'DEAN', 'PRINCIPAL', 'TRUSTEE', 'COUNSELLOR', 'ADMIN', 'RECRUITER', 'APPLICANT'])
   role!: UserRole;
 
   @IsString()
