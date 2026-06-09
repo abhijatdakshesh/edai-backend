@@ -20,13 +20,47 @@ export class TwilioWebhookGuard implements CanActivate {
       // Dynamic import to avoid hard dependency when Twilio not configured
       const twilio = await import('twilio');
       const baseUrl = (process.env['TWILIO_WEBHOOK_BASE_URL'] ?? '').replace(/\/$/, '');
-      const fullUrl = baseUrl
-        ? `${baseUrl}${req.originalUrl}`
-        : `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       const params = req.body as Record<string, string>;
-      const valid = twilio.validateRequest(authToken, twilioSig, fullUrl, params);
-      // Temporary diagnostic log — remove after confirmed working
-      console.log(`[TwilioGuard] url=${fullUrl} sig=${twilioSig?.slice(0, 8)}… valid=${valid} bodyKeys=${Object.keys(params).join(',')}`);
+
+      // Behind a proxy / path-rewrite (e.g. Vercel rewrites /api/:path* →
+      // /api/[[...path]]), req.originalUrl can differ from the public URL that
+      // Twilio actually signed (rewritten path, injected query params). Twilio's
+      // HMAC is over the EXACT called URL, so we validate against a set of
+      // canonical candidates and accept if any matches. Still real signature
+      // validation — not a bypass.
+      const host = req.get('host');
+      const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] ?? req.protocol;
+      const pathOnly = req.originalUrl.split('?')[0];
+      // Drop Vercel's injected `path` rewrite query param if present.
+      const cleanedOriginal = req.originalUrl
+        .replace(/(^|[?&])path=[^&]*/g, '')
+        .replace(/[?&]$/, '')
+        .replace(/\?&/, '?');
+
+      const candidates = Array.from(
+        new Set(
+          [
+            baseUrl && `${baseUrl}${req.originalUrl}`,
+            baseUrl && `${baseUrl}${cleanedOriginal}`,
+            baseUrl && `${baseUrl}${pathOnly}`,
+            host && `${proto}://${host}${req.originalUrl}`,
+            host && `${proto}://${host}${pathOnly}`,
+          ].filter(Boolean) as string[],
+        ),
+      );
+
+      let valid = false;
+      let matched = 'none';
+      for (const url of candidates) {
+        if (twilio.validateRequest(authToken, twilioSig, url, params)) {
+          valid = true;
+          matched = url;
+          break;
+        }
+      }
+      console.log(
+        `[TwilioGuard] valid=${valid} matched=${matched} tried=${candidates.length} sig=${twilioSig?.slice(0, 8)}… bodyKeys=${Object.keys(params).join(',')}`,
+      );
       if (!valid) throw new ForbiddenException('Invalid Twilio signature');
       return true;
     } catch (err) {
