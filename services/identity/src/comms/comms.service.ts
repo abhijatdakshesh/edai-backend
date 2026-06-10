@@ -101,6 +101,14 @@ const GOODBYE_BY_LANG: Record<string, string> = {
   ta: 'நேரத்திற்கு நன்றி. வணக்கம்.',
   te: 'మీ సమయానికి ధన్యవాదాలు. వీడ్కోలు.',
 };
+// Admission DTMF: caller pressed 1 (interested) → confirm a counsellor will follow up.
+const INTERESTED_BY_LANG: Record<string, string> = {
+  en: 'Thank you for your interest! Our admissions counsellor will contact you shortly with all the details. Have a great day.',
+  hi: 'आपकी रुचि के लिए धन्यवाद! हमारे प्रवेश सलाहकार जल्द ही सभी जानकारी के साथ आपसे संपर्क करेंगे। आपका दिन शुभ हो।',
+  kn: 'ನಿಮ್ಮ ಆಸಕ್ತಿಗೆ ಧನ್ಯವಾದಗಳು! ನಮ್ಮ ಪ್ರವೇಶ ಸಲಹೆಗಾರರು ಶೀಘ್ರದಲ್ಲೇ ಎಲ್ಲಾ ವಿವರಗಳೊಂದಿಗೆ ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸುತ್ತಾರೆ. ಶುಭದಿನ.',
+  ta: 'உங்கள் ஆர்வத்திற்கு நன்றி! எங்கள் சேர்க்கை ஆலோசகர் விரைவில் அனைத்து விவரங்களுடன் உங்களைத் தொடர்புகொள்வார். நல்ல நாள்.',
+  te: 'మీ ఆసక్తికి ధన్యవాదాలు! మా ప్రవేశ సలహాదారు త్వరలో అన్ని వివరాలతో మిమ్మల్ని సంప్రదిస్తారు. శుభదినం.',
+};
 
 function escapeXml(s: string): string {
   return s
@@ -564,6 +572,16 @@ export class CommsService implements OnModuleInit {
       }
     }
 
+    // Admission DTMF menu: caller pressed 1 (interested) or 2 (not interested).
+    if (state.callType === 'ADMISSION_OUTREACH' && /^[0-9]$/.test(parentText)) {
+      if (parentText === '1') {
+        const msg = INTERESTED_BY_LANG[language] ?? INTERESTED_BY_LANG['en'];
+        return this.goodbyeTwiml(callId, language, msg, state.institutionId);
+      }
+      // 2 (or any other digit) → not interested → polite goodbye
+      return this.goodbyeTwiml(callId, language, goodbye, state.institutionId);
+    }
+
     // Stop intent → polite goodbye + hangup
     if (parentText && STOP_INTENTS.test(parentText)) {
       return this.goodbyeTwiml(callId, language, goodbye, state.institutionId);
@@ -764,11 +782,11 @@ export class CommsService implements OnModuleInit {
         te: `నమస్కారం, RVCE నుండి EdAI. విద్యార్థి ${usn} ఫీజు పెండింగ్‌లో ఉంది. ఈ వారం చెల్లించగలరా?`,
       },
       ADMISSION_OUTREACH: {
-        en: `Hello! This is the admissions team at Sri Bisvesvara Institute of Technology, Bengaluru. We're reaching out about B.E. admissions for the upcoming batch. Are you considering applying?`,
-        hi: `नमस्ते! यह बेंगलुरु के श्री बिस्वेश्वर इंस्टीट्यूट ऑफ टेक्नोलॉजी की प्रवेश टीम है। हम आने वाले बैच के बी.ई. प्रवेश के बारे में बात करना चाहते हैं। क्या आप आवेदन करने पर विचार कर रहे हैं?`,
-        kn: `ನಮಸ್ಕಾರ! ಇದು ಬೆಂಗಳೂರಿನ ಶ್ರೀ ಬಿಸ್ವೇಶ್ವರ ಇನ್‌ಸ್ಟಿಟ್ಯೂಟ್ ಆಫ್ ಟೆಕ್ನಾಲಜಿಯ ಪ್ರವೇಶ ತಂಡ. ಮುಂಬರುವ ಬ್ಯಾಚ್‌ನ ಬಿ.ಇ. ಪ್ರವೇಶದ ಬಗ್ಗೆ ಕರೆ ಮಾಡಿದ್ದೇವೆ. ನೀವು ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಆಸಕ್ತಿ ಹೊಂದಿದ್ದೀರಾ?`,
-        ta: `வணக்கம்! இது பெங்களூரு ஸ்ரீ பிஸ்வேஸ்வரா தொழில்நுட்பக் கல்லூரியின் சேர்க்கைக் குழு. வரும் பேட்ச் பி.இ. சேர்க்கை குறித்து அழைக்கிறோம். விண்ணப்பிக்க விரும்புகிறீர்களா?`,
-        te: `నమస్కారం! ఇది బెంగళూరులోని శ్రీ బిస్వేశ్వర ఇన్‌స్టిట్యూట్ ఆఫ్ టెక్నాలజీ ప్రవేశ బృందం. రాబోయే బ్యాచ్ బి.ఇ. ప్రవేశాల గురించి కాల్ చేస్తున్నాం. మీరు దరఖాస్తు చేయాలనుకుంటున్నారా?`,
+        en: `Namaskara! This is a call from Shri Basaveshwara College about B.E. admissions. If you are interested, press 1. If not, press 2.`,
+        hi: `नमस्कार! यह श्री बसवेश्वर कॉलेज से बी.ई. प्रवेश के बारे में कॉल है। यदि आप इच्छुक हैं तो 1 दबाएँ, अन्यथा 2 दबाएँ।`,
+        kn: `ನಮಸ್ಕಾರ! ಇದು ಶ್ರೀ ಬಸವೇಶ್ವರ ಕಾಲೇಜಿನಿಂದ ಬಿ.ಇ. ಪ್ರವೇಶದ ಕುರಿತು ಕರೆ. ನಿಮಗೆ ಆಸಕ್ತಿ ಇದ್ದರೆ ೧ ಒತ್ತಿ, ಇಲ್ಲದಿದ್ದರೆ ೨ ಒತ್ತಿ.`,
+        ta: `வணக்கம்! இது ஸ்ரீ பசவேஶ்வரா கல்லூரியில் இருந்து பி.இ. சேர்க்கை குறித்த அழைப்பு. ஆர்வமாக இருந்தால் 1 ஐ அழுத்தவும், இல்லையெனில் 2 ஐ அழுத்தவும்.`,
+        te: `నమస్కారం! ఇది శ్రీ బసవేశ్వర కళాశాల నుండి బి.ఇ. ప్రవేశాల గురించి కాల్. ఆసక్తి ఉంటే 1 నొక్కండి, లేకపోతే 2 నొక్కండి.`,
       },
     };
     const typeScripts = scripts[type] ?? scripts['ABSENT_CALL'];

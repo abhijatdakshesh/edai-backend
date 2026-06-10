@@ -77,11 +77,14 @@ class PublicCommsController {
       speakXml = `<Play>${escXml(playUrl)}</Play>`;
     }
 
+    // Admission outreach uses a DTMF menu (press 1/2); other calls use speech.
+    const isAdmission = state?.callType === 'ADMISSION_OUTREACH';
+    const gatherOpen = isAdmission
+      ? `<Gather input="dtmf speech" numDigits="1" timeout="8" language="${langTag}" action="${baseUrl}/api/comms/twiml/${callId}/turn" method="POST">`
+      : `<Gather input="speech" speechTimeout="auto" timeout="6" language="${langTag}" action="${baseUrl}/api/comms/twiml/${callId}/turn" method="POST">`;
     const xml =
       `<?xml version="1.0" encoding="UTF-8"?>` +
-      `<Response>${speakXml}` +
-      `<Gather input="speech" speechTimeout="auto" timeout="6" language="${langTag}" ` +
-      `action="${baseUrl}/api/comms/twiml/${callId}/turn" method="POST"></Gather></Response>`;
+      `<Response>${speakXml}${gatherOpen}</Gather></Response>`;
 
     res.type('text/xml');
     res.send(xml);
