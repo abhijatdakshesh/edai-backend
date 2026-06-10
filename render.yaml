@@ -1,0 +1,59 @@
+# Render Blueprint — EdAI identity (unified API) on a free always-on host.
+#
+# Why: the AI-voice flow keeps conversation + audio state in-memory
+# (ConversationStateService / audioStore). Vercel serverless runs many isolated
+# instances, so the Twilio TwiML/audio webhooks land on an instance without that
+# state → "Application Error". An always-on Node process keeps the in-memory
+# state for the whole call, exactly like local/Azure did before.
+#
+# Setup (one-time, free, no card on Render):
+#   1. Push this file (on a branch/PR or main).
+#   2. Render dashboard → New → Blueprint → connect the EdAI-Backend repo →
+#      pick the branch with this file → Apply.
+#   3. Render prompts for the `sync: false` secrets below — paste them.
+#   4. After first deploy you get https://edai-identity.onrender.com — set that
+#      as TWILIO_WEBHOOK_BASE_URL (and as the frontend's NEXT_PUBLIC_API_BASE_URL
+#      / IDENTITY_SERVICE_URL on Vercel), then redeploy.
+#
+# Note: Render free spins down after ~15 min idle; the admin "Trigger Call"
+# request wakes it and the call proceeds while warm. For zero-sleep use Koyeb.
+
+services:
+  - type: web
+    name: edai-identity
+    runtime: docker
+    repo: https://github.com/abhijatdakshesh/EdAI-Backend
+    rootDir: services/identity
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      # ── Secrets — entered in the Render dashboard (not stored in git) ──
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: "https://app.raycraft.in,https://ed8ai.vercel.app"
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      # Set to the Render URL after first deploy, e.g. https://edai-identity.onrender.com
+      - key: TWILIO_WEBHOOK_BASE_URL
+        sync: false
+      - key: TWILIO_AUDIO_SIGNING_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Optional: leave unset to run in-memory; set to a live Postgres for persistence.
+      - key: DATABASE_URL
+        sync: false
