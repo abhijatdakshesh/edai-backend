@@ -43,6 +43,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
 import { RevisionModule } from './revision/revision.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { IntegrityModule } from './integrity/integrity.module';
+import { ProctorModule } from './proctor/proctor.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { IntegrityModule } from './integrity/integrity.module';
     GamificationModule,
     BulkImportModule,
     IntegrityModule,
+    ProctorModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
