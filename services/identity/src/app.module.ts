@@ -41,6 +41,7 @@ import { LmsModule } from './lms/lms.module';
 import { ObeModule } from './obe/obe.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
 import { RevisionModule } from './revision/revision.module';
+import { GamificationModule } from './gamification/gamification.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { RevisionModule } from './revision/revision.module';
     LmsModule,
     ObeModule,
     RevisionModule,
+    GamificationModule,
     BulkImportModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
