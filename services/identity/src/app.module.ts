@@ -39,6 +39,7 @@ import { PlacementModule } from './placement/placement.module';
 import { RecruiterModule } from './recruiter/recruiter.module';
 import { LmsModule } from './lms/lms.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
+import { GamificationModule } from './gamification/gamification.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     PlacementModule,
     RecruiterModule,
     LmsModule,
+    GamificationModule,
     BulkImportModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
