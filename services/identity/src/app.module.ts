@@ -42,6 +42,7 @@ import { ObeModule } from './obe/obe.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
 import { RevisionModule } from './revision/revision.module';
 import { GamificationModule } from './gamification/gamification.module';
+import { IntegrityModule } from './integrity/integrity.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { GamificationModule } from './gamification/gamification.module';
     RevisionModule,
     GamificationModule,
     BulkImportModule,
+    IntegrityModule,
     // Seed (must be last — imports all domain modules)
     SeedModule,
   ],
